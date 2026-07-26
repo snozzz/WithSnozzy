@@ -59,9 +59,39 @@ enum TimeMode: String, CaseIterable, Codable {
 @MainActor
 @Observable
 final class AppState {
+    /// 音频引擎。`@ObservationIgnored` 是因为它内部的状态变化频率远高于 UI
+    /// 需要刷新的频率——播放信息由 UI 主动轮询，不走观察机制。
+    @ObservationIgnored let audio = AudioEngine()
+
     // 播放
     var isPlaying = false
-    var volume: Double = 0.7
+    var volume: Double = 0.7 {
+        didSet { audio.volume = volume }
+    }
+
+    /// 当前曲目描述，随播放状态刷新。
+    var trackTitle = "Snozzy 的电台"
+    var tempoText = ""
+
+    func togglePlay() {
+        isPlaying.toggle()
+        isPlaying ? audio.play() : audio.pause()
+        refreshTrackInfo()
+    }
+
+    func nextTrack() {
+        audio.next()
+        // 合成器要到下一个小节线才真正换曲，稍等一下再取标题。
+        Task {
+            try? await Task.sleep(for: .milliseconds(3200))
+            refreshTrackInfo()
+        }
+    }
+
+    func refreshTrackInfo() {
+        trackTitle = isPlaying ? audio.trackTitle : "Snozzy 的电台"
+        tempoText = isPlaying ? audio.tempoText : "已暂停"
+    }
 
     // 面板
     var panel: Panel?
@@ -87,6 +117,10 @@ final class AppState {
     }
 
     var palette: Palette { .at(hour: sceneHour) }
+
+    init() {
+        audio.volume = volume
+    }
 
     func togglePanel(_ p: Panel) {
         withAnimation(.snappy(duration: 0.28, extraBounce: 0.06)) {

@@ -18,6 +18,20 @@ Scripts/run.sh debug    # 开发时用，编译更快
 Scripts/build_app.sh    # 只打包，产物在 dist/WithSnozzy.app
 ```
 
+## 开发工具
+
+音频引擎带两个命令行入口，调音色和排查问题时比反复开 app 快得多：
+
+```bash
+BIN=dist/WithSnozzy.app/Contents/MacOS/WithSnozzy
+
+$BIN --render out.wav 40   # 离线渲染 40 秒，打印峰值/RMS/削顶数
+$BIN --selftest            # 实跑 CoreAudio 输出路径，验证声音真的送出去了
+```
+
+`--render` 让合成器变得可测——可以直接对波形做频谱和立体声分析，
+不用靠耳朵判断有没有削顶、走音或相位抵消。
+
 ## 目录结构
 
 ```

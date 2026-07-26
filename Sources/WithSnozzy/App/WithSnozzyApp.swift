@@ -5,6 +5,11 @@ struct WithSnozzyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var state = AppState()
 
+    init() {
+        // 带 --render 参数时走离线渲染并退出，不创建窗口。
+        OfflineRender.runIfRequested()
+    }
+
     var body: some Scene {
         // 用 `Window` 而不是 `WindowGroup`：这是个单窗口的陪伴型应用，
         // 不需要 ⌘N 开出第二个 Snozzy。

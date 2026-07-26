@@ -10,10 +10,12 @@ struct Dock: View {
 
         HStack(spacing: 14) {
             // ── 播放控制 ──────────────────────────────
-            IconButton(symbol: "backward.fill", size: 13, tint: palette.accent, help: "上一段") {}
+            IconButton(symbol: "shuffle", size: 13, tint: palette.accent, help: "换一首") {
+                state.nextTrack()
+            }
 
             Button {
-                state.isPlaying.toggle()
+                state.togglePlay()
             } label: {
                 ZStack {
                     Circle()
@@ -31,20 +33,24 @@ struct Dock: View {
             .keyboardShortcut(.space, modifiers: [])
             .help(state.isPlaying ? "暂停" : "播放")
 
-            IconButton(symbol: "forward.fill", size: 13, tint: palette.accent, help: "下一段") {}
+            IconButton(symbol: "forward.fill", size: 13, tint: palette.accent, help: "下一首") {
+                state.nextTrack()
+            }
 
             divider
 
             // ── 曲目信息 ──────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
-                Text("Snozzy 的电台")
+                Text(state.trackTitle)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.88))
-                Text(state.isPlaying ? "正在生成…" : "已暂停")
+                    .lineLimit(1)
+                Text(state.tempoText)
                     .font(.system(size: 10, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.42))
+                    .monospacedDigit()
             }
-            .frame(width: 96, alignment: .leading)
+            .frame(width: 138, alignment: .leading)
 
             divider
 

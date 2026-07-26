@@ -10,6 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // 自检模式：跑完音频链路检查就退出，不显示窗口。
+        if AudioSelfTest.isRequested {
+            MainActor.assumeIsolated { AudioSelfTest.run() }
+            return
+        }
+
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
