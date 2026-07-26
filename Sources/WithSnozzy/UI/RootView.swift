@@ -15,9 +15,13 @@ struct RootView: View {
 
             // 只有角色这一层跑动画时钟。
             TimelineView(.animation(minimumInterval: state.frameInterval, paused: !state.isVisible)) { tl in
-                SnozzyView(palette: pal, t: tl.date.timeIntervalSinceReferenceDate)
-                    .frame(width: 360, height: 360)
-                    .offset(y: -20)
+                SnozzyView(
+                    palette: pal,
+                    t: tl.date.timeIntervalSinceReferenceDate,
+                    kick: state.audio.kickPulse,
+                    playing: state.isPlaying)
+                .frame(width: 430, height: 430)
+                .offset(y: 22)
             }
 
             VStack(spacing: 0) {

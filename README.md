@@ -27,6 +27,7 @@ BIN=dist/WithSnozzy.app/Contents/MacOS/WithSnozzy
 
 $BIN --render out.wav 40   # 离线渲染 40 秒，打印峰值/RMS/削顶数
 $BIN --selftest            # 实跑 CoreAudio 输出路径，验证声音真的送出去了
+$BIN --snapshot out.png    # 一次画出 Snozzy 的多种表情和时段，用于调整建模
 ```
 
 `--render` 让合成器变得可测——可以直接对波形做频谱和立体声分析，

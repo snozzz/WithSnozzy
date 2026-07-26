@@ -10,9 +10,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // 自检模式：跑完音频链路检查就退出，不显示窗口。
+        // 诊断模式：跑完就退出，不显示窗口。
         if AudioSelfTest.isRequested {
             MainActor.assumeIsolated { AudioSelfTest.run() }
+            return
+        }
+        if let path = MainActor.assumeIsolated({ Snapshot.requestedPath }) {
+            MainActor.assumeIsolated { Snapshot.run(path: path) }
             return
         }
 
