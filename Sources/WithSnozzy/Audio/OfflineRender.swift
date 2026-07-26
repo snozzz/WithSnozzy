@@ -10,9 +10,30 @@ import Foundation
 /// 可以直接对输出做峰值/RMS 检查，不用靠耳朵判断有没有削顶或静音。
 enum OfflineRender {
 
-    /// 命令行里带 `--render` 就渲染完直接退出，不进入 GUI。
+    /// 命令行里带 `--render` / `--render-air` 就渲染完直接退出，不进入 GUI。
     static func runIfRequested() {
         let args = CommandLine.arguments
+
+        // 环境音：--render-air rain out.wav 20
+        if let i = args.firstIndex(of: "--render-air"), i + 2 < args.count {
+            let name = args[i + 1]
+            let path = args[i + 2]
+            let seconds = (i + 3 < args.count ? Double(args[i + 3]) : nil) ?? 20
+            guard let sound = Ambience.allCases.first(where: { "\($0)" == name }) else {
+                print("未知的环境音: \(name)（可选: \(Ambience.allCases.map { "\($0)" }.joined(separator: ", "))）")
+                exit(1)
+            }
+            do {
+                let stats = try renderAmbience(sound, to: path, seconds: seconds)
+                print("已写入 \(path)  [\(sound.label)]")
+                print(String(format: "  峰值 %.3f  RMS %.4f  削顶样本 %d", stats.peak, stats.rms, stats.clipped))
+            } catch {
+                print("渲染失败: \(error.localizedDescription)")
+                exit(1)
+            }
+            exit(0)
+        }
+
         guard let i = args.firstIndex(of: "--render"), i + 1 < args.count else { return }
 
         let path = args[i + 1]
@@ -28,6 +49,16 @@ enum OfflineRender {
             exit(1)
         }
         exit(0)
+    }
+
+    /// 单独渲染一路环境音，音量拉满，方便检查它的频谱和动态。
+    static func renderAmbience(_ sound: Ambience, to path: String, seconds: Double) throws -> Stats {
+        let sr = 44100.0
+        let mixer = AmbienceMixer(sampleRate: sr)
+        mixer.setLevel(sound, 1.0)
+        return try drain(seconds: seconds, sr: sr, path: path) { l, r, n in
+            mixer.render(left: l, right: r, frames: n)
+        }
     }
 
     struct Stats {
@@ -47,6 +78,17 @@ enum OfflineRender {
               + " · \(Progressions.all[synth.progressionIndex].name)"
               + " · \(Int(synth.bpm.rounded())) BPM")
 
+        return try drain(seconds: seconds, sr: sr, path: path) { l, r, n in
+            synth.render(left: l, right: r, frames: n)
+        }
+    }
+
+    /// 反复调用渲染闭包，攒成 PCM 并统计电平。
+    /// 音乐和环境音共用这段，免得两处各写一遍缓冲区管理。
+    private static func drain(
+        seconds: Double, sr: Double, path: String,
+        _ produce: (UnsafeMutablePointer<Float>, UnsafeMutablePointer<Float>, Int) -> Void
+    ) throws -> Stats {
         let total = Int(seconds * sr)
         let block = 512
 
@@ -62,7 +104,7 @@ enum OfflineRender {
 
         while done < total {
             let n = min(block, total - done)
-            synth.render(left: l, right: r, frames: n)
+            produce(l, r, n)
             for k in 0..<n {
                 for v in [Double(l[k]), Double(r[k])] {
                     let s = v.isFinite ? v : 0

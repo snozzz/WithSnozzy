@@ -100,6 +100,25 @@ final class AppState {
     var timeMode: TimeMode = .auto
     var weather: Weather = .clear
 
+    /// 环境音各路音量。
+    ///
+    /// 引擎里已经有一份权威数据了，这里再存一份是因为 `audio` 被标记为
+    /// `@ObservationIgnored`——UI 需要一个可观察的镜像才能刷新滑杆。
+    var ambienceLevels = [Double](repeating: 0, count: Ambience.allCases.count)
+
+    func setAmbience(_ sound: Ambience, _ value: Double) {
+        ambienceLevels[sound.rawValue] = value
+        audio.setAmbienceLevel(sound, value)
+    }
+
+    func applyAmbiencePreset(_ preset: AmbiencePreset) {
+        for sound in Ambience.allCases {
+            setAmbience(sound, preset.levels[sound] ?? 0)
+        }
+    }
+
+    var hasAnyAmbience: Bool { ambienceLevels.contains { $0 > 0.001 } }
+
     /// 窗口是否真的可见（未被遮挡 / 未最小化）。
     /// 不可见时所有动画时间线暂停，CPU 掉到接近 0。
     var isVisible = true
@@ -129,6 +148,14 @@ final class AppState {
 
     init() {
         audio.volume = volume
+
+        // 开发用：`--panel mixer` 启动时直接把某个面板打开。
+        // 调面板样式时省掉每次手点的一步。
+        if let i = CommandLine.arguments.firstIndex(of: "--panel"),
+           i + 1 < CommandLine.arguments.count,
+           let p = Panel(rawValue: CommandLine.arguments[i + 1]) {
+            panel = p
+        }
     }
 
     func togglePanel(_ p: Panel) {

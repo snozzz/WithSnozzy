@@ -109,6 +109,8 @@ struct PanelHost: View {
             state.panel = nil
         } content: {
             switch panel {
+            case .mixer:
+                MixerPanel(palette: palette)
             default:
                 VStack(spacing: 8) {
                     Image(systemName: panel.symbol)

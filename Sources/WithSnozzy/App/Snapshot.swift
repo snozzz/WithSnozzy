@@ -19,6 +19,11 @@ enum Snapshot {
     }
 
     static func run(path: String) {
+        // 只用来拍角色和场景。
+        //
+        // 侧边面板不走这条路：`ImageRenderer` 不会绘制 `ScrollView` 的内容，
+        // 面板拍出来永远是空的。面板改用 `--panel` 启动参数直接开在真实窗口里截图，
+        // 反正那才是真正要验证的渲染路径。
         let renderer = ImageRenderer(content: PoseSheet())
         renderer.scale = 2
 
