@@ -79,6 +79,12 @@ final class AudioEngine {
 
     var hasAmbience: Bool { ambience.isActive }
 
+    /// 番茄钟阶段切换的提示音。走环境音节点，所以音乐没在放也能响。
+    func chime(rising: Bool) {
+        ambience.triggerChime(rising: rising)
+        syncEngine()
+    }
+
     // MARK: - 引擎生命周期
 
     /// 音乐或环境音任一在响，引擎就得跑；都停了就淡出后挂起。

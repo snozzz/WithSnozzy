@@ -267,6 +267,56 @@ struct WindGen {
     }
 }
 
+/// 提示音：三个音的小琶音。
+///
+/// 番茄钟结束时用系统提示音会很突兀——那是「出错了」的声音。
+/// 这里用和音乐同一套音色（音乐盒），提示才像是从场景里长出来的。
+struct ChimeGen {
+    private var bells = [BellVoice](repeating: BellVoice(), count: 3)
+    private var notes: [Double] = [0, 0, 0]
+    private var pending = 0
+    private var countdown = 0
+    private var gap = 0
+    private var sr = 44100.0
+
+    var isActive: Bool {
+        if pending > 0 { return true }
+        for b in bells where b.isActive { return true }
+        return false
+    }
+
+    mutating func prepare(sr: Double) {
+        self.sr = sr
+        gap = Int(sr * 0.115)
+    }
+
+    /// - Parameter rising: true = 上行（专注结束，可以休息了），false = 下行（休息结束）。
+    mutating func trigger(rising: Bool) {
+        notes = rising ? [76, 81, 88] : [83, 78, 76]
+        pending = 3
+        countdown = 0
+    }
+
+    @inline(__always) mutating func render() -> (Double, Double) {
+        if pending > 0 {
+            countdown -= 1
+            if countdown <= 0 {
+                let i = 3 - pending
+                bells[i].trigger(note: notes[i], velocity: 0.55, pan: Double(i - 1) * 0.25, sr: sr)
+                pending -= 1
+                countdown = gap
+            }
+        }
+        var l = 0.0, r = 0.0
+        for i in 0..<bells.count where bells[i].isActive {
+            let v = bells[i].render()
+            l += v * bells[i].gainL
+            r += v * bells[i].gainR
+        }
+        return (l * 0.5, r * 0.5)
+    }
+}
+
 // MARK: - 混音台
 
 /// 六路环境音的混音器。和 `LofiSynth` 一样，`render` 只跑在音频线程上，全程无分配无锁。
@@ -277,10 +327,11 @@ final class AmbienceMixer: @unchecked Sendable {
     private var targets = [Double](repeating: 0, count: Ambience.allCases.count)
     private var smoothers: [Smoother]
 
-    /// 任意一路有声音时为 true。音频引擎据此决定要不要保持运行。
+    /// 任意一路有声音（或提示音还没响完）时为 true。
+    /// 音频引擎据此决定要不要保持运行——提示音响到一半被掐掉就很难听了。
     var isActive: Bool {
         for v in targets where v > 0.001 { return true }
-        return false
+        return chime.isActive
     }
 
     private let sr: Double
@@ -290,6 +341,7 @@ final class AmbienceMixer: @unchecked Sendable {
     private var waves = WavesGen()
     private var keys = KeysGen()
     private var wind = WindGen()
+    private var chime = ChimeGen()
 
     /// 各路的基准电平。不同生成器的原始响度差很多，这里先拉平，
     /// 用户的滑杆才会是「一半就是一半」而不是某几路一推就爆。
@@ -304,11 +356,15 @@ final class AmbienceMixer: @unchecked Sendable {
         waves.prepare(sr: sr)
         keys.prepare(sr: sr)
         wind.prepare(sr: sr)
+        chime.prepare(sr: sr)
     }
 
     func level(_ s: Ambience) -> Double { targets[s.rawValue] }
 
     func setLevel(_ s: Ambience, _ v: Double) { targets[s.rawValue] = clamp(v, 0, 1) }
+
+    /// 触发一次提示音。番茄钟阶段切换时调用。
+    func triggerChime(rising: Bool) { chime.trigger(rising: rising) }
 
     func render(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) {
         for n in 0..<frames {
@@ -332,8 +388,9 @@ final class AmbienceMixer: @unchecked Sendable {
                 r += b * g
             }
 
-            left[n] = Float(softClip(l))
-            right[n] = Float(softClip(r))
+            let (cl, cr) = chime.render()
+            left[n] = Float(softClip(l + cl))
+            right[n] = Float(softClip(r + cr))
         }
     }
 }

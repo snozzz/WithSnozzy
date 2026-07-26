@@ -12,9 +12,7 @@ struct RootView: View {
                 palette: pal,
                 weather: state.weather,
                 interval: state.frameInterval,
-                paused: !state.isVisible,
-                playing: state.isPlaying,
-                kick: state.audio.kickPulse)
+                paused: !state.isVisible)
 
             VStack(spacing: 0) {
                 TopBar(palette: pal)
@@ -46,12 +44,17 @@ struct RootView: View {
 /// 分层是有代价的，所以每一层的动画时钟单独控制：
 /// 静态的墙和桌子根本不进时间线，只有降水、角色、热气三层在动。
 private struct SceneStack: View {
+    /// 从环境里拿状态，而不是让 `RootView` 把值当参数传进来。
+    ///
+    /// 传值的写法有个隐蔽的 bug：参数是在 `RootView` 的 body 求值时取的，
+    /// 而 body 并不会每帧运行，于是底鼓脉冲永远是过期值，节拍同步根本没生效。
+    /// 必须在 `TimelineView` 的闭包**内部**读，那里才是每帧执行的地方。
+    @Environment(AppState.self) private var state
+
     let palette: Palette
     let weather: Weather
     let interval: Double
     let paused: Bool
-    let playing: Bool
-    let kick: Double
 
     /// Snozzy 相对窗口高度的尺寸，以及她的中心位置。
     /// 这两个数决定桌沿切在她身上的哪个高度——调构图就改这里。
@@ -79,7 +82,10 @@ private struct SceneStack: View {
                 TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in
                     let t = tl.date.timeIntervalSinceReferenceDate
                     ZStack {
-                        SnozzyView(palette: palette, t: t, kick: kick, playing: playing)
+                        SnozzyView(palette: palette, t: t,
+                                   kick: state.audio.kickPulse,
+                                   playing: state.isPlaying,
+                                   mood: state.mood)
                             .frame(width: figure, height: figure)
                             .position(x: w / 2, y: h * Self.figureCenterY)
 
@@ -111,6 +117,10 @@ struct PanelHost: View {
             switch panel {
             case .mixer:
                 MixerPanel(palette: palette)
+            case .focus:
+                FocusPanel(palette: palette)
+            case .tasks:
+                TasksPanel(palette: palette)
             default:
                 VStack(spacing: 8) {
                     Image(systemName: panel.symbol)

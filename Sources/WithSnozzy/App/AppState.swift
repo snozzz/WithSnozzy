@@ -63,6 +63,27 @@ final class AppState {
     /// 需要刷新的频率——播放信息由 UI 主动轮询，不走观察机制。
     @ObservationIgnored let audio = AudioEngine()
 
+    /// 番茄钟与待办。两者都是 `@Observable`，嵌套观察会自动生效。
+    let focus = FocusTimer()
+    let tasks = TaskList()
+
+    /// 刚完成一段专注的时刻。Snozzy 的心情会短暂地高涨一阵。
+    private var lastCelebration: Date?
+
+    /// Snozzy 的心情 0…1。
+    ///
+    /// 由「今天专注了多久」打底，完成一段番茄钟后叠加一段会衰减的兴奋值。
+    /// 这个值每帧都会被读到，所以刻意做成纯计算——不需要额外的定时器去驱动衰减。
+    var mood: Double {
+        let base = 0.40 + min(Double(focus.todayMinutes) / 180.0, 0.26)
+        guard let t = lastCelebration else { return base }
+        let elapsed = Date().timeIntervalSince(t)
+        let boost = elapsed < 100 ? (1 - elapsed / 100) : 0
+        return min(1.0, base + boost * 0.42)
+    }
+
+    func celebrate() { lastCelebration = Date() }
+
     // 播放
     var isPlaying = false
     var volume: Double = 0.7 {
@@ -148,6 +169,13 @@ final class AppState {
 
     init() {
         audio.volume = volume
+
+        // 番茄钟阶段切换：响一下提示音；专注段完成时 Snozzy 会高兴一阵。
+        focus.onPhaseFinished = { [weak self] finished in
+            guard let self else { return }
+            self.audio.chime(rising: finished == .work)
+            if finished == .work { self.celebrate() }
+        }
 
         // 开发用：`--panel mixer` 启动时直接把某个面板打开。
         // 调面板样式时省掉每次手点的一步。
