@@ -63,9 +63,10 @@ final class AppState {
     /// 需要刷新的频率——播放信息由 UI 主动轮询，不走观察机制。
     @ObservationIgnored let audio = AudioEngine()
 
-    /// 番茄钟与待办。两者都是 `@Observable`，嵌套观察会自动生效。
+    /// 番茄钟、待办、本地音乐库。都是 `@Observable`，嵌套观察会自动生效。
     let focus = FocusTimer()
     let tasks = TaskList()
+    let library = MusicLibrary()
 
     /// 刚完成一段专注的时刻。Snozzy 的心情会短暂地高涨一阵。
     private var lastCelebration: Date?
@@ -84,34 +85,105 @@ final class AppState {
 
     func celebrate() { lastCelebration = Date() }
 
-    // 播放
+    // MARK: - 播放
+
     var isPlaying = false
+
+    /// 播放来源：生成电台，还是本地文件。
+    var source: MusicSource = .radio {
+        didSet { if source != oldValue { switchSource(from: oldValue) } }
+    }
+
     var volume: Double = 0.7 {
-        didSet { audio.volume = volume }
-    }
-
-    /// 当前曲目描述，随播放状态刷新。
-    var trackTitle = "Snozzy 的电台"
-    var tempoText = ""
-
-    func togglePlay() {
-        isPlaying.toggle()
-        isPlaying ? audio.play() : audio.pause()
-        refreshTrackInfo()
-    }
-
-    func nextTrack() {
-        audio.next()
-        // 合成器要到下一个小节线才真正换曲，稍等一下再取标题。
-        Task {
-            try? await Task.sleep(for: .milliseconds(3200))
-            refreshTrackInfo()
+        didSet {
+            audio.volume = volume
+            library.volume = volume
         }
     }
 
-    func refreshTrackInfo() {
-        trackTitle = isPlaying ? audio.trackTitle : "Snozzy 的电台"
-        tempoText = isPlaying ? audio.tempoText : "已暂停"
+    /// 电台当前曲目的描述。
+    ///
+    /// 合成器的调式/进行不是可观察的（`audio` 标了 `@ObservationIgnored`），
+    /// 所以这个值靠手动刷新；本地曲目则通过 `library` 的嵌套观察自动更新。
+    private var radioTitle = ""
+    private var radioTempo = ""
+
+    var trackTitle: String {
+        switch source {
+        case .radio:
+            isPlaying && !radioTitle.isEmpty ? radioTitle : MusicSource.radio.label
+        case .library:
+            library.currentTrack?.title ?? MusicSource.library.label
+        }
+    }
+
+    var subtitleText: String {
+        switch source {
+        case .radio:
+            isPlaying ? radioTempo : "已暂停"
+        case .library:
+            if let msg = library.message { msg }
+            else if library.tracks.isEmpty { "未选择文件夹" }
+            else if let i = library.currentIndex { "\(i + 1) / \(library.tracks.count)" }
+            else { "\(library.tracks.count) 首" }
+        }
+    }
+
+    func togglePlay() {
+        isPlaying.toggle()
+        switch source {
+        case .radio: isPlaying ? audio.play() : audio.pause()
+        case .library: isPlaying ? library.resume() : library.pause()
+        }
+        refreshRadioInfo()
+    }
+
+    func nextTrack() {
+        switch source {
+        case .radio:
+            audio.next()
+            // 合成器要到下一个小节线才真正换曲，稍等一下再取标题。
+            Task {
+                try? await Task.sleep(for: .milliseconds(3400))
+                refreshRadioInfo()
+            }
+        case .library:
+            library.next()
+            if !isPlaying { isPlaying = true }
+        }
+    }
+
+    func previousTrack() {
+        switch source {
+        case .radio: nextTrack()          // 生成的音乐没有"上一首"，就当再换一首
+        case .library: library.previous()
+        }
+    }
+
+    /// 从列表里点某一首。
+    func playFromLibrary(index: Int) {
+        source = .library
+        library.play(at: index)
+        isPlaying = true
+    }
+
+    private func switchSource(from old: MusicSource) {
+        // 两个来源同时出声会很吵，切换时先把旧的停掉。
+        switch old {
+        case .radio: audio.pause()
+        case .library: library.pause()
+        }
+        guard isPlaying else { return }
+        switch source {
+        case .radio: audio.play()
+        case .library: library.resume()
+        }
+        refreshRadioInfo()
+    }
+
+    private func refreshRadioInfo() {
+        radioTitle = audio.trackTitle
+        radioTempo = audio.tempoText
     }
 
     // 面板
@@ -169,6 +241,7 @@ final class AppState {
 
     init() {
         audio.volume = volume
+        library.volume = volume
 
         // 番茄钟阶段切换：响一下提示音；专注段完成时 Snozzy 会高兴一阵。
         focus.onPhaseFinished = { [weak self] finished in
@@ -177,12 +250,16 @@ final class AppState {
             if finished == .work { self.celebrate() }
         }
 
-        // 开发用：`--panel mixer` 启动时直接把某个面板打开。
-        // 调面板样式时省掉每次手点的一步。
-        if let i = CommandLine.arguments.firstIndex(of: "--panel"),
-           i + 1 < CommandLine.arguments.count,
-           let p = Panel(rawValue: CommandLine.arguments[i + 1]) {
+        // 开发用：`--panel mixer --source library` 启动时直接进入指定状态。
+        // 调面板样式时省掉每次手点的几步。
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--panel"), i + 1 < args.count,
+           let p = Panel(rawValue: args[i + 1]) {
             panel = p
+        }
+        if let i = args.firstIndex(of: "--source"), i + 1 < args.count,
+           let s = MusicSource(rawValue: args[i + 1]) {
+            source = s
         }
     }
 

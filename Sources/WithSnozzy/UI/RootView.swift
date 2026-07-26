@@ -121,6 +121,8 @@ struct PanelHost: View {
                 FocusPanel(palette: palette)
             case .tasks:
                 TasksPanel(palette: palette)
+            case .library:
+                LibraryPanel(palette: palette)
             default:
                 VStack(spacing: 8) {
                     Image(systemName: panel.symbol)

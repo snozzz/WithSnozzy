@@ -10,8 +10,18 @@ struct Dock: View {
 
         HStack(spacing: 14) {
             // ── 播放控制 ──────────────────────────────
-            IconButton(symbol: "shuffle", size: 13, tint: palette.accent, help: "换一首") {
-                state.nextTrack()
+            // 第一个按钮在两种来源下含义不同：
+            // 电台是「再生成一首」，音乐库是「随机播放开关」。
+            if state.source == .library {
+                IconButton(symbol: "shuffle", size: 13,
+                           isOn: state.library.shuffle, tint: palette.accent,
+                           help: state.library.shuffle ? "关闭随机播放" : "随机播放") {
+                    state.library.shuffle.toggle()
+                }
+            } else {
+                IconButton(symbol: "backward.fill", size: 13, tint: palette.accent, help: "换一首") {
+                    state.previousTrack()
+                }
             }
 
             Button {
@@ -45,7 +55,7 @@ struct Dock: View {
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.88))
                     .lineLimit(1)
-                Text(state.tempoText)
+                Text(state.subtitleText)
                     .font(.system(size: 10, weight: .regular, design: .rounded))
                     .foregroundStyle(.white.opacity(0.42))
                     .monospacedDigit()
