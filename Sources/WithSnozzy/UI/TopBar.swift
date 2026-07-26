@@ -16,14 +16,28 @@ struct TopBar: View {
                 .monospacedDigit()
                 .foregroundStyle(palette.text.color(0.55))
 
+            // 中间刻意留空：这里是墙上的串灯，压一行标题上去两边都看不清。
             Spacer()
 
-            Text("With Snozzy")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(palette.text.color(0.35))
-                .tracking(0.6)
-
-            Spacer()
+            Menu {
+                ForEach(Weather.allCases) { wx in
+                    Button {
+                        state.weather = wx
+                    } label: {
+                        Label(wx.label, systemImage: wx.symbol)
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: state.weather.symbol)
+                    Text(state.weather.label)
+                }
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(palette.text.color(0.55))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
 
             Menu {
                 ForEach(TimeMode.allCases, id: \.self) { mode in

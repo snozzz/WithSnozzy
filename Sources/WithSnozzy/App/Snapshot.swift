@@ -76,6 +76,9 @@ private struct PoseSheet: View {
         ]
     }
 
+    /// 每格用不同天气，一张图就能同时检查降水效果。
+    private let weathers: [Weather] = [.clear, .rain, .snow, .rain, .clear, .snow]
+
     var body: some View {
         let items = cases
         VStack(spacing: 0) {
@@ -85,8 +88,11 @@ private struct PoseSheet: View {
                         let item = items[row * 3 + col]
                         VStack(spacing: 4) {
                             ZStack {
-                                RoomView(palette: item.2)
+                                RoomBackdrop(palette: item.2, weather: weathers[row * 3 + col], t: 3.0)
                                 SnozzyCanvas(pose: item.1, palette: item.2)
+                                    .frame(width: Self.cell * 0.78, height: Self.cell * 0.78)
+                                    .position(x: Self.cell / 2, y: Self.cell * 0.511)
+                                RoomForeground(palette: item.2)
                             }
                             .frame(width: Self.cell, height: Self.cell)
                             .clipped()

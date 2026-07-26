@@ -98,6 +98,7 @@ final class AppState {
 
     // 场景
     var timeMode: TimeMode = .auto
+    var weather: Weather = .clear
 
     /// 窗口是否真的可见（未被遮挡 / 未最小化）。
     /// 不可见时所有动画时间线暂停，CPU 掉到接近 0。
@@ -106,8 +107,16 @@ final class AppState {
     /// 省电模式：降帧、关掉高开销的绘制层。
     var lowPower = false
 
-    /// 动画帧间隔。省电模式下砍到 20fps，肉眼几乎无差别但功耗减半。
-    var frameInterval: Double { lowPower ? 1.0 / 20.0 : 1.0 / 30.0 }
+    /// 动画帧间隔。
+    ///
+    /// 分三档：
+    /// - 播放中 24fps —— 要跟上底鼓的点头，帧率低了会看出顿挫。
+    /// - 空闲 15fps  —— 只剩呼吸和眨眼这种慢动作，15fps 完全看不出来。
+    /// - 省电 10fps  —— 明显省电，代价是动作略有台阶感。
+    var frameInterval: Double {
+        if lowPower { return 1.0 / 10.0 }
+        return isPlaying ? 1.0 / 24.0 : 1.0 / 15.0
+    }
 
     /// 当前场景小时数，驱动整套调色板。
     var sceneHour: Double {

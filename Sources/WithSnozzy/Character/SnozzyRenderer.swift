@@ -237,18 +237,19 @@ enum SnozzyRenderer {
         ctx.fill(neck, with: .color(lit(Look.skinShade).color))
 
         // 下巴投在脖子上的影。少了这道影，头会像浮在身体上面。
-        // 羽化过的软边才像投影；硬边会把下巴"切断"。
-        ctx.drawLayer { l in
-            l.addFilter(.blur(radius: UnitPath(in: rect).length(0.008)))
-            let shadow = UnitPath.build(in: rect) { p in
-                p.move(G.cx - G.neckHalf - 0.006, G.neckTop - 0.010)
-                p.quad(G.cx + G.neckHalf + 0.006, G.neckTop - 0.010, G.cx, G.neckTop + 0.040)
-                p.line(G.cx + G.neckHalf + 0.006, G.neckTop - 0.018)
-                p.line(G.cx - G.neckHalf - 0.006, G.neckTop - 0.018)
-                p.close()
-            }
-            l.fill(shadow, with: .color(lit(Look.skinDeep).color(0.72)))
+        // 纵向渐隐代替模糊：上缘实、下缘化开，正是投影该有的样子。
+        let up = UnitPath(in: rect)
+        let shadow = UnitPath.build(in: rect) { p in
+            p.move(G.cx - G.neckHalf - 0.006, G.neckTop - 0.016)
+            p.quad(G.cx + G.neckHalf + 0.006, G.neckTop - 0.016, G.cx, G.neckTop + 0.046)
+            p.line(G.cx + G.neckHalf + 0.006, G.neckTop - 0.020)
+            p.line(G.cx - G.neckHalf - 0.006, G.neckTop - 0.020)
+            p.close()
         }
+        ctx.fill(shadow, with: .linearGradient(
+            Gradient(colors: [lit(Look.skinDeep).color(0.78), lit(Look.skinDeep).color(0.0)]),
+            startPoint: up.point(G.cx, G.neckTop - 0.016),
+            endPoint: up.point(G.cx, G.neckTop + 0.048)))
     }
 
     // MARK: - 脸
@@ -292,20 +293,22 @@ enum SnozzyRenderer {
             }
             l.fill(shade, with: .color(lit(Look.skinShade).color(0.62)))
 
-            // 两颊的侧影，把脸的体积撑出来。羽化掉硬边，否则脸上会出现两条直棱。
-            l.drawLayer { c in
-                c.addFilter(.blur(radius: UnitPath(in: rect).length(0.012)))
-                for sign in [-1.0, 1.0] {
-                    let cheek = UnitPath.build(in: rect) { p in
-                        p.move(G.cx + sign * G.rx * 1.02, G.cy - G.ry * 0.30)
-                        p.quad(G.cx + sign * G.rx * 0.40, G.cy + G.ry * 0.98,
-                               G.cx + sign * G.rx * 0.92, G.cy + G.ry * 0.60)
-                        p.quad(G.cx + sign * G.rx * 1.06, G.cy - G.ry * 0.30,
-                               G.cx + sign * G.rx * 1.14, G.cy + G.ry * 0.40)
-                        p.close()
-                    }
-                    c.fill(cheek, with: .color(lit(Look.skinShade).color(0.44)))
+            // 两颊的侧影，把脸的体积撑出来。
+            // 用横向渐变从脸缘往里渐隐，效果等同羽化但不走离屏模糊。
+            let up = UnitPath(in: rect)
+            for sign in [-1.0, 1.0] {
+                let cheek = UnitPath.build(in: rect) { p in
+                    p.move(G.cx + sign * G.rx * 1.02, G.cy - G.ry * 0.30)
+                    p.quad(G.cx + sign * G.rx * 0.36, G.cy + G.ry * 0.98,
+                           G.cx + sign * G.rx * 0.92, G.cy + G.ry * 0.60)
+                    p.quad(G.cx + sign * G.rx * 1.06, G.cy - G.ry * 0.30,
+                           G.cx + sign * G.rx * 1.14, G.cy + G.ry * 0.40)
+                    p.close()
                 }
+                l.fill(cheek, with: .linearGradient(
+                    Gradient(colors: [lit(Look.skinShade).color(0.0), lit(Look.skinShade).color(0.50)]),
+                    startPoint: up.point(G.cx + sign * G.rx * 0.30, G.cy),
+                    endPoint: up.point(G.cx + sign * G.rx * 1.10, G.cy)))
             }
         }
     }
@@ -316,14 +319,22 @@ enum SnozzyRenderer {
                                   pose: Pose, lit: (RGB) -> RGB) {
         guard pose.blush > 0.01 else { return }
         let up = UnitPath(in: rect)
-        ctx.drawLayer { l in
-            l.addFilter(.blur(radius: up.length(0.016)))
-            for sign in [-1.0, 1.0] {
-                let e = UnitPath.build(in: rect) { p in
-                    p.ellipse(G.cx + sign * G.blushDX, G.blushY, 0.040, 0.0225)
-                }
-                l.fill(e, with: .color(lit(Look.blush).color(pose.blush * 0.85)))
+        // 用径向渐变代替高斯模糊。
+        //
+        // `addFilter(.blur)` 每次都会强制一遍离屏渲染，而角色是逐帧重绘的——
+        // 四处模糊就是四次全画布离屏，实测占了空闲 CPU 的一大半。
+        // 渐变由 GPU 直接填充，观感几乎一样，开销可以忽略。
+        for sign in [-1.0, 1.0] {
+            let cx = G.cx + sign * G.blushDX
+            let e = UnitPath.build(in: rect) { p in
+                p.ellipse(cx, G.blushY, 0.044, 0.026)
             }
+            ctx.fill(e, with: .radialGradient(
+                Gradient(colors: [lit(Look.blush).color(pose.blush * 0.80),
+                                  lit(Look.blush).color(0)]),
+                center: up.point(cx, G.blushY),
+                startRadius: 0,
+                endRadius: up.length(0.044)))
         }
     }
 
@@ -557,17 +568,22 @@ enum SnozzyRenderer {
                    style: .init(lineWidth: up.length(0.0034), lineCap: .round))
 
         // 头顶高光带：白发最重要的一笔，没有它就是一坨白。
-        // 必须羽化——硬边的白色条会像在头上贴了张纸。
-        ctx.drawLayer { l in
-            l.addFilter(.blur(radius: up.length(0.013)))
-            let shine = UnitPath.build(in: rect) { p in
-                p.move(G.cx - G.rx * 0.70, G.cy - G.ry * 0.70)
-                p.quad(G.cx + G.rx * 0.70, G.cy - G.ry * 0.70, G.cx, G.cy - G.ry * 0.99)
-                p.quad(G.cx - G.rx * 0.70, G.cy - G.ry * 0.70, G.cx, G.cy - G.ry * 0.78)
-                p.close()
-            }
-            l.fill(shine, with: .color(.white.opacity(0.62)))
+        // 上下两端渐隐，效果等同羽化，但不需要离屏模糊。
+        let shine = UnitPath.build(in: rect) { p in
+            p.move(G.cx - G.rx * 0.70, G.cy - G.ry * 0.68)
+            p.quad(G.cx + G.rx * 0.70, G.cy - G.ry * 0.68, G.cx, G.cy - G.ry * 1.02)
+            p.quad(G.cx - G.rx * 0.70, G.cy - G.ry * 0.68, G.cx, G.cy - G.ry * 0.74)
+            p.close()
         }
+        ctx.fill(shine, with: .linearGradient(
+            Gradient(stops: [
+                .init(color: .white.opacity(0.0), location: 0.0),
+                .init(color: .white.opacity(0.60), location: 0.42),
+                .init(color: .white.opacity(0.32), location: 0.75),
+                .init(color: .white.opacity(0.0), location: 1.0),
+            ]),
+            startPoint: up.point(G.cx, G.cy - G.ry * 1.02),
+            endPoint: up.point(G.cx, G.cy - G.ry * 0.64)))
     }
 
     // MARK: - 侧发

@@ -11,7 +11,8 @@ struct SnozzyCanvas: View {
                                 rect: CGRect(origin: .zero, size: size),
                                 scene: palette)
         }
-        .drawingGroup()   // 合成到一层 Metal 纹理，避免每帧重建大量图层
+        // 刻意**不加** .drawingGroup()：Canvas 本身已经是一次性的即时绘制，
+        // 再套一层 drawingGroup 只会多一次离屏合成，纯粹是负优化。
     }
 }
 
