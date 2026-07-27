@@ -5,9 +5,17 @@ struct RootView: View {
     @Environment(AppState.self) private var state
 
     var body: some View {
+        switch state.windowMode {
+        case .normal: fullScene
+        case .mini: MiniView()
+        case .pet: PetView()
+        }
+    }
+
+    private var fullScene: some View {
         let pal = state.palette
 
-        ZStack {
+        return ZStack {
             SceneStack(
                 palette: pal,
                 weather: state.weather,

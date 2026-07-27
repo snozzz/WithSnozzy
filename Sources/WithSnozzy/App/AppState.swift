@@ -85,6 +85,13 @@ final class AppState {
 
     func celebrate() { lastCelebration = Date() }
 
+    /// 退出前把所有待写的数据落盘。
+    func flushAll() {
+        focus.flush()
+        tasks.flush()
+        library.flush()
+    }
+
     // MARK: - 播放
 
     var isPlaying = false
@@ -184,7 +191,37 @@ final class AppState {
     private func refreshRadioInfo() {
         radioTitle = audio.trackTitle
         radioTempo = audio.tempoText
+        nowPlaying.update(title: trackTitle, subtitle: subtitleText, isPlaying: isPlaying)
     }
+
+    /// 系统「正在播放」与媒体键。
+    @ObservationIgnored let nowPlaying = NowPlaying()
+
+    private func setUpNowPlaying() {
+        nowPlaying.onPlay = { [weak self] in
+            guard let self, !self.isPlaying else { return }
+            self.togglePlay()
+        }
+        nowPlaying.onPause = { [weak self] in
+            guard let self, self.isPlaying else { return }
+            self.togglePlay()
+        }
+        nowPlaying.onToggle = { [weak self] in self?.togglePlay() }
+        nowPlaying.onNext = { [weak self] in self?.nextTrack() }
+        nowPlaying.onPrevious = { [weak self] in self?.previousTrack() }
+        nowPlaying.configure()
+    }
+
+    // MARK: - 窗口
+
+    var windowMode: WindowMode = .normal {
+        didSet { if windowMode != oldValue { onWindowModeChange?(windowMode) } }
+    }
+
+    /// 由 `AppDelegate` 注入：把形态变化落到真实的 NSWindow 上。
+    @ObservationIgnored var onWindowModeChange: ((WindowMode) -> Void)?
+    /// 由 `AppDelegate` 注入：从菜单栏把主窗口叫回前台。
+    @ObservationIgnored var revealWindow: (() -> Void)?
 
     // 面板
     var panel: Panel?
@@ -242,6 +279,7 @@ final class AppState {
     init() {
         audio.volume = volume
         library.volume = volume
+        setUpNowPlaying()
 
         // 番茄钟阶段切换：响一下提示音；专注段完成时 Snozzy 会高兴一阵。
         focus.onPhaseFinished = { [weak self] finished in
@@ -260,6 +298,10 @@ final class AppState {
         if let i = args.firstIndex(of: "--source"), i + 1 < args.count,
            let s = MusicSource(rawValue: args[i + 1]) {
             source = s
+        }
+        if let i = args.firstIndex(of: "--mode"), i + 1 < args.count,
+           let m = WindowMode(rawValue: args[i + 1]) {
+            windowMode = m
         }
     }
 

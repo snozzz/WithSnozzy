@@ -16,7 +16,9 @@ struct WithSnozzyApp: App {
         Window("With Snozzy", id: "main") {
             RootView()
                 .environment(state)
-                .frame(minWidth: 720, minHeight: 480)
+                // 迷你和桌宠模式要比这个小得多，所以最小尺寸只在完整模式下生效。
+                .frame(minWidth: state.windowMode == .normal ? 720 : 240,
+                       minHeight: state.windowMode == .normal ? 480 : 220)
                 .onAppear { delegate.state = state }
         }
         .windowStyle(.hiddenTitleBar)
@@ -25,6 +27,25 @@ struct WithSnozzyApp: App {
             // 移除用不到的系统菜单项，让菜单栏保持干净。
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .help) {}
+
+            CommandMenu("播放") {
+                Button(state.isPlaying ? "暂停" : "播放") { state.togglePlay() }
+                    .keyboardShortcut(.space, modifiers: [])
+                Button("下一首") { state.nextTrack() }
+                    .keyboardShortcut(.rightArrow, modifiers: [.command])
+                Divider()
+                ForEach(WindowMode.allCases, id: \.self) { mode in
+                    Button(mode.label) { state.windowMode = mode }
+                }
+            }
         }
+
+        // 菜单栏常驻图标。主窗口关掉之后它仍然在，音乐也不会断。
+        MenuBarExtra {
+            MenuBarView().environment(state)
+        } label: {
+            Image(systemName: state.isPlaying ? "moon.stars.fill" : "moon.stars")
+        }
+        .menuBarExtraStyle(.window)
     }
 }
