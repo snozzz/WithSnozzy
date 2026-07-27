@@ -131,17 +131,8 @@ struct PanelHost: View {
                 TasksPanel(palette: palette)
             case .library:
                 LibraryPanel(palette: palette)
-            default:
-                VStack(spacing: 8) {
-                    Image(systemName: panel.symbol)
-                        .font(.system(size: 26))
-                        .foregroundStyle(.white.opacity(0.22))
-                    Text("即将上线")
-                        .font(.system(size: 12, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 40)
+            case .settings:
+                SettingsPanel(palette: palette)
             }
         }
     }

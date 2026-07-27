@@ -85,11 +85,49 @@ final class AppState {
 
     func celebrate() { lastCelebration = Date() }
 
+    // MARK: - 偏好持久化
+
+    @ObservationIgnored private var settingsSaver: DebouncedSaver?
+    /// 启动阶段批量赋值时不该触发保存，否则会把默认值写回去覆盖存档。
+    @ObservationIgnored private var isRestoring = false
+
+    private func scheduleSave() {
+        guard !isRestoring else { return }
+        settingsSaver?.schedule()
+    }
+
+    private var currentSettings: AppSettings {
+        AppSettings(volume: volume, source: source, timeMode: timeMode, weather: weather,
+                    windowMode: windowMode, ambienceLevels: ambienceLevels,
+                    lowPower: lowPower, panel: panel?.rawValue)
+    }
+
+    private func restore() {
+        guard var saved = Store.load(AppSettings.storeName, as: AppSettings.self) else { return }
+        saved.sanitize()
+
+        isRestoring = true
+        defer { isRestoring = false }
+
+        volume = saved.volume
+        timeMode = saved.timeMode
+        weather = saved.weather
+        lowPower = saved.lowPower
+        panel = saved.panel.flatMap(Panel.init(rawValue:))
+        source = saved.source
+        windowMode = saved.windowMode
+        for (i, sound) in Ambience.allCases.enumerated() {
+            ambienceLevels[i] = saved.ambienceLevels[i]
+            audio.setAmbienceLevel(sound, saved.ambienceLevels[i])
+        }
+    }
+
     /// 退出前把所有待写的数据落盘。
     func flushAll() {
         focus.flush()
         tasks.flush()
         library.flush()
+        settingsSaver?.flush()
     }
 
     // MARK: - 播放
@@ -98,13 +136,18 @@ final class AppState {
 
     /// 播放来源：生成电台，还是本地文件。
     var source: MusicSource = .radio {
-        didSet { if source != oldValue { switchSource(from: oldValue) } }
+        didSet {
+            guard source != oldValue else { return }
+            switchSource(from: oldValue)
+            scheduleSave()
+        }
     }
 
     var volume: Double = 0.7 {
         didSet {
             audio.volume = volume
             library.volume = volume
+            scheduleSave()
         }
     }
 
@@ -215,7 +258,11 @@ final class AppState {
     // MARK: - 窗口
 
     var windowMode: WindowMode = .normal {
-        didSet { if windowMode != oldValue { onWindowModeChange?(windowMode) } }
+        didSet {
+            guard windowMode != oldValue else { return }
+            onWindowModeChange?(windowMode)
+            scheduleSave()
+        }
     }
 
     /// 由 `AppDelegate` 注入：把形态变化落到真实的 NSWindow 上。
@@ -224,11 +271,13 @@ final class AppState {
     @ObservationIgnored var revealWindow: (() -> Void)?
 
     // 面板
-    var panel: Panel?
+    var panel: Panel? {
+        didSet { scheduleSave() }
+    }
 
     // 场景
-    var timeMode: TimeMode = .auto
-    var weather: Weather = .clear
+    var timeMode: TimeMode = .auto { didSet { scheduleSave() } }
+    var weather: Weather = .clear { didSet { scheduleSave() } }
 
     /// 环境音各路音量。
     ///
@@ -239,6 +288,7 @@ final class AppState {
     func setAmbience(_ sound: Ambience, _ value: Double) {
         ambienceLevels[sound.rawValue] = value
         audio.setAmbienceLevel(sound, value)
+        scheduleSave()
     }
 
     func applyAmbiencePreset(_ preset: AmbiencePreset) {
@@ -254,7 +304,7 @@ final class AppState {
     var isVisible = true
 
     /// 省电模式：降帧、关掉高开销的绘制层。
-    var lowPower = false
+    var lowPower = false { didSet { scheduleSave() } }
 
     /// 动画帧间隔。
     ///
@@ -277,6 +327,12 @@ final class AppState {
     var palette: Palette { .at(hour: sceneHour) }
 
     init() {
+        settingsSaver = DebouncedSaver { [weak self] in
+            guard let self else { return }
+            Store.save(self.currentSettings, as: AppSettings.storeName)
+        }
+        restore()
+
         audio.volume = volume
         library.volume = volume
         setUpNowPlaying()
