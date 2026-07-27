@@ -27,6 +27,13 @@ if [ "$CONFIG" = "release" ]; then
   strip -x "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 fi
 
+# 手绘素材（如果有）。放进 Resources/Assets/，运行时从 Bundle 里取。
+if [ -d "$ROOT/Assets" ] && [ -n "$(ls -A "$ROOT/Assets" 2>/dev/null)" ]; then
+  mkdir -p "$APP/Contents/Resources/Assets"
+  cp "$ROOT/Assets/"* "$APP/Contents/Resources/Assets/" 2>/dev/null || true
+  echo "▸ 已打包手绘素材 ($(ls "$ROOT/Assets" | wc -l | tr -d ' ') 个文件)"
+fi
+
 # 图标。
 #
 # 由刚编出来的二进制自己画：`--icon` 会用和游戏里同一套渲染代码输出全套尺寸。

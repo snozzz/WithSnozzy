@@ -79,10 +79,17 @@ private struct SceneStack: View {
 
             ZStack {
                 // 1. 背景。晴天时时间线暂停，这一层完全静止。
+                //    有手绘素材就用手绘的，没有就回落到程序化房间——
+                //    素材是可选的，不该让 app 跑不起来。
                 TimelineView(.animation(minimumInterval: interval,
                                         paused: paused || weather == .clear)) { tl in
-                    RoomBackdrop(palette: palette, weather: weather,
-                                 t: tl.date.timeIntervalSinceReferenceDate)
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    if state.sceneAssets.isAvailable {
+                        PaintedRoomBackdrop(assets: state.sceneAssets, palette: palette,
+                                            weather: weather, t: t)
+                    } else {
+                        RoomBackdrop(palette: palette, weather: weather, t: t)
+                    }
                 }
 
                 // 2+4. Snozzy 和热气共用**同一个**时间线。
@@ -105,11 +112,21 @@ private struct SceneStack: View {
                         // 3. 前景：桌面挡住她的下半身，"坐在桌前"的印象就成立了。
                         //    它必须夹在角色和热气之间，所以只能放进这个时间线里；
                         //    但它本身是静态的，靠 .equatable() 跳过每帧重绘。
-                        RoomForeground(palette: palette).equatable()
+                        if state.sceneAssets.isAvailable {
+                            PaintedRoomForeground(assets: state.sceneAssets, palette: palette)
+                                .equatable()
+                        } else {
+                            RoomForeground(palette: palette).equatable()
+                        }
 
-                        SteamOverlay(palette: palette, t: t)
-                            .frame(width: w * 0.085, height: h * 0.13)
-                            .position(x: w * 0.178, y: h * (RoomForeground.deskTop - 0.128))
+                        // 蒸汽只在程序化房间里画。手绘素材自带氛围，
+                        // 再叠一层程序化蒸汽只会飘在错的位置。
+                        if !state.sceneAssets.isAvailable {
+                            SteamOverlay(palette: palette, t: t)
+                                .frame(width: w * 0.085, height: h * 0.13)
+                                .position(x: w * 0.178,
+                                          y: h * (RoomForeground.deskTop - 0.128))
+                        }
                     }
                 }
 

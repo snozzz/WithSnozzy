@@ -66,6 +66,30 @@ struct RoomBackdrop: View {
     }
 }
 
+// MARK: - 天空
+
+/// 窗外的天空。抽成独立视图，因为手绘房间的窗洞后面也要塞同一份东西——
+/// 画死的天空会让房间失去时间感，昼夜和天气就全丢了。
+struct SkyView: View {
+    let palette: Palette
+    let weather: Weather
+    var t: Double = 0
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [palette.skyTop.color, palette.skyBottom.color],
+                startPoint: .top, endPoint: .bottom)
+
+            if palette.star > 0.01 {
+                Stars(opacity: palette.star)
+            }
+            Cityscape(palette: palette)
+            Precipitation(weather: weather, t: t, tint: palette.skyBottom)
+        }
+    }
+}
+
 // MARK: - 窗
 
 private struct WindowPane: View {
@@ -119,7 +143,7 @@ private struct WindowPane: View {
 }
 
 /// 静态星图。位置由固定种子生成——星星不该每次重绘都换地方。
-private struct Stars: View {
+struct Stars: View {
     let opacity: Double
 
     private static let points: [(CGFloat, CGFloat, Double)] = {
@@ -146,7 +170,7 @@ private struct Stars: View {
 }
 
 /// 远景楼房。
-private struct Cityscape: View {
+struct Cityscape: View {
     let palette: Palette
 
     /// (左边界, 宽, 高) —— 全部归一化。固定种子保证轮廓不会闪。

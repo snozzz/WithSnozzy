@@ -74,6 +74,9 @@ final class AppState {
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
 
+    /// 手绘房间素材。缺失时场景自动回落到程序化绘制。
+    let sceneAssets = SceneAssets()
+
     /// 角色的渲染方式。
     var characterStyle: CharacterStyle = .vector {
         didSet {
@@ -409,6 +412,7 @@ final class AppState {
         }
         restore()
 
+        sceneAssets.load()
         audio.volume = volume
         library.volume = volume
         setUpNowPlaying()

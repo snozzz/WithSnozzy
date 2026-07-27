@@ -40,10 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
-        // 窗口要等 SwiftUI 建好，下一轮 runloop 再抓。
-        DispatchQueue.main.async { [weak self] in
-            MainActor.assumeIsolated { self?.configureWindow() }
-        }
+        // 窗口要等 SwiftUI 建好才抓得到。
+        //
+        // 只等一轮 runloop 是不够的：窗口什么时候出现取决于 SwiftUI 内部的时序，
+        // 抓不到就直接返回的话，窗口会永远停在未配置的状态——
+        // 表现为一个一百来像素、跑到屏幕外的小窗。所以要重试。
+        scheduleWindowSetup(attempt: 0)
     }
 
     /// 菜单栏图标一直在，所以关掉窗口不等于退出应用——音乐还在放。
@@ -61,12 +63,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    private func configureWindow() {
+    private func scheduleWindowSetup(attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0 : 0.1)) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if !self.configureWindow(), attempt < 20 {
+                    self.scheduleWindowSetup(attempt: attempt + 1)
+                }
+            }
+        }
+    }
+
+    @discardableResult
+    private func configureWindow() -> Bool {
+        if CommandLine.arguments.contains("--debug-windows") {
+            // 走 stderr：stdout 在非终端下是块缓冲的，进程被杀时缓冲区里的东西全丢，
+            // 表现成"什么都没打印"，会把人往错误的方向带。
+            func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
+            log("--- NSApp.windows (\(NSApp.windows.count)) ---")
+            for w in NSApp.windows {
+                log(String(format: "  %@  %.0fx%.0f @(%.0f,%.0f) canMain=%@ panel=%@ content=%@ level=%ld",
+                             String(describing: type(of: w)),
+                             w.frame.width, w.frame.height, w.frame.minX, w.frame.minY,
+                             w.canBecomeMain ? "Y" : "N",
+                             (w is NSPanel) ? "Y" : "N",
+                             w.contentView != nil ? "Y" : "N",
+                             w.level.rawValue))
+            }
+        }
         // 注意不能简单地取 `NSApp.windows.first`：MenuBarExtra 自己也是一个窗口。
         // 主窗口的特征是它能成为 main window，而菜单栏那个面板不能。
         guard let win = NSApp.windows.first(where: {
             $0.canBecomeMain && $0.contentView != nil && !($0 is NSPanel)
-        }) else { return }
+        }) else { return false }
 
         window = win
         // 窗口是在 AppState 之后才建好的，所以要把此刻的形态补上一次。
@@ -81,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NotificationCenter.default.addObserver(
                 self, selector: #selector(occlusionChanged), name: name, object: win)
         }
+        return true
     }
 
     private func wireState() {
