@@ -68,6 +68,9 @@ private struct SceneStack: View {
     /// 这两个数决定桌沿切在她身上的哪个高度——调构图就改这里。
     private static let figureScale = 0.78
     private static let figureCenterY = 0.511
+    /// 她头部中心在窗口里的高度。摸头的热区和气泡都以它为锚点。
+    /// = figureCenterY − figureScale/2 + 0.335 × figureScale
+    private static let headY = 0.382
 
     var body: some View {
         GeometryReader { geo in
@@ -106,7 +109,31 @@ private struct SceneStack: View {
                             .position(x: w * 0.178, y: h * (RoomForeground.deskTop - 0.128))
                     }
                 }
+
+                // 摸头的热区。
+                //
+                // 只覆盖头部附近，而不是整块角色画布——那块画布大部分是透明的，
+                // 全设成可点的话，点房间空白处也会被当成摸头。
+                Circle()
+                    .fill(.clear)
+                    .contentShape(Circle())
+                    .frame(width: figure * 0.40, height: figure * 0.40)
+                    .position(x: w / 2, y: h * Self.headY)
+                    .onTapGesture { state.pet() }
+                    .help("摸摸头")
+
+                // 对话气泡，浮在她头部右上方。
+                if let line = state.chatter.current {
+                    SpeechBubble(text: line, palette: palette)
+                        .fixedSize()
+                        .position(x: w / 2 + figure * 0.20,
+                                  y: h * Self.headY - figure * 0.22)
+                        .transition(.scale(scale: 0.85, anchor: .bottomLeading)
+                            .combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
             }
+            .animation(.spring(duration: 0.34, bounce: 0.28), value: state.chatter.current)
         }
         .ignoresSafeArea()
     }

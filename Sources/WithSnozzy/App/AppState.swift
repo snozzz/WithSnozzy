@@ -68,6 +68,9 @@ final class AppState {
     let tasks = TaskList()
     let library = MusicLibrary()
 
+    /// 她说的话。
+    let chatter = Chatter()
+
     /// 刚完成一段专注的时刻。Snozzy 的心情会短暂地高涨一阵。
     private var lastCelebration: Date?
 
@@ -84,6 +87,16 @@ final class AppState {
     }
 
     func celebrate() { lastCelebration = Date() }
+
+    /// 摸头。桌宠类应用里最重要的一个交互——
+    /// 点她一下会有回应，这件事本身就让"陪伴"成立。
+    func pet() {
+        chatter.say(.pet)
+        // 比完成一段专注小得多的心情提升，但足够让她笑一下。
+        if lastCelebration == nil || Date().timeIntervalSince(lastCelebration!) > 40 {
+            lastCelebration = Date().addingTimeInterval(-62)
+        }
+    }
 
     // MARK: - 偏好持久化
 
@@ -201,6 +214,7 @@ final class AppState {
             library.next()
             if !isPlaying { isPlaying = true }
         }
+        chatter.say(.musicChanged)
     }
 
     func previousTrack() {
@@ -277,7 +291,17 @@ final class AppState {
 
     // 场景
     var timeMode: TimeMode = .auto { didSet { scheduleSave() } }
-    var weather: Weather = .clear { didSet { scheduleSave() } }
+    var weather: Weather = .clear {
+        didSet {
+            guard weather != oldValue else { return }
+            scheduleSave()
+            switch weather {
+            case .rain: chatter.say(.rain)
+            case .snow: chatter.say(.snow)
+            case .clear: break
+            }
+        }
+    }
 
     /// 环境音各路音量。
     ///
@@ -286,9 +310,12 @@ final class AppState {
     var ambienceLevels = [Double](repeating: 0, count: Ambience.allCases.count)
 
     func setAmbience(_ sound: Ambience, _ value: Double) {
+        let wasSilent = !hasAnyAmbience
         ambienceLevels[sound.rawValue] = value
         audio.setAmbienceLevel(sound, value)
         scheduleSave()
+        // 只在"从完全没有环境音变成有"时说一句，每拖一下滑杆都说会很烦。
+        if wasSilent && value > 0.001 { chatter.say(.ambienceOn) }
     }
 
     func applyAmbiencePreset(_ preset: AmbiencePreset) {
@@ -341,7 +368,23 @@ final class AppState {
         focus.onPhaseFinished = { [weak self] finished in
             guard let self else { return }
             self.audio.chime(rising: finished == .work)
-            if finished == .work { self.celebrate() }
+            if finished == .work {
+                self.celebrate()
+                self.chatter.say(.focusFinished)
+            } else {
+                self.chatter.say(.breakFinished)
+            }
+        }
+
+        tasks.onAdded = { [weak self] in self?.chatter.say(.taskAdded) }
+        tasks.onCompleted = { [weak self] in self?.chatter.say(.taskCompleted) }
+        tasks.onAllDone = { [weak self] in self?.chatter.say(.allTasksDone) }
+
+        // 启动时按时段打个招呼，稍等一下再说，免得和窗口出现撞在一起。
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard let self else { return }
+            self.chatter.say(Dialogue.greetingContext(hour: self.sceneHour))
         }
 
         // 开发用：`--panel mixer --source library` 启动时直接进入指定状态。

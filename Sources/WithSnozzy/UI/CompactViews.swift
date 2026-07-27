@@ -26,6 +26,16 @@ struct MiniView: View {
                 }
             }
 
+            if let line = state.chatter.current {
+                SpeechBubble(text: line, palette: pal, compact: true)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 26)
+                    .padding(.trailing, 10)
+                    .transition(.scale(scale: 0.85, anchor: .bottomLeading).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+
             VStack(spacing: 7) {
                 Text(state.trackTitle)
                     .font(.system(size: 11, weight: .medium, design: .rounded))
@@ -64,6 +74,7 @@ struct MiniView: View {
                     .allowsHitTesting(false)
             }
         }
+        .animation(.spring(duration: 0.34, bounce: 0.28), value: state.chatter.current)
         .grain(0.03)
         // 标题栏是透明的，内容必须铺满整个窗口，否则顶上会留一条黑边。
         .ignoresSafeArea()
@@ -94,7 +105,18 @@ struct PetView: View {
                         .position(x: geo.size.width / 2, y: geo.size.height * 0.478)
                         // 一圈柔和的暗影，深色和浅色桌面上都能看清轮廓。
                         .shadow(color: .black.opacity(0.35), radius: 14, y: 5)
+                        .onTapGesture { state.pet() }
                 }
+            }
+
+            if let line = state.chatter.current {
+                SpeechBubble(text: line, palette: pal, compact: true)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.top, 4)
+                    .padding(.trailing, 6)
+                    .transition(.scale(scale: 0.85, anchor: .bottomLeading).combined(with: .opacity))
+                    .allowsHitTesting(false)
             }
 
             // 控制条只在鼠标悬停时浮现，平时桌面上真的只有她一个人。
@@ -121,6 +143,7 @@ struct PetView: View {
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
+        .animation(.spring(duration: 0.34, bounce: 0.28), value: state.chatter.current)
         .ignoresSafeArea()
         .onHover { h in
             withAnimation(.easeOut(duration: 0.18)) { hovering = h }

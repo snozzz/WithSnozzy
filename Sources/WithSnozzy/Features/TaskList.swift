@@ -24,6 +24,11 @@ final class TaskList {
     private static let storeName = "tasks"
     private var saver: DebouncedSaver?
 
+    /// 让 Snozzy 有机会对待办的变化说句话。
+    var onAdded: (() -> Void)?
+    var onCompleted: (() -> Void)?
+    var onAllDone: (() -> Void)?
+
     init() {
         items = Store.load(Self.storeName, as: [TodoItem].self) ?? []
         saver = DebouncedSaver { [weak self] in
@@ -48,6 +53,7 @@ final class TaskList {
         guard !trimmed.isEmpty else { return }
         items.insert(TodoItem(title: trimmed), at: 0)
         saver?.schedule()
+        onAdded?()
     }
 
     func toggle(_ item: TodoItem) {
@@ -55,6 +61,10 @@ final class TaskList {
         items[i].done.toggle()
         items[i].completedAt = items[i].done ? Date() : nil
         saver?.schedule()
+        if items[i].done {
+            // 全部做完时说一句更郑重的，这个时刻值得被注意到。
+            if pending.isEmpty { onAllDone?() } else { onCompleted?() }
+        }
     }
 
     func remove(_ item: TodoItem) {

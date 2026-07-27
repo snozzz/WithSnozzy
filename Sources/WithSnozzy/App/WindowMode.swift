@@ -113,15 +113,32 @@ final class WindowStyler {
     }
 
     private func frame(for mode: WindowMode, window: NSWindow) -> NSRect {
+        let target: NSRect
         if mode == .normal, let saved = savedFrame {
             savedFrame = nil
-            return saved
+            target = saved
+        } else {
+            let size = mode.defaultSize
+            // 缩小时保持右上角不动，视觉上像是"收起来"而不是"跳走"。
+            let old = window.frame
+            target = NSRect(x: old.maxX - size.width, y: old.maxY - size.height,
+                            width: size.width, height: size.height)
         }
-        let size = mode.defaultSize
-        // 缩小时保持右上角不动，视觉上像是"收起来"而不是"跳走"。
-        let old = window.frame
-        return NSRect(x: old.maxX - size.width,
-                      y: old.maxY - size.height,
-                      width: size.width, height: size.height)
+        return clampToScreen(target, window: window)
+    }
+
+    /// 把窗口收回可见区域内。
+    ///
+    /// 「保持右上角不动」在放大回完整窗口时会把左边推出屏幕外，
+    /// 表现就是画面被裁掉一块、旁边露出黑边。必须夹一次。
+    private func clampToScreen(_ rect: NSRect, window: NSWindow) -> NSRect {
+        guard let screen = window.screen ?? NSScreen.main else { return rect }
+        let visible = screen.visibleFrame
+        var r = rect
+        r.size.width = min(r.width, visible.width)
+        r.size.height = min(r.height, visible.height)
+        r.origin.x = min(max(r.minX, visible.minX), visible.maxX - r.width)
+        r.origin.y = min(max(r.minY, visible.minY), visible.maxY - r.height)
+        return r
     }
 }
