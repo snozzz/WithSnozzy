@@ -9,3 +9,6 @@ Package.resolved
 Vendor/CubismCore/
 hiyori_en/
 Models/
+
+# Python 缓存
+__pycache__/

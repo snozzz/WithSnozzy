@@ -22,13 +22,10 @@ struct SceneManifest: Codable {
     var deskBottom: Double?
     /// 桌面图里"桌面上沿"所在的相对高度，角色的下半身由它遮住。
     var deskSurface: Double?
-    /// 小臂图的底边贴在窗口的哪个高度、占多宽。
-    var armsBottom: Double?
-    var armsWidth: Double?
 
     static let `default` = SceneManifest(
         room_window: nil, roomFit: "fillHeight", roomAnchorX: 0.35,
-        deskBottom: 1.0, deskSurface: 0.55, armsBottom: 1.0, armsWidth: 1.0)
+        deskBottom: 1.0, deskSurface: 0.55)
 
     /// 用默认值补齐没写的字段。
     ///
@@ -40,8 +37,6 @@ struct SceneManifest: Codable {
         roomAnchorX = roomAnchorX ?? d.roomAnchorX
         deskBottom = deskBottom ?? d.deskBottom
         deskSurface = deskSurface ?? d.deskSurface
-        armsBottom = armsBottom ?? d.armsBottom
-        armsWidth = armsWidth ?? d.armsWidth
     }
 }
 
@@ -55,8 +50,6 @@ final class SceneAssets {
 
     private(set) var room: NSImage?
     private(set) var desk: NSImage?
-    /// 搭在桌上的小臂。可选——没有这张图时她就只是坐在桌后。
-    private(set) var arms: NSImage?
     private(set) var cats: [NSImage] = []
     private(set) var manifest = SceneManifest.default
     private(set) var loadedFrom: String?
@@ -85,7 +78,6 @@ final class SceneAssets {
 
             room = roomImage
             desk = NSImage(contentsOf: dir.appendingPathComponent("desk.png"))
-            arms = NSImage(contentsOf: dir.appendingPathComponent("arms.png"))
 
             var found: [NSImage] = []
             for i in 0..<8 {
@@ -151,16 +143,6 @@ final class SceneAssets {
         let h = w / aspect
         let bottom = (manifest.deskBottom ?? 1.0) * size.height
         return CGRect(x: 0, y: bottom - h, width: w, height: h)
-    }
-
-    /// 小臂图的绘制矩形。
-    func armsFrame(in size: CGSize) -> CGRect {
-        guard let arms else { return .zero }
-        let aspect = arms.size.width / max(arms.size.height, 1)
-        let w = size.width * (manifest.armsWidth ?? 1.0)
-        let h = w / aspect
-        let bottom = (manifest.armsBottom ?? 1.0) * size.height
-        return CGRect(x: (size.width - w) / 2, y: bottom - h, width: w, height: h)
     }
 
     /// 桌面上沿在窗口里的高度。角色的下半身应当被它盖住。

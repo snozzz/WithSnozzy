@@ -115,9 +115,6 @@ private struct SceneStack: View {
                         if state.sceneAssets.isAvailable {
                             PaintedRoomForeground(assets: state.sceneAssets, palette: palette)
                                 .equatable()
-                            // 小臂压在桌面物件之上——搭在桌上，而不是埋在桌子里。
-                            DeskArms(assets: state.sceneAssets, palette: palette, t: t,
-                                     writing: state.focus.isRunning && state.focus.phase == .work)
                         } else {
                             RoomForeground(palette: palette).equatable()
                         }

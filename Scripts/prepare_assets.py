@@ -273,7 +273,8 @@ def main():
     if args.bands.strip():
         cuts = [int(x) for x in args.bands.split(",") if x.strip()]
         edges = [0] + cuts + [rgb.shape[0]]
-        bands = list(zip(edges, edges[1:]))
+        # 去掉高度为 0 的空条带：传 --bands <图高> 就是"整张图算一条带"的写法。
+        bands = [(a, b) for a, b in zip(edges, edges[1:]) if b - a > 0]
     else:
         bands = find_bands(rgb)
     names = [n.strip() for n in args.names.split(",")]
