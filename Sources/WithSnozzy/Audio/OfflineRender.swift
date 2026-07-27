@@ -38,9 +38,10 @@ enum OfflineRender {
 
         let path = args[i + 1]
         let seconds = (i + 2 < args.count ? Double(args[i + 2]) : nil) ?? 30
+        let mood = (i + 3 < args.count ? RadioMood(rawValue: args[i + 3]) : nil) ?? .chill
 
         do {
-            let stats = try render(to: path, seconds: seconds)
+            let stats = try render(to: path, seconds: seconds, mood: mood)
             print("已写入 \(path)")
             print(String(format: "  时长 %.1fs  峰值 %.3f  RMS %.4f  削顶样本 %d",
                          seconds, stats.peak, stats.rms, stats.clipped))
@@ -67,11 +68,15 @@ enum OfflineRender {
         var clipped: Int
     }
 
-    static func render(to path: String, seconds: Double) throws -> Stats {
+    static func render(to path: String, seconds: Double, mood: RadioMood = .chill) throws -> Stats {
         let sr = 44100.0
         let synth = LofiSynth(sampleRate: sr)
+        synth.mood = mood
+        // 必须在打印曲目信息**之前**就把新曲子生成出来。
+        // 之前是靠 regenerateRequested 让它在第一个小节线换曲，
+        // 结果打印出来的是 init() 里那首默认曲目——诊断信息在说谎。
+        synth.regenerateImmediately()
         synth.targetGain = 0.8
-        synth.restart()
 
         let names = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"]
         print("曲目: \(names[synth.keyRoot % 12])\(synth.isMinor ? "小调" : "大调")"

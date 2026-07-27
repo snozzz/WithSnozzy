@@ -112,7 +112,7 @@ final class AppState {
     private var currentSettings: AppSettings {
         AppSettings(volume: volume, source: source, timeMode: timeMode, weather: weather,
                     windowMode: windowMode, ambienceLevels: ambienceLevels,
-                    lowPower: lowPower, panel: panel?.rawValue)
+                    lowPower: lowPower, panel: panel?.rawValue, radioMood: radioMood)
     }
 
     private func restore() {
@@ -123,6 +123,8 @@ final class AppState {
         defer { isRestoring = false }
 
         volume = saved.volume
+        radioMood = saved.radioMood
+        audio.radioMood = saved.radioMood
         timeMode = saved.timeMode
         weather = saved.weather
         lowPower = saved.lowPower
@@ -160,6 +162,15 @@ final class AppState {
         didSet {
             audio.volume = volume
             library.volume = volume
+            scheduleSave()
+        }
+    }
+
+    /// 电台心情。换了之后下一首才会生效——不打断正在放的这首。
+    var radioMood: RadioMood = .chill {
+        didSet {
+            guard radioMood != oldValue else { return }
+            audio.radioMood = radioMood
             scheduleSave()
         }
     }

@@ -72,45 +72,159 @@ struct Chord {
 
 // MARK: - 和弦进行
 
+/// 进行的明暗倾向。选曲时按心情筛。
+enum ProgressionTone {
+    case bright, neutral, dark
+}
+
 /// 一段进行模板：4 个和弦，每个占一小节。
 struct Progression {
     let chords: [Chord]
     let isMinor: Bool
     let name: String
+    let tone: ProgressionTone
+}
+
+/// 电台的心情。
+///
+/// 同一套合成器，换一组「进行池 + 速度区间 + 编曲密度 + 音色亮度」，
+/// 听感差别比想象中大得多。这比再写几个音色划算。
+enum RadioMood: String, CaseIterable, Codable, Identifiable {
+    case chill, bright, melancholy, sleepy
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .chill: "慵懒"
+        case .bright: "明亮"
+        case .melancholy: "忧郁"
+        case .sleepy: "困倦"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .chill: "cloud"
+        case .bright: "sun.max"
+        case .melancholy: "cloud.drizzle"
+        case .sleepy: "moon.zzz"
+        }
+    }
+
+    /// 速度区间。
+    var tempoRange: ClosedRange<Double> {
+        switch self {
+        case .chill: 70...84
+        case .bright: 78...92
+        case .melancholy: 62...74
+        case .sleepy: 56...66
+        }
+    }
+
+    /// 编曲密度：影响鼓的力度、切分补音和旋律的出现概率。
+    var density: Double {
+        switch self {
+        case .chill: 1.0
+        case .bright: 1.15
+        case .melancholy: 0.82
+        case .sleepy: 0.55
+        }
+    }
+
+    /// 总线低通的截止频率。越低越闷、越"远"。
+    var toneCutoff: Double {
+        switch self {
+        case .chill: 7200
+        case .bright: 9500
+        case .melancholy: 6200
+        case .sleepy: 4600
+        }
+    }
+
+    /// 这个心情接受哪些明暗的进行。
+    func accepts(_ tone: ProgressionTone) -> Bool {
+        switch self {
+        case .chill, .sleepy: true          // 全收，靠速度和密度区分
+        case .bright: tone != .dark
+        case .melancholy: tone != .bright
+        }
+    }
 }
 
 enum Progressions {
     /// 手挑的一组，都是 lofi / city pop 里反复出现的走向。
-    /// 排在前面的更"亮"，后面的更"沉"，选曲时会按心情偏向取。
     static let all: [Progression] = [
+        // ── 明亮 ──
+        Progression(chords: [.init(degree: 0, quality: .maj9), .init(degree: 7, quality: .dom9),
+                             .init(degree: 9, quality: .min9), .init(degree: 5, quality: .maj7)],
+                    isMinor: false, name: "I–V–vi–IV", tone: .bright),
+
+        Progression(chords: [.init(degree: 0, quality: .maj9), .init(degree: 4, quality: .min7),
+                             .init(degree: 5, quality: .maj7), .init(degree: 7, quality: .dom9)],
+                    isMinor: false, name: "I–iii–IV–V", tone: .bright),
+
+        Progression(chords: [.init(degree: 5, quality: .maj7), .init(degree: 7, quality: .dom9),
+                             .init(degree: 4, quality: .min7), .init(degree: 9, quality: .min9)],
+                    isMinor: false, name: "IV–V–iii–vi", tone: .bright),
+
+        // ── 中性 ──
         Progression(chords: [.init(degree: 0, quality: .maj9), .init(degree: 9, quality: .min9),
                              .init(degree: 2, quality: .min9), .init(degree: 7, quality: .dom9)],
-                    isMinor: false, name: "I–vi–ii–V"),
+                    isMinor: false, name: "I–vi–ii–V", tone: .neutral),
 
         Progression(chords: [.init(degree: 0, quality: .maj9), .init(degree: 5, quality: .maj7),
                              .init(degree: 4, quality: .min7), .init(degree: 9, quality: .min9)],
-                    isMinor: false, name: "I–IV–iii–vi"),
+                    isMinor: false, name: "I–IV–iii–vi", tone: .neutral),
 
         Progression(chords: [.init(degree: 2, quality: .min9), .init(degree: 7, quality: .dom9),
                              .init(degree: 0, quality: .maj9), .init(degree: 0, quality: .maj9)],
-                    isMinor: false, name: "ii–V–I"),
+                    isMinor: false, name: "ii–V–I", tone: .neutral),
 
         Progression(chords: [.init(degree: 9, quality: .min9), .init(degree: 5, quality: .maj7),
                              .init(degree: 0, quality: .maj9), .init(degree: 7, quality: .dom9)],
-                    isMinor: false, name: "vi–IV–I–V"),
+                    isMinor: false, name: "vi–IV–I–V", tone: .neutral),
 
+        Progression(chords: [.init(degree: 0, quality: .maj7), .init(degree: 10, quality: .dom9),
+                             .init(degree: 5, quality: .maj7), .init(degree: 0, quality: .maj9)],
+                    isMinor: false, name: "I–♭VII–IV–I", tone: .neutral),
+
+        // ── 沉 ──
         Progression(chords: [.init(degree: 0, quality: .min9), .init(degree: 8, quality: .maj7),
                              .init(degree: 5, quality: .min7), .init(degree: 7, quality: .dom7)],
-                    isMinor: true, name: "i–VI–iv–V"),
+                    isMinor: true, name: "i–VI–iv–V", tone: .dark),
 
         Progression(chords: [.init(degree: 0, quality: .min9), .init(degree: 10, quality: .maj7),
                              .init(degree: 8, quality: .maj7), .init(degree: 7, quality: .dom7)],
-                    isMinor: true, name: "i–VII–VI–V"),
+                    isMinor: true, name: "i–VII–VI–V", tone: .dark),
 
         Progression(chords: [.init(degree: 2, quality: .m7b5), .init(degree: 7, quality: .dom7),
                              .init(degree: 0, quality: .min9), .init(degree: 0, quality: .min6)],
-                    isMinor: true, name: "iiø–V–i"),
+                    isMinor: true, name: "iiø–V–i", tone: .dark),
+
+        Progression(chords: [.init(degree: 0, quality: .min9), .init(degree: 5, quality: .min7),
+                             .init(degree: 10, quality: .maj7), .init(degree: 3, quality: .maj7)],
+                    isMinor: true, name: "i–iv–VII–III", tone: .dark),
+
+        Progression(chords: [.init(degree: 8, quality: .maj7), .init(degree: 10, quality: .maj7),
+                             .init(degree: 0, quality: .min9), .init(degree: 0, quality: .min9)],
+                    isMinor: true, name: "VI–VII–i", tone: .dark),
+
+        Progression(chords: [.init(degree: 0, quality: .min7), .init(degree: 3, quality: .maj7),
+                             .init(degree: 8, quality: .maj7), .init(degree: 10, quality: .dom7)],
+                    isMinor: true, name: "i–III–VI–VII", tone: .dark),
     ]
+
+    /// 某个心情可用的进行下标。
+    /// 结果缓存下来，避免在音频线程上做数组过滤（会分配内存）。
+    static let byMood: [RadioMood: [Int]] = {
+        var map: [RadioMood: [Int]] = [:]
+        for mood in RadioMood.allCases {
+            let indices = all.indices.filter { mood.accepts(all[$0].tone) }
+            map[mood] = indices.isEmpty ? Array(all.indices) : indices
+        }
+        return map
+    }()
 }
 
 // MARK: - 音阶
@@ -160,7 +274,33 @@ enum DrumPatterns {
         openHat: []
     )
 
-    static let all = [classic, laidBack, sparse]
+    /// 半速感：底鼓只在第 1 和第 3 拍，军鼓压到第 3 拍。
+    /// 同样的 BPM 听起来会慢一半，是"困倦"心情的主力鼓型。
+    static let halfTime = DrumPattern(
+        kick:  [1.0, z, z, z,  z, z, z, z,  z, z, z, z,  z, z, z, z],
+        snare: [z, z, z, z,  z, z, z, z,  0.85, z, z, z,  z, z, z, z],
+        hat:   [0.35, z, z, z,  z, z, 0.22, z,  0.35, z, z, z,  z, z, 0.22, z],
+        openHat: []
+    )
+
+    /// 密一点的十六分踩镲，配"明亮"心情。
+    static let busy = DrumPattern(
+        kick:  [1.0, z, z, z,  z, 0.5, z, z,  0.9, z, z, 0.55, z, z, z, z],
+        snare: [z, z, z, 0.22, 1.0, z, z, z,  z, z, 0.28, z,  1.0, z, z, 0.3],
+        hat:   [0.55, 0.2, 0.34, 0.2, 0.55, 0.2, 0.34, 0.22, 0.55, 0.2, 0.34, 0.2, 0.55, 0.2, 0.36, 0.26],
+        openHat: [10]
+    )
+
+    static let all = [classic, laidBack, sparse, halfTime, busy]
+
+    /// 每个心情用哪几个鼓型（`all` 里的下标）。
+    /// 预先算好，避免在音频线程上过滤数组。
+    static let byMood: [RadioMood: [Int]] = [
+        .chill: [0, 1, 2],
+        .bright: [0, 1, 4],
+        .melancholy: [0, 2, 3],
+        .sleepy: [2, 3],
+    ]
 }
 
 // MARK: - 配和声

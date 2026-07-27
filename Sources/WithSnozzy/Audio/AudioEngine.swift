@@ -63,6 +63,12 @@ final class AudioEngine {
     /// 换一首。合成器会在下一个小节线上切换，所以不会切在半句上。
     func next() { synth.regenerateRequested = true }
 
+    /// 电台心情。只影响下一首，不打断正在放的这首。
+    var radioMood: RadioMood {
+        get { synth.mood }
+        set { synth.mood = newValue }
+    }
+
     // MARK: - 环境音
 
     func ambienceLevel(_ sound: Ambience) -> Double { ambience.level(sound) }
@@ -183,6 +189,7 @@ final class AudioEngine {
     private func handleConfigurationChange() {
         let wasPlaying = isPlaying
         let savedVolume = volume
+        let savedMood = synth.mood
         let savedAmbience = Ambience.allCases.map { ambience.level($0) }
 
         engine.stop()
@@ -194,6 +201,7 @@ final class AudioEngine {
 
         let sampleRate = Self.hardwareSampleRate(engine)
         synth = LofiSynth(sampleRate: sampleRate)
+        synth.mood = savedMood
         ambience = AmbienceMixer(sampleRate: sampleRate)
         for (i, s) in Ambience.allCases.enumerated() { ambience.setLevel(s, savedAmbience[i]) }
         volume = savedVolume

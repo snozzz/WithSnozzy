@@ -15,6 +15,7 @@ struct AppSettings: Codable {
     var lowPower = false
     /// 上次打开的侧边面板。
     var panel: String?
+    var radioMood: RadioMood = .chill
 
     static let storeName = "settings"
 

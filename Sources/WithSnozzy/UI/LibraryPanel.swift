@@ -34,17 +34,69 @@ struct LibraryPanel: View {
             }
 
             if state.source == .radio {
-                VStack(spacing: 7) {
-                    Image(systemName: "antenna.radiowaves.left.and.right")
-                        .font(.system(size: 22))
-                        .foregroundStyle(.white.opacity(0.2))
-                    Text("电台的音乐是实时生成的\n每一段都不会重复")
-                        .font(.system(size: 11, design: .rounded))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(.white.opacity(0.32))
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(spacing: 7) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white.opacity(0.2))
+                        Text("音乐是实时生成的，每一段都不会重复")
+                            .font(.system(size: 10.5, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white.opacity(0.32))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+
+                    Text("心情")
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.35))
+                        .tracking(0.8)
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
+                                        GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        ForEach(RadioMood.allCases) { mood in
+                            let on = state.radioMood == mood
+                            Button {
+                                state.radioMood = mood
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: mood.symbol).font(.system(size: 11))
+                                    Text(mood.label)
+                                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    Spacer(minLength: 0)
+                                }
+                                .foregroundStyle(on ? palette.accent.color : .white.opacity(0.62))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background {
+                                    RoundedRectangle(cornerRadius: Metrics.smallCorner, style: .continuous)
+                                        .fill(.white.opacity(on ? 0.13 : 0.06))
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    Text("换心情后，下一首才会变——不会打断正在放的这首。")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        state.nextTrack()
+                    } label: {
+                        Text("立刻换一首")
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .background {
+                                RoundedRectangle(cornerRadius: Metrics.smallCorner, style: .continuous)
+                                    .fill(.white.opacity(0.07))
+                            }
+                    }
+                    .buttonStyle(.plain)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 26)
             } else {
                 libraryContent(lib)
             }

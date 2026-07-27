@@ -17,6 +17,9 @@ final class LofiSynth: @unchecked Sendable {
     /// 置 true 后，音频线程会在下一个小节线换一首。
     var regenerateRequested = false
 
+    /// 电台心情。改了之后下一首才会生效——不打断正在放的这首。
+    var mood: RadioMood = .chill
+
     // MARK: - 主线程可读的状态（供 UI 显示）
 
     private(set) var keyRoot = 0
@@ -66,6 +69,8 @@ final class LofiSynth: @unchecked Sendable {
     private var drums = DrumPatterns.classic
     private var melodyOn = true
     private var density = 1.0
+    /// 生成这一首时用的心情。中途改心情不影响已经开始的曲子。
+    private var songMood: RadioMood = .chill
 
     /// 当前与上一个和弦的钢琴配置，用于声部连接。init 时一次性分配。
     private let voicing: UnsafeMutablePointer<Double>
@@ -161,6 +166,16 @@ final class LofiSynth: @unchecked Sendable {
         voicing.deallocate()
         prevVoicing.deallocate()
         motif.deallocate()
+    }
+
+    /// 立刻按当前心情重新生成一首，不等下一个小节线。
+    ///
+    /// 正常播放时**不该**用它——那会把正在放的乐句切断。
+    /// 它是给离线渲染和自检准备的：那些场景需要"设好心情马上出结果"。
+    func regenerateImmediately() {
+        regenerateRequested = false
+        newSong()
+        restart()
     }
 
     /// 从头开始。播放键按下时调用，保证每次都从小节线起步。
@@ -267,13 +282,26 @@ final class LofiSynth: @unchecked Sendable {
 
     /// 换一首：新的调、新的进行、新的速度。
     private func newSong() {
-        progressionIndex = rng.int(Progressions.all.count)
+        songMood = mood
+
+        // 从这个心情允许的进行里挑一个。
+        let pool = Progressions.byMood[songMood] ?? Array(Progressions.all.indices)
+        progressionIndex = pool[rng.int(pool.count)]
         progression = Progressions.all[progressionIndex]
         isMinor = progression.isMinor
+
         // 避开极端调性，C…B 全都可以，但低音区太低会糊，所以根音统一落在 0…11。
         keyRoot = rng.int(12)
-        bpm = 68 + rng.unit() * 16       // 68…84，lofi 的舒适区
-        swing = 0.12 + rng.unit() * 0.10
+
+        let range = songMood.tempoRange
+        bpm = range.lowerBound + rng.unit() * (range.upperBound - range.lowerBound)
+        // 慢的曲子摇摆要收一点，否则会拖得散掉。
+        swing = (bpm < 68 ? 0.08 : 0.12) + rng.unit() * 0.10
+
+        // 音色亮度跟着心情走：困倦时把总线低通压得很低，整首曲子像隔了一层。
+        toneL.lowpass(freq: songMood.toneCutoff, q: 0.7, sr: sr)
+        toneR.lowpass(freq: songMood.toneCutoff, q: 0.7, sr: sr)
+
         prevVoicingCount = 0
         regenerateMotif()
     }
@@ -291,14 +319,17 @@ final class LofiSynth: @unchecked Sendable {
         // 每 8 小节一个段落。第 4 个段落抽成留白段，让耳朵休息。
         if bar % 8 == 0 {
             let section = bar / 8
+            let pool = DrumPatterns.byMood[songMood] ?? Array(DrumPatterns.all.indices)
             if section % 4 == 3 {
+                // 留白段：换成最稀疏的鼓型，旋律停掉，让耳朵歇一会儿。
                 drums = DrumPatterns.sparse
                 melodyOn = false
-                density = 0.55
+                density = 0.55 * songMood.density
             } else {
-                drums = DrumPatterns.all[rng.int(2)]
-                melodyOn = true
-                density = 1.0
+                drums = DrumPatterns.all[pool[rng.int(pool.count)]]
+                // 困倦心情下旋律出现得更少，大段时间只剩和声和铺底。
+                melodyOn = songMood == .sleepy ? rng.unit() < 0.45 : true
+                density = songMood.density
             }
             regenerateMotif()
         }
