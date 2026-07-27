@@ -1,56 +1,105 @@
 # With Snozzy
 
-一个 macOS 上的 lofi 陪伴应用。Snozzy 会在她的房间里陪你度过工作、学习和发呆的时间。
+一个 macOS 上的 lofi 陪伴应用。Snozzy 在她的房间里，陪你度过工作、学习和发呆的时间。
 
-## 设计原则
+<!-- 截图请自行运行后补上，仓库刻意不放二进制文件 -->
 
-1. **零第三方依赖** — 只用系统框架（SwiftUI / AVFoundation / AppKit）。没有包管理噩梦，克隆下来就能编译。
-2. **零二进制素材** — 音乐是实时合成的，不是播放 mp3；Snozzy 和房间是矢量绘制的，不是贴图。所以整个 app 包只有几百 KB。
-3. **只在需要时渲染** — 窗口被遮挡就暂停所有动画时间线，CPU 掉到接近 0。
+## 它是什么
+
+- **音乐是当场写出来的**，不是在放 mp3。一套实时合成引擎按爵士乐理生成和弦进行、
+  贝斯、鼓组和旋律，配上磁带抖动和黑胶噪声。永远不会重复，也不会听腻。
+- **Snozzy 是画出来的**，不是贴图。全部由贝塞尔曲线绘制，会呼吸、会眨眼、
+  会跟着底鼓点头，头发比身体慢半拍地摆动。
+- **房间会随时间变化**。窗外的天色跟着系统时钟走，可以下雨、下雪。
+- 因为没有任何音频和图片素材，整个 app 只有 2 MB 出头。
+
+## 功能
+
+| | |
+|---|---|
+| **Snozzy 的电台** | 实时合成的 lofi，7 组爵士进行 × 12 个调 × 随机速度，每 32 小节换一首 |
+| **环境音混音台** | 雨声 / 篝火 / 咖啡厅 / 海浪 / 键盘 / 风声，六路独立调音，附 4 组预设 |
+| **本地音乐库** | 也可以放你自己收藏的音乐，随机、循环、和电台自由切换 |
+| **番茄钟** | 可配置时长、自动续段、跳过；结束时用音乐盒音色轻轻响一下 |
+| **专注统计** | 每日时长、连续天数、12 周热力图 |
+| **待办清单** | 极简，没有分组和优先级 |
+| **昼夜与天气** | 跟随系统时间，或手动固定某个时段；晴 / 雨 / 雪 |
+| **三种窗口形态** | 完整窗口 / 迷你播放器 / 桌宠（无边框透明，浮在所有 App 之上） |
+| **菜单栏** | 关掉窗口音乐也不停；快捷控制播放、环境音、番茄钟 |
+| **媒体键** | 支持键盘媒体键和控制中心的播放控件 |
 
 ## 构建与运行
 
-需要 macOS 14+ 和 Xcode 命令行工具。
+需要 macOS 14+ 和 Xcode 命令行工具。没有任何第三方依赖，克隆下来就能编译。
 
 ```bash
-Scripts/run.sh          # 构建 release 并启动
-Scripts/run.sh debug    # 开发时用，编译更快
-Scripts/build_app.sh    # 只打包，产物在 dist/WithSnozzy.app
+Scripts/run.sh            # 构建 release 并启动
+Scripts/run.sh debug      # 开发时用，编译更快
+Scripts/build_app.sh      # 只打包，产物在 dist/WithSnozzy.app
 ```
+
+想让它开机自启，先把 `dist/WithSnozzy.app` 拖进「应用程序」，再到设置里打开开关——
+macOS 要求登录项指向一个稳定位置。
+
+## 设计原则
+
+1. **零第三方依赖**——只用系统框架（SwiftUI / AVFoundation / AppKit / MediaPlayer）。
+2. **零二进制素材**——音乐实时合成，角色和房间矢量绘制，连 App 图标都是构建时用
+   同一套渲染代码画出来的。改了 Snozzy 的建模，图标下次构建自动跟着变。
+3. **只在需要时渲染**——窗口被遮挡或最小化时暂停所有动画时间线，CPU 掉到接近 0。
+   播放时 24fps，空闲 15fps，省电模式 10fps。
+4. **音频线程上不分配内存**——实时线程里一次 malloc 卡顿就是一声爆音。
+   所有缓冲区在初始化时分配，滤波器系数按控制率更新。
 
 ## 开发工具
 
-音频引擎带两个命令行入口，调音色和排查问题时比反复开 app 快得多：
+命令行入口，调音色和排查问题时比反复开 app 快得多：
 
 ```bash
 BIN=dist/WithSnozzy.app/Contents/MacOS/WithSnozzy
 
-$BIN --render out.wav 40   # 离线渲染 40 秒，打印峰值/RMS/削顶数
-$BIN --selftest            # 实跑 CoreAudio 输出路径，验证声音真的送出去了
-$BIN --snapshot out.png    # 一次画出 Snozzy 的多种表情和时段，用于调整建模
+$BIN --render out.wav 40          # 离线渲染音乐，打印峰值 / RMS / 削顶数
 $BIN --render-air rain a.wav 20   # 单独渲染一路环境音，检查频谱与动态
-$BIN --panel mixer         # 启动时直接打开某个侧边面板，方便调样式
+$BIN --selftest                   # 实跑 CoreAudio 输出路径，验证声音真的送出去了
+$BIN --snapshot poses.png         # 一次画出多种表情和时段的对照表
+$BIN --icon out.iconset           # 生成全套 App 图标
+$BIN --panel mixer --source library --mode mini   # 启动时直接进入某个状态
 ```
 
-`--render` 让合成器变得可测——可以直接对波形做频谱和立体声分析，
+`--render` 让合成器变得可测：可以直接对波形做频谱和立体声分析，
 不用靠耳朵判断有没有削顶、走音或相位抵消。
 
 ## 目录结构
 
 ```
 Sources/WithSnozzy/
-  App/         应用入口、全局状态、AppKit 窗口配置
-  Audio/       实时 lofi 合成引擎与环境音
-  Character/   Snozzy 的矢量建模与动画
-  Scene/       房间、昼夜循环、天气
-  Features/    番茄钟、待办、统计、音乐库
-  UI/          主视图、控制条、面板、配色
-  Support/     持久化与通用工具
+  App/         入口、全局状态、窗口形态、AppKit 桥接、图标与快照生成
+  Audio/       DSP 基础件、乐理层、声部、lofi 合成器、环境音、音频引擎
+  Character/   Snozzy 的姿态层与渲染层
+  Scene/       房间背景与前景、天气
+  Features/    番茄钟、待办、本地音乐库
+  UI/          主视图、控制条、各个侧边面板、配色
+  Support/     持久化、颗粒纹理、偏好
 Scripts/       构建脚本
 Resources/     Info.plist
 ```
 
+## 数据存在哪
+
+`~/Library/Application Support/WithSnozzy/`，全部是 JSON，可以直接打开看或备份：
+
+| 文件 | 内容 |
+|---|---|
+| `settings.json` | 音量、时段、天气、窗口形态、环境音电平 |
+| `tasks.json` | 待办 |
+| `focus-history.json` | 每日专注时长与累计段数 |
+| `focus-settings.json` | 番茄钟时长配置 |
+| `library.json` | 音乐文件夹路径与播放选项 |
+
+设置面板里有「打开数据文件夹」和「清空全部数据」。
+
 ## 关于 Snozzy 的形象
 
-当前是纯代码矢量绘制的版本。之后如果接入专门的建模工具（Live2D / VRM），
-会把 `Character/` 换成模型驱动，其余部分不受影响——这也是把角色单独分层的原因。
+当前是纯代码矢量绘制的版本。姿态（`SnozzyRig`）和渲染（`SnozzyRenderer`）是分开的两层，
+所以之后如果接入专门的建模工具（Live2D / VRM），只需要替换渲染层，
+动画逻辑、场景、UI 都不用动。

@@ -27,9 +27,20 @@ if [ "$CONFIG" = "release" ]; then
   strip -x "$APP/Contents/MacOS/$APP_NAME" 2>/dev/null || true
 fi
 
-# 图标（由 Scripts/make_icon.swift 生成，缺失时跳过，不影响运行）。
-if [ -f "$ROOT/Scripts/make_icon.swift" ]; then
-  "$ROOT/Scripts/make_icon.sh" "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null || true
+# 图标。
+#
+# 由刚编出来的二进制自己画：`--icon` 会用和游戏里同一套渲染代码输出全套尺寸。
+# 好处是仓库里一个二进制文件都不用存，而且改了 Snozzy 的建模图标自动跟着变。
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+if "$BIN_DIR/$APP_NAME" --icon "$ICONSET" >/dev/null 2>&1; then
+  if iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" 2>/dev/null; then
+    echo "▸ 图标已生成"
+  else
+    echo "  (iconutil 失败，跳过图标)"
+  fi
+  rm -rf "$(dirname "$ICONSET")"
+else
+  echo "  (图标生成失败，跳过)"
 fi
 
 # 自签名。本地自用不需要开发者证书，但签一下能让 macOS 记住窗口位置和权限。
