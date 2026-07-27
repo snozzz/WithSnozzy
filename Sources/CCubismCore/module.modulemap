@@ -1,0 +1,9 @@
+// 把 Cubism Core 的 C 头文件暴露成一个 Swift 可以 import 的模块。
+//
+// 路径是相对本文件所在目录的，指向仓库根下的 Vendor/。
+// 之所以不把头文件复制进来，是因为它属于 Live2D 的专有授权，不能进版本库；
+// 留在 Vendor/（已 gitignore）里，各人自己下载。
+module CCubismCore {
+    header "../../Vendor/CubismCore/include/Live2DCubismCore.h"
+    export *
+}

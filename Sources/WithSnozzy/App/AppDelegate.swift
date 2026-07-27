@@ -28,6 +28,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             IconMaker.run(dir: path)
             return
         }
+        if let path = Live2DInfo.requestedPath {
+            Live2DInfo.run(path: path)
+            return
+        }
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
