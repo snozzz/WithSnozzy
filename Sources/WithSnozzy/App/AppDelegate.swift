@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Live2DInfo.run(path: path)
             return
         }
+        if let r = Live2DInfo.renderRequest {
+            Live2DInfo.render(out: r.out, modelPath: r.model)
+            return
+        }
 
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
