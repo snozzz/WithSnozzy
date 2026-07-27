@@ -134,7 +134,35 @@ enum SnozzyRenderer {
             drawSideLocks(in: &head, rect: rect, pose: pose, lit: lit, rim: rim)
             drawClip(in: &head, rect: rect, lit: lit)
             drawAhoge(in: &head, rect: rect, pose: pose, lit: lit)
-            drawHeadphones(in: &head, rect: rect, lit: lit)
+            drawHeadphones(in: &head, rect: rect, pose: pose, lit: lit, accent: scene.accent)
+            drawZzz(in: &head, rect: rect, pose: pose, lit: lit)
+        }
+    }
+
+    // MARK: - 打瞌睡的 zzz
+
+    private static func drawZzz(in ctx: inout GraphicsContext, rect: CGRect,
+                                pose: Pose, lit: (RGB) -> RGB) {
+        guard pose.drowsy > 0.35 else { return }
+        let up = UnitPath(in: rect)
+        let side = min(rect.width, rect.height)
+
+        // 三个 z 依次往右上飘并淡出，形成一串。
+        for i in 0..<3 {
+            let phase = (pose.zzz + Double(i) * 0.333).truncatingRemainder(dividingBy: 1.0)
+            let rise = phase
+            let fade = (1 - phase) * pose.drowsy
+            guard fade > 0.02 else { continue }
+
+            let x = G.cx + G.rx * 0.92 + rise * 0.070
+            let y = G.cy - G.ry * 0.62 - rise * 0.120
+            // 越飘越大、越淡，这是「往上飘远」的透视暗示。
+            let size = side * (0.044 + rise * 0.030)
+
+            var text = ctx.resolve(
+                Text("z").font(.system(size: size, weight: .bold, design: .rounded)))
+            text.shading = .color(lit(Look.hairShade).lighter(0.55).color(fade * 0.92))
+            ctx.draw(text, at: up.point(x, y), anchor: .center)
         }
     }
 
@@ -677,7 +705,8 @@ enum SnozzyRenderer {
 
     // MARK: - 耳机
 
-    private static func drawHeadphones(in ctx: inout GraphicsContext, rect: CGRect, lit: (RGB) -> RGB) {
+    private static func drawHeadphones(in ctx: inout GraphicsContext, rect: CGRect,
+                                       pose: Pose, lit: (RGB) -> RGB, accent: RGB) {
         let up = UnitPath(in: rect)
 
         // 头梁：从左耳罩绕过头顶到右耳罩
@@ -714,6 +743,18 @@ enum SnozzyRenderer {
                 p.ellipse(x + sign * 0.012, G.canY - 0.022, 0.0090, 0.0125)
             }
             ctx.fill(gloss, with: .color(.white.opacity(0.22)))
+        }
+
+        // 右耳罩上的指示灯，跟着底鼓闪。
+        //
+        // 一个很小的细节，但它把"她戴着耳机"和"她在听同一首歌"这两件事连起来了。
+        // 打瞌睡的时候不亮——睡着的人不会在听歌。
+        let pulse = pose.beatPulse * (1 - pose.drowsy)
+        if pulse > 0.02 {
+            let led = UnitPath.build(in: rect) { p in
+                p.ellipse(G.cx + G.canX + 0.012, G.canY + 0.030, 0.0058, 0.0058)
+            }
+            ctx.fill(led, with: .color(accent.lighter(0.35).color(0.35 + pulse * 0.65)))
         }
     }
 }

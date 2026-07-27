@@ -96,7 +96,8 @@ private struct SceneStack: View {
                         SnozzyView(palette: palette, t: t,
                                    kick: state.audio.kickPulse,
                                    playing: state.isPlaying,
-                                   mood: state.mood)
+                                   mood: state.mood,
+                                   drowsy: state.drowsy)
                             .frame(width: figure, height: figure)
                             .position(x: w / 2, y: h * Self.figureCenterY)
 

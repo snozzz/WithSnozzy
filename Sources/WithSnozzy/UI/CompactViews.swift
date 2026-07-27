@@ -18,7 +18,8 @@ struct MiniView: View {
                                t: tl.date.timeIntervalSinceReferenceDate,
                                kick: state.audio.kickPulse,
                                playing: state.isPlaying,
-                               mood: state.mood)
+                               mood: state.mood,
+                               drowsy: state.drowsy)
                         // 半身像取景：头顶留一点余量，底部切在胸口。
                         // 放太大只剩一张脸，放太小又看不清表情。
                         .frame(width: geo.size.width, height: geo.size.width)
@@ -100,7 +101,8 @@ struct PetView: View {
                                t: tl.date.timeIntervalSinceReferenceDate,
                                kick: state.audio.kickPulse,
                                playing: state.isPlaying,
-                               mood: state.mood)
+                               mood: state.mood,
+                               drowsy: state.drowsy)
                         .frame(width: geo.size.width * 1.15, height: geo.size.width * 1.15)
                         .position(x: geo.size.width / 2, y: geo.size.height * 0.478)
                         // 一圈柔和的暗影，深色和浅色桌面上都能看清轮廓。

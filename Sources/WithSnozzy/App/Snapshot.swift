@@ -71,11 +71,17 @@ private struct PoseSheet: View {
         var halfBlink = idle
         halfBlink.blink = 0.55
 
+        // 打瞌睡：这一档要单独看，因为它同时改了眼睛、头的角度和动作幅度。
+        var dozing = SnozzyRig.pose(time: 3.1, kick: 0, playing: false, drowsy: 1.0)
+        var halfDozing = SnozzyRig.pose(time: 6.4, kick: 0, playing: false, drowsy: 0.55)
+        dozing.zzz = 0.30
+        halfDozing.zzz = 0.65
+
         return [
             ("深夜 · 静止", idle, .night),
             ("深夜 · 律动", groove, .night),
-            ("眨眼", blinking, .night),
-            ("半闭", halfBlink, .night),
+            ("打瞌睡", dozing, .night),
+            ("半困", halfDozing, .night),
             ("开心（笑眼）", happy, .dusk),
             ("看向别处", lookAway, .day),
         ]

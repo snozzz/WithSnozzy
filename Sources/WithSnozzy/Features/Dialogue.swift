@@ -8,6 +8,8 @@ enum DialogueContext {
     case idle
     /// 被摸头。
     case pet
+    /// 打瞌睡时被摸醒。
+    case wokenUp
     case focusStarted, focusFinished, breakFinished
     case taskAdded, taskCompleted, allTasksDone
     case rain, snow
@@ -71,6 +73,13 @@ enum Dialogue {
             "……再摸一下也行。",
             "头发会乱的。",
             "嘿嘿。",
+        ],
+        .wokenUp: [
+            "唔……我没睡。",
+            "……嗯？",
+            "只是闭一下眼睛。",
+            "你也该睡了。",
+            "几点了……",
         ],
         .focusStarted: [
             "好，开始吧。",

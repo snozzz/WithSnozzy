@@ -27,6 +27,12 @@ struct Pose {
     var blush = 0.35
     /// 眼睛闭起来微笑（>0 时画成弯月形）。
     var happyEyes = 0.0
+    /// 困倦程度 0…1。深夜且没在放音乐时会慢慢升上来。
+    var drowsy = 0.0
+    /// 「zzz」的循环相位 0…1，只在 drowsy 高时用得上。
+    var zzz = 0.0
+    /// 底鼓脉冲的原始值，耳机上的指示灯拿它闪。
+    var beatPulse = 0.0
 }
 
 /// 从时间和音乐驱动出姿态。
@@ -64,11 +70,16 @@ struct SnozzyRig {
     ///   - kick: 底鼓脉冲 0…1，来自合成器。
     ///   - playing: 是否在放音乐。不放的时候动作幅度收小，人也会安静下来。
     ///   - mood: 0…1，越高越开心（专注完成、被摸头之类的时候会拉高）。
-    static func pose(time t: Double, kick: Double, playing: Bool, mood: Double = 0.5) -> Pose {
+    ///   - drowsy: 0…1，困倦程度。
+    static func pose(time t: Double, kick: Double, playing: Bool,
+                     mood: Double = 0.5, drowsy: Double = 0) -> Pose {
         var p = Pose()
+        let sleepy = clamp(drowsy, 0, 1)
+        p.drowsy = sleepy
+        p.beatPulse = kick
 
-        // 呼吸：约 4.2 秒一轮。不放音乐时稍慢一点。
-        let breathPeriod = playing ? 4.2 : 5.4
+        // 呼吸：约 4.2 秒一轮。不放音乐时稍慢，打瞌睡时更慢更深。
+        let breathPeriod = (playing ? 4.2 : 5.4) + sleepy * 2.6
         p.breath = (sin(t * 2 * .pi / breathPeriod) + 1) * 0.5
 
         p.blink = blinkPhase(at: t)
@@ -91,6 +102,25 @@ struct SnozzyRig {
 
         // 心情很好的时候会眯起眼睛笑。
         p.happyEyes = mood > 0.82 ? smoothstep((mood - 0.82) / 0.18) : 0
+
+        // ── 打瞌睡 ──
+        //
+        // 不是简单地"闭眼"，而是一整套：眼睛合上、头往一侧垂、
+        // 身体的动作幅度收到几乎为零、呼吸变长。
+        // 少了任何一条都会像"她只是闭着眼"，而不是"她睡着了"。
+        if sleepy > 0.01 {
+            p.blink = max(p.blink, sleepy)
+            // 头一点一点往下沉，偶尔又惊醒似的抬一下——打盹的典型样子。
+            let nod = (sin(t * 0.42) * 0.5 + 0.5)
+            p.headTilt += sleepy * 0.13
+            p.headBob += sleepy * (0.010 + nod * 0.012)
+            p.bodySway *= (1 - sleepy * 0.85)
+            p.hairSway *= (1 - sleepy * 0.7)
+            p.lookX *= (1 - sleepy)
+            p.lookY *= (1 - sleepy)
+            p.smile = max(p.smile * (1 - sleepy * 0.5), 0.12)
+            p.zzz = (t * 0.34).truncatingRemainder(dividingBy: 1.0)
+        }
 
         return p
     }

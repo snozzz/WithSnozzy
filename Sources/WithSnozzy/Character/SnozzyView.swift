@@ -25,10 +25,13 @@ struct SnozzyView: View {
     var kick: Double = 0
     var playing: Bool = false
     var mood: Double = 0.5
+    /// 困倦程度 0…1。
+    var drowsy: Double = 0
 
     var body: some View {
         SnozzyCanvas(
-            pose: SnozzyRig.pose(time: t, kick: kick, playing: playing, mood: mood),
+            pose: SnozzyRig.pose(time: t, kick: kick, playing: playing,
+                                 mood: mood, drowsy: drowsy),
             palette: palette)
     }
 }

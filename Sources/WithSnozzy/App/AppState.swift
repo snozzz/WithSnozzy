@@ -88,10 +88,24 @@ final class AppState {
 
     func celebrate() { lastCelebration = Date() }
 
+    /// 困倦程度 0…1。
+    ///
+    /// 深夜、并且没在放音乐的时候她会打瞌睡。用平滑过渡而不是到点硬切——
+    /// 凌晨一点整突然睡着会很出戏。
+    var drowsy: Double {
+        guard !isPlaying else { return 0 }
+        let h = sceneHour
+        // 00:30 起逐渐困，01:30 完全睡着；05:00 起转醒，06:00 完全清醒。
+        if h >= 0.5 && h < 1.5 { return smoothstep((h - 0.5) / 1.0) }
+        if h >= 1.5 && h < 5.0 { return 1.0 }
+        if h >= 5.0 && h < 6.0 { return 1 - smoothstep((h - 5.0) / 1.0) }
+        return 0
+    }
+
     /// 摸头。桌宠类应用里最重要的一个交互——
     /// 点她一下会有回应，这件事本身就让"陪伴"成立。
     func pet() {
-        chatter.say(.pet)
+        chatter.say(drowsy > 0.5 ? .wokenUp : .pet)
         // 比完成一段专注小得多的心情提升，但足够让她笑一下。
         if lastCelebration == nil || Date().timeIntervalSince(lastCelebration!) > 40 {
             lastCelebration = Date().addingTimeInterval(-62)
