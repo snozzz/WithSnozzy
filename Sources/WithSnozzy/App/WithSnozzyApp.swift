@@ -23,6 +23,10 @@ struct WithSnozzyApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 960, height: 640)
+        // `Window` 默认的 .automatic 会让窗口尺寸跟着内容走。
+        // 我们的内容全是 GeometryReader（没有固有尺寸），结果窗口被压成
+        // 一百来像素的小方块。改成只用内容的最小尺寸做约束。
+        .windowResizability(.contentMinSize)
         .commands {
             // 移除用不到的系统菜单项，让菜单栏保持干净。
             CommandGroup(replacing: .newItem) {}

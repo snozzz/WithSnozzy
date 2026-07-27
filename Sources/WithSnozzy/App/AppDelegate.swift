@@ -77,9 +77,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func configureWindow() -> Bool {
         if CommandLine.arguments.contains("--debug-windows") {
+            FileManager.default.createFile(atPath: "/tmp/snozzy-windows.log", contents: nil)
             // 走 stderr：stdout 在非终端下是块缓冲的，进程被杀时缓冲区里的东西全丢，
             // 表现成"什么都没打印"，会把人往错误的方向带。
-            func log(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
+            // 同时写文件：通过 `open` 启动时拿不到 stderr。
+            func log(_ s: String) {
+                FileHandle.standardError.write(Data((s + "\n").utf8))
+                if let h = FileHandle(forWritingAtPath: "/tmp/snozzy-windows.log") {
+                    h.seekToEndOfFile(); h.write(Data((s + "\n").utf8)); h.closeFile()
+                }
+            }
             log("--- NSApp.windows (\(NSApp.windows.count)) ---")
             for w in NSApp.windows {
                 log(String(format: "  %@  %.0fx%.0f @(%.0f,%.0f) canMain=%@ panel=%@ content=%@ level=%ld",

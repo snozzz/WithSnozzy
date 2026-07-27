@@ -25,6 +25,18 @@ enum WindowMode: String, CaseIterable, Codable {
         }
     }
 
+    /// 窗口允许缩到多小。
+    ///
+    /// 必须在 AppKit 这一侧显式设定：SwiftUI 那边的 `.frame(minWidth:)`
+    /// 只约束内容，窗口本身仍可能被压扁。
+    var minimumSize: NSSize {
+        switch self {
+        case .normal: NSSize(width: 720, height: 480)
+        case .mini: NSSize(width: 260, height: 220)
+        case .pet: NSSize(width: 220, height: 240)
+        }
+    }
+
     var defaultSize: NSSize {
         switch self {
         case .normal: NSSize(width: 960, height: 640)
@@ -99,6 +111,7 @@ final class WindowStyler {
             setTrafficLights(hidden: true, on: window)
         }
 
+        window.minSize = mode.minimumSize
         let target = frame(for: mode, window: window)
         window.setFrame(target, display: true, animate: animated)
         window.makeKeyAndOrderFront(nil)
