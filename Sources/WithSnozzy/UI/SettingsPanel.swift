@@ -37,6 +37,47 @@ struct SettingsPanel: View {
                 }
             }
 
+            section("角色") {
+                row("渲染方式") {
+                    Picker("", selection: Binding(
+                        get: { state.characterStyle },
+                        set: { state.characterStyle = $0 })) {
+                        ForEach(CharacterStyle.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 118)
+                }
+
+                if state.characterStyle == .live2d {
+                    HStack(spacing: 6) {
+                        Image(systemName: "folder")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.white.opacity(0.4))
+                        Text(modelFolderName)
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer(minLength: 4)
+                        smallButton("选择模型…") { pickModelFolder() }
+                    }
+
+                    HStack(spacing: 6) {
+                        Image(systemName: live2dSymbol)
+                            .font(.system(size: 10))
+                            .foregroundStyle(live2dReady ? palette.accent.color : .orange.opacity(0.8))
+                        Text(state.live2d.status.message)
+                            .font(.system(size: 9, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.45))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                Text("矢量 Snozzy 是纯代码绘制的，零素材、最省电。Live2D 需要在 Vendor/ 下放好 Cubism Core 和模型。")
+                    .font(.system(size: 9, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.32))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             section("性能") {
                 Toggle(isOn: $s.lowPower) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -111,6 +152,36 @@ struct SettingsPanel: View {
                     .foregroundStyle(.white.opacity(0.3))
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+
+    private var live2dReady: Bool { state.live2d.status.isReady }
+
+    private var modelFolderName: String {
+        let p = state.live2d.modelDirectory
+        return p.isEmpty ? "未选择" : (p as NSString).lastPathComponent
+    }
+
+    /// 选一个含 .model3.json 的文件夹。
+    ///
+    /// 必须存绝对路径：app 从 .app 包启动时工作目录是根目录，
+    /// 相对路径一定找不到模型。
+    private func pickModelFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "选择"
+        panel.message = "选一个包含 .model3.json 的文件夹（子目录也会扫描）"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        state.setLive2DModel(path: url.path)
+    }
+
+    private var live2dSymbol: String {
+        switch state.live2d.status {
+        case .ready: "checkmark.circle.fill"
+        case .loading: "hourglass"
+        default: "exclamationmark.triangle"
         }
     }
 

@@ -71,6 +71,18 @@ final class AppState {
     /// 她说的话。
     let chatter = Chatter()
 
+    /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
+    let live2d = Live2DStage()
+
+    /// 角色的渲染方式。
+    var characterStyle: CharacterStyle = .vector {
+        didSet {
+            guard characterStyle != oldValue else { return }
+            if characterStyle == .live2d { live2d.loadIfNeeded() }
+            scheduleSave()
+        }
+    }
+
     /// 刚完成一段专注的时刻。Snozzy 的心情会短暂地高涨一阵。
     private var lastCelebration: Date?
 
@@ -87,6 +99,14 @@ final class AppState {
     }
 
     func celebrate() { lastCelebration = Date() }
+
+    /// 换 Live2D 模型。路径必须是绝对的。
+    func setLive2DModel(path: String) {
+        live2d.unload()
+        live2d.modelDirectory = path
+        if characterStyle == .live2d { live2d.loadIfNeeded() }
+        scheduleSave()
+    }
 
     /// 困倦程度 0…1。
     ///
@@ -126,7 +146,8 @@ final class AppState {
     private var currentSettings: AppSettings {
         AppSettings(volume: volume, source: source, timeMode: timeMode, weather: weather,
                     windowMode: windowMode, ambienceLevels: ambienceLevels,
-                    lowPower: lowPower, panel: panel?.rawValue, radioMood: radioMood)
+                    lowPower: lowPower, panel: panel?.rawValue, radioMood: radioMood,
+                    characterStyle: characterStyle, live2dModelPath: live2d.modelDirectory)
     }
 
     private func restore() {
@@ -137,6 +158,9 @@ final class AppState {
         defer { isRestoring = false }
 
         volume = saved.volume
+        live2d.modelDirectory = saved.live2dModelPath
+        characterStyle = saved.characterStyle
+        if characterStyle == .live2d { live2d.loadIfNeeded() }
         radioMood = saved.radioMood
         audio.radioMood = saved.radioMood
         timeMode = saved.timeMode

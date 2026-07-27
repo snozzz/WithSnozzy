@@ -93,11 +93,12 @@ private struct SceneStack: View {
                 TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in
                     let t = tl.date.timeIntervalSinceReferenceDate
                     ZStack {
-                        SnozzyView(palette: palette, t: t,
-                                   kick: state.audio.kickPulse,
-                                   playing: state.isPlaying,
-                                   mood: state.mood,
-                                   drowsy: state.drowsy)
+                        CharacterView(palette: palette, t: t,
+                                      kick: state.audio.kickPulse,
+                                      playing: state.isPlaying,
+                                      mood: state.mood,
+                                      drowsy: state.drowsy,
+                                      framing: .bust)
                             .frame(width: figure, height: figure)
                             .position(x: w / 2, y: h * Self.figureCenterY)
 

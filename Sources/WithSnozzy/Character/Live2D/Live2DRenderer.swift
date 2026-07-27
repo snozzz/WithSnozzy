@@ -17,6 +17,9 @@ final class Live2DRenderer: NSObject, MTKViewDelegate {
 
     private let model: CubismModel
     private let device: MTLDevice
+
+    /// 供 MTKView 使用。
+    var metalDevice: MTLDevice { device }
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private let maskPipeline: MTLRenderPipelineState
@@ -38,9 +41,8 @@ final class Live2DRenderer: NSObject, MTKViewDelegate {
 
     /// 外部每帧塞进来的姿态。
     var pose = Pose()
-    /// 取景：相对画布高度的缩放和平移，用来把半身像框好。
-    var zoom: Float = 1.0
-    var offset = SIMD2<Float>(0, 0)
+    /// 取景。
+    var framing = Live2DFraming.fullBody
 
     private let binding: Live2DPoseBinding
 
@@ -351,25 +353,23 @@ final class Live2DRenderer: NSObject, MTKViewDelegate {
 
     /// 模型坐标 → NDC。
     ///
-    /// 模型的顶点位置以「单位」为单位，画布宽度 = size.x / pixelsPerUnit。
-    /// 这里保持等比，并按 zoom / offset 取景。
+    /// 用「视图中心对准模型空间的哪个点」+「视图宽度对应多少模型单位」来描述取景，
+    /// 比用缩放系数加偏移量直观得多——想让她的脸在画面上什么位置，直接写坐标就行。
     private func makeMVP(viewSize: CGSize) -> float4x4 {
-        let canvas = model.canvas
-        let canvasWidthInUnits = canvas.size.x / canvas.pixelsPerUnit
-        guard viewSize.width > 0, viewSize.height > 0, canvasWidthInUnits > 0 else {
+        guard viewSize.width > 0, viewSize.height > 0, framing.unitsAcross > 0 else {
             return matrix_identity_float4x4
         }
-
         let viewAspect = Float(viewSize.width / viewSize.height)
-        // 让画布宽度铺满视图宽度，纵向按等比走（模型通常比视图高，超出的部分被裁掉，
-        // 这正是我们要的半身取景）。
-        let sx = 2.0 / canvasWidthInUnits * zoom
+
+        // 横向：视图宽度覆盖 unitsAcross 个模型单位。
+        let sx = 2.0 / framing.unitsAcross
+        // 纵向乘长宽比，保证等比不变形。
         let sy = sx * viewAspect
 
         var m = matrix_identity_float4x4
         m.columns.0 = SIMD4(sx, 0, 0, 0)
         m.columns.1 = SIMD4(0, sy, 0, 0)
-        m.columns.3 = SIMD4(offset.x, offset.y, 0, 1)
+        m.columns.3 = SIMD4(-framing.focus.x * sx, -framing.focus.y * sy, 0, 1)
         return m
     }
 

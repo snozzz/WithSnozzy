@@ -16,6 +16,8 @@ struct AppSettings: Codable {
     /// 上次打开的侧边面板。
     var panel: String?
     var radioMood: RadioMood = .chill
+    var characterStyle: CharacterStyle = .vector
+    var live2dModelPath: String = "hiyori_en/hiyori_free"
 
     static let storeName = "settings"
 
