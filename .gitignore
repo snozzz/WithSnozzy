@@ -4,3 +4,8 @@ dist/
 .DS_Store
 *.xcuserstate
 Package.resolved
+
+# 第三方素材与运行库：授权都不允许再分发，只能各自下载
+Vendor/CubismCore/
+hiyori_en/
+Models/
