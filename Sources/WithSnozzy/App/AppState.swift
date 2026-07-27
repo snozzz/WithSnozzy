@@ -427,6 +427,13 @@ final class AppState {
            let m = WindowMode(rawValue: args[i + 1]) {
             windowMode = m
         }
+        if args.contains("--play") {
+            // 稍等一下再开始，让音频引擎和窗口都就绪。
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(600))
+                self?.togglePlay()
+            }
+        }
     }
 
     func togglePanel(_ p: Panel) {

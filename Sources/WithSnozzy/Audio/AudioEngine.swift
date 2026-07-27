@@ -4,17 +4,20 @@ import Foundation
 /// 音频的主线程门面：装配 AVAudioEngine、管理播放/暂停的淡入淡出、
 /// 以及输出设备切换后的重建。
 ///
-/// 音乐和环境音是**两个独立的源节点**挂在同一张图上。分开的原因是它们的
-/// 开关互不相干——很多时候人只想听雨声不想听音乐。共用一个引擎则是为了
-/// 让设备切换、采样率协商这些麻烦事只处理一遍。
+/// 音乐和环境音共用一个源节点：合成器先写进缓冲区，环境音再叠上去。
+///
+/// 它们的开关是互相独立的（很多时候人只想听雨声不想听音乐），
+/// 但这个独立性来自「是否发声」，不需要靠两个节点来实现。
+/// 实测每多一个 AVAudioSourceNode 就多一整条 AU 桥接链，值几个百分点的 CPU。
 @MainActor
 final class AudioEngine {
 
     private var engine = AVAudioEngine()
     private var synth: LofiSynth
     private var ambience: AmbienceMixer
-    private var musicNode: AVAudioSourceNode?
-    private var ambienceNode: AVAudioSourceNode?
+    /// 音乐和环境音共用**一个**源节点。
+    /// AVAudioEngine 里每多一个节点就多一整条 AU 桥接链，实测能占到几个百分点。
+    private var sourceNode: AVAudioSourceNode?
     private var stopWork: DispatchWorkItem?
 
     private(set) var isPlaying = false
@@ -85,7 +88,7 @@ final class AudioEngine {
 
     var hasAmbience: Bool { ambience.isActive }
 
-    /// 番茄钟阶段切换的提示音。走环境音节点，所以音乐没在放也能响。
+    /// 番茄钟阶段切换的提示音。走环境音那一路，所以音乐没在放也能响。
     func chime(rising: Bool) {
         ambience.triggerChime(rising: rising)
         syncEngine()
@@ -134,15 +137,33 @@ final class AudioEngine {
     var kickPulse: Double { synth.kickPulse }
 
     /// 自检探针的挂载点。见 `AudioSelfTest`。
-    var probeTarget: AVAudioNode { engine.mainMixerNode }
+    /// 挂在源节点上而不是混音器上——图里已经没有混音器了。
+    var probeTarget: AVAudioNode? { sourceNode }
+
+    /// 图上各节点协商出来的格式。诊断重采样问题用。
+    var debugFormats: [(String, AVAudioFormat)] {
+        var out: [(String, AVAudioFormat)] = []
+        if let n = sourceNode { out.append(("源节点", n.outputFormat(forBus: 0))) }
+        out.append(("输出节点输入", engine.outputNode.inputFormat(forBus: 0)))
+        out.append(("输出节点输出", engine.outputNode.outputFormat(forBus: 0)))
+        return out
+    }
 
     // MARK: - 图的装配
 
     private static func hardwareSampleRate(_ engine: AVAudioEngine) -> Double {
-        // 读 outputNode 的格式前必须先碰一下 mainMixerNode，否则拿到的是 0。
-        _ = engine.mainMixerNode
+        // 刻意**不碰** mainMixerNode。
+        //
+        // 常见写法是先访问一下 mainMixerNode 再读 outputNode 的格式，
+        // 但访问它会把混音器实例化并接进图里。我们只有一个源节点，
+        // 混音器什么也没做，却要多走一整条 AU 桥接和格式转换链——
+        // 采样显示那条链占了播放时一半以上的音频线程时间。
         let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        return rate > 0 ? rate : 44100
+        if rate > 0 { return rate }
+        // 万一拿不到（某些设备上要先实例化混音器），再退回老办法。
+        _ = engine.mainMixerNode
+        let fallback = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        return fallback > 0 ? fallback : 44100
     }
 
     private func buildGraph(sampleRate: Double) {
@@ -152,25 +173,20 @@ final class AudioEngine {
         }
 
         let synth = self.synth
-        let music = AVAudioSourceNode(format: format) { _, _, frameCount, ablPointer in
-            guard let (l, r) = Self.stereoBuffers(ablPointer) else { return noErr }
-            synth.render(left: l, right: r, frames: Int(frameCount))
-            return noErr
-        }
-
         let ambience = self.ambience
-        let air = AVAudioSourceNode(format: format) { _, _, frameCount, ablPointer in
+        let node = AVAudioSourceNode(format: format) { _, _, frameCount, ablPointer in
             guard let (l, r) = Self.stereoBuffers(ablPointer) else { return noErr }
-            ambience.render(left: l, right: r, frames: Int(frameCount))
+            let n = Int(frameCount)
+            // 音乐先写进缓冲区，环境音再叠上去。
+            synth.render(left: l, right: r, frames: n)
+            ambience.mix(left: l, right: r, frames: n)
             return noErr
         }
 
-        engine.attach(music)
-        engine.attach(air)
-        engine.connect(music, to: engine.mainMixerNode, format: format)
-        engine.connect(air, to: engine.mainMixerNode, format: format)
-        musicNode = music
-        ambienceNode = air
+        engine.attach(node)
+        // 直连输出节点，绕开 mainMixerNode。
+        engine.connect(node, to: engine.outputNode, format: format)
+        sourceNode = node
     }
 
     /// 声明的是双声道非交错格式，所以这里一定是两个独立缓冲区。
@@ -193,10 +209,8 @@ final class AudioEngine {
         let savedAmbience = Ambience.allCases.map { ambience.level($0) }
 
         engine.stop()
-        if let n = musicNode { engine.detach(n) }
-        if let n = ambienceNode { engine.detach(n) }
-        musicNode = nil
-        ambienceNode = nil
+        if let n = sourceNode { engine.detach(n) }
+        sourceNode = nil
         engine = AVAudioEngine()
 
         let sampleRate = Self.hardwareSampleRate(engine)

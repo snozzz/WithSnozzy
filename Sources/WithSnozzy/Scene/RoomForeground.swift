@@ -29,8 +29,17 @@ private enum Props {
 ///
 /// 它画在 Snozzy 之上，桌沿因此会挡住她的下半身——
 /// 这一层是「她坐在桌前」这个印象的全部来源。
-struct RoomForeground: View {
+/// 遵循 `Equatable` 并在使用处加 `.equatable()`。
+///
+/// 这一层为了保证遮挡顺序，被夹在角色的 `TimelineView` 内部，
+/// 于是每帧都会被重新求值——而桌子、绿植、杯子、猫、台灯全是静态的。
+/// 告诉 SwiftUI「调色板没变就别重画」，这一层每秒就从 24 次降到 0 次。
+struct RoomForeground: View, Equatable {
     let palette: Palette
+
+    static func == (a: RoomForeground, b: RoomForeground) -> Bool {
+        a.palette == b.palette
+    }
 
     /// 桌面上沿在画面中的高度。
     ///

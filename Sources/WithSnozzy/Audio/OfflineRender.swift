@@ -58,7 +58,9 @@ enum OfflineRender {
         let mixer = AmbienceMixer(sampleRate: sr)
         mixer.setLevel(sound, 1.0)
         return try drain(seconds: seconds, sr: sr, path: path) { l, r, n in
-            mixer.render(left: l, right: r, frames: n)
+            // mix 是叠加语义，所以要先把缓冲区清零。
+            for k in 0..<n { l[k] = 0; r[k] = 0 }
+            mixer.mix(left: l, right: r, frames: n)
         }
     }
 

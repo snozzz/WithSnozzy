@@ -366,31 +366,58 @@ final class AmbienceMixer: @unchecked Sendable {
     /// 触发一次提示音。番茄钟阶段切换时调用。
     func triggerChime(rising: Bool) { chime.trigger(rising: rising) }
 
-    func render(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) {
+    /// 本缓冲区需要参与运算的通道下标。预分配，避免在音频线程上分配内存。
+    private var activeIndices = [Int](repeating: 0, count: Ambience.allCases.count)
+
+    /// 把环境音**叠加**到已有内容上（而不是覆写）。
+    ///
+    /// 叠加而不是独占一个源节点，是因为 AVAudioEngine 里每多一个节点，
+    /// 就多一整条 AU 桥接链的开销。独立开关靠的是"是否发声"，不是节点数量。
+    func mix(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) {
+        // 哪些通道要跑，**每个缓冲区判定一次**，而不是每个样本判定六次。
+        //
+        // 之前的写法在全部静音时仍然逐样本更新 6 个平滑器：48kHz × 6 = 每秒 29 万次
+        // 无意义的乘加。而"全部静音"恰恰是最常见的状态（多数人只听音乐不开环境音）。
+        // 平滑器还没收敛到 0 的通道也要算进来，否则淡出会被截断。
+        var count = 0
+        for i in targets.indices where targets[i] > 0.0002 || smoothers[i].value > 0.0002 {
+            activeIndices[count] = i
+            count += 1
+        }
+        let chimeActive = chime.isActive
+
+        // 什么都不响时直接返回，连缓冲区都不用碰——里面已经是音乐了。
+        if count == 0 && !chimeActive { return }
+
         for n in 0..<frames {
             var l = 0.0, r = 0.0
 
-            // 音量走平滑器，拖动滑杆时才不会有咔哒声。
-            // 电平为 0 的通道直接跳过生成器，关掉的音源不花任何 CPU。
-            for (i, sound) in Ambience.allCases.enumerated() {
+            for j in 0..<count {
+                let i = activeIndices[j]
+                // 音量走平滑器，拖动滑杆时才不会有咔哒声。
                 let g = smoothers[i].next(targets[i]) * Self.trim[i]
-                guard g > 0.0002 else { continue }
                 let (a, b): (Double, Double)
-                switch sound {
-                case .rain: (a, b) = rain.render()
-                case .fire: (a, b) = fire.render()
-                case .cafe: (a, b) = cafe.render()
-                case .waves: (a, b) = waves.render()
-                case .keys: (a, b) = keys.render()
-                case .wind: (a, b) = wind.render()
+                switch i {
+                case Ambience.rain.rawValue: (a, b) = rain.render()
+                case Ambience.fire.rawValue: (a, b) = fire.render()
+                case Ambience.cafe.rawValue: (a, b) = cafe.render()
+                case Ambience.waves.rawValue: (a, b) = waves.render()
+                case Ambience.keys.rawValue: (a, b) = keys.render()
+                default: (a, b) = wind.render()
                 }
                 l += a * g
                 r += b * g
             }
 
-            let (cl, cr) = chime.render()
-            left[n] = Float(softClip(l + cl))
-            right[n] = Float(softClip(r + cr))
+            if chimeActive {
+                let (cl, cr) = chime.render()
+                l += cl
+                r += cr
+            }
+
+            // 叠在音乐之上，最后统一软削波。
+            left[n] = Float(softClip(Double(left[n]) + l))
+            right[n] = Float(softClip(Double(right[n]) + r))
         }
     }
 }

@@ -102,8 +102,9 @@ private struct SceneStack: View {
                             .position(x: w / 2, y: h * Self.figureCenterY)
 
                         // 3. 前景：桌面挡住她的下半身，"坐在桌前"的印象就成立了。
-                        //    它是静态的，但必须夹在角色和热气之间，所以放进同一层。
-                        RoomForeground(palette: palette)
+                        //    它必须夹在角色和热气之间，所以只能放进这个时间线里；
+                        //    但它本身是静态的，靠 .equatable() 跳过每帧重绘。
+                        RoomForeground(palette: palette).equatable()
 
                         SteamOverlay(palette: palette, t: t)
                             .frame(width: w * 0.085, height: h * 0.13)
@@ -121,7 +122,9 @@ private struct SceneStack: View {
                     .frame(width: figure * 0.40, height: figure * 0.40)
                     .position(x: w / 2, y: h * Self.headY)
                     .onTapGesture { state.pet() }
-                    .help("摸摸头")
+                    // 刻意不加 .help()：这个热区正好在她脸上，
+                    // 悬停时系统提示会把整张脸盖住，比没有提示更糟。
+                    // 点角色本来就是自然行为，她的回应就是最好的说明。
 
                 // 对话气泡，浮在她头部右上方。
                 if let line = state.chatter.current {

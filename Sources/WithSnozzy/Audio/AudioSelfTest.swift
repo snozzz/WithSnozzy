@@ -45,6 +45,14 @@ enum AudioSelfTest {
         audio.installProbe(bufferSize: 4096) { probe.record($0) }
         audio.play()
 
+        // 格式协商结果。源节点和输出设备的采样率一旦对不上，
+        // AVAudioEngine 会在中间插一整条重采样链，CPU 开销可以翻好几倍。
+        print("格式：")
+        for (name, fmt) in audio.debugFormats {
+            print("  \(name): \(Int(fmt.sampleRate)) Hz, \(fmt.channelCount) ch, "
+                  + "\(fmt.isInterleaved ? "交错" : "非交错")")
+        }
+
         let seconds = 3.0
         print("自检中：播放 \(Int(seconds)) 秒并统计流过输出总线的样本…")
 
@@ -69,12 +77,12 @@ enum AudioSelfTest {
 extension AudioEngine {
     /// 在总线上挂一个只读探针。仅用于自检，正常播放路径不受影响。
     func installProbe(bufferSize: AVAudioFrameCount, _ handler: @escaping @Sendable (AVAudioPCMBuffer) -> Void) {
-        probeTarget.installTap(onBus: 0, bufferSize: bufferSize, format: nil) { buffer, _ in
+        probeTarget?.installTap(onBus: 0, bufferSize: bufferSize, format: nil) { buffer, _ in
             handler(buffer)
         }
     }
 
     func removeProbe() {
-        probeTarget.removeTap(onBus: 0)
+        probeTarget?.removeTap(onBus: 0)
     }
 }
