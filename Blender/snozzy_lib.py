@@ -245,6 +245,9 @@ def room_lights():
         data = bpy.data.lights.new(name, 'SUN')
         data.color = color
         data.energy = energy
+        # 关阴影。平行光打在墙上会投出一大块生硬的黑影，
+        # 和 lofi 插画那种柔和的观感完全相反；形体交给色带分级就够了。
+        data.use_shadow = False
         obj = bpy.data.objects.new(name, data)
         bpy.context.scene.collection.objects.link(obj)
         v = Vector(d).normalized()

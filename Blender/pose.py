@@ -50,12 +50,31 @@ def aim(arm, name, direction, prefer=None):
     return pb
 
 
-def seated(arm, lean=0.10, head_down=0.18, hands="desk"):
-    """伏案坐姿。
+def sit_down(arm, seat_h=0.50):
+    """把整个人放到椅子高度上，并弯起腿。
 
-    腿完全不管——房间场景里桌沿从胸口往下全挡住，
-    摆了也看不见，还徒增出错的机会。
+    VRoid 模型静置是**站姿**，只摆上半身的话她会立在桌子后面而不是坐着。
+    先把骨架整体下移到坐高，再把大腿折向前、小腿垂下去。
+    腿基本会被桌子挡住，但不折的话会从桌板底下穿出来。
     """
+    hips = arm.pose.bones.get("J_Bip_C_Hips")
+    if hips is not None:
+        cur = (arm.matrix_world @ hips.head).z
+        arm.location.z += seat_h - cur
+
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='POSE')
+    for side, sx in (("L", 1), ("R", -1)):
+        aim(arm, f"J_Bip_{side}_UpperLeg", (sx * 0.14, -1, -0.10))
+        aim(arm, f"J_Bip_{side}_LowerLeg", (sx * 0.06, -0.08, -1))
+        aim(arm, f"J_Bip_{side}_Foot", (sx * 0.05, -0.9, -0.2))
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def seated(arm, lean=0.10, head_down=0.18, hands="desk", sit=False, seat_h=0.50):
+    """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
+    if sit:
+        sit_down(arm, seat_h)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
 

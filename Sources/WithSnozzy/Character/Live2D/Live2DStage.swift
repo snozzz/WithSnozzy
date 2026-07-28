@@ -8,6 +8,8 @@ import Metal
 enum CharacterStyle: String, CaseIterable, Codable, Identifiable {
     /// 纯代码矢量绘制的 Snozzy。
     case vector
+    /// Blender 离线渲染出来的图层。
+    case rendered
     /// Live2D 模型。
     case live2d
 
@@ -16,6 +18,7 @@ enum CharacterStyle: String, CaseIterable, Codable, Identifiable {
     var label: String {
         switch self {
         case .vector: "矢量 Snozzy"
+        case .rendered: "渲染 Snozzy"
         case .live2d: "Live2D 模型"
         }
     }

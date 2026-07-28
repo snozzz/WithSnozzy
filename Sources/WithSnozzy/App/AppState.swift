@@ -78,7 +78,7 @@ final class AppState {
     let sceneAssets = SceneAssets()
 
     /// 角色的渲染方式。
-    var characterStyle: CharacterStyle = .vector {
+    var characterStyle: CharacterStyle = .rendered {
         didSet {
             guard characterStyle != oldValue else { return }
             if characterStyle == .live2d { live2d.loadIfNeeded() }

@@ -51,6 +51,12 @@ final class SceneAssets {
     private(set) var room: NSImage?
     private(set) var desk: NSImage?
     private(set) var cats: [NSImage] = []
+    /// Blender 渲出来的 Snozzy。两张图共用同一个相机，像素级对齐。
+    private(set) var snozzyIdle: NSImage?
+    private(set) var snozzyHeadphones: NSImage?
+
+    /// 渲染版角色是否可用。缺图就回落到矢量绘制。
+    var hasRenderedCharacter: Bool { snozzyIdle != nil }
     private(set) var manifest = SceneManifest.default
     private(set) var loadedFrom: String?
 
@@ -78,6 +84,8 @@ final class SceneAssets {
 
             room = roomImage
             desk = NSImage(contentsOf: dir.appendingPathComponent("desk.png"))
+            snozzyIdle = NSImage(contentsOf: dir.appendingPathComponent("snozzy_idle.png"))
+            snozzyHeadphones = NSImage(contentsOf: dir.appendingPathComponent("snozzy_headphones.png"))
 
             var found: [NSImage] = []
             for i in 0..<8 {

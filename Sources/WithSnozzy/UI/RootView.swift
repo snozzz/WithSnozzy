@@ -100,14 +100,27 @@ private struct SceneStack: View {
                 TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in
                     let t = tl.date.timeIntervalSinceReferenceDate
                     ZStack {
-                        CharacterView(palette: palette, t: t,
-                                      kick: state.audio.kickPulse,
-                                      playing: state.isPlaying,
-                                      mood: state.mood,
-                                      drowsy: state.drowsy,
-                                      framing: .bust)
-                            .frame(width: figure, height: figure)
-                            .position(x: w / 2, y: h * Self.figureCenterY)
+                        // 渲染版自己按整块画布取景（构图写死在 RenderedSnozzy 里），
+                        // 所以不能塞进 figure 这个正方形框里。
+                        if state.characterStyle == .rendered && state.sceneAssets.hasRenderedCharacter {
+                            RenderedSnozzy(assets: state.sceneAssets, palette: palette,
+                                           pose: SnozzyRig.pose(time: t,
+                                                                kick: state.audio.kickPulse,
+                                                                playing: state.isPlaying,
+                                                                mood: state.mood,
+                                                                drowsy: state.drowsy),
+                                           headphones: state.isPlaying)
+                                .equatable()
+                        } else {
+                            CharacterView(palette: palette, t: t,
+                                          kick: state.audio.kickPulse,
+                                          playing: state.isPlaying,
+                                          mood: state.mood,
+                                          drowsy: state.drowsy,
+                                          framing: .bust)
+                                .frame(width: figure, height: figure)
+                                .position(x: w / 2, y: h * Self.figureCenterY)
+                        }
 
                         // 3. 前景：桌面挡住她的下半身，"坐在桌前"的印象就成立了。
                         //    它必须夹在角色和热气之间，所以只能放进这个时间线里；
