@@ -11,12 +11,14 @@ struct LibraryPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             // ── 来源切换 ──
             HStack(spacing: 6) {
-                ForEach([MusicSource.radio, .library], id: \.self) { src in
+                ForEach(MusicSource.allCases, id: \.self) { src in
                     Button {
                         withAnimation(.easeOut(duration: 0.18)) { state.source = src }
                     } label: {
-                        Text(src == .radio ? "电台" : "本地")
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                        Text(src.shortLabel)
+                            .font(.system(size: 10.5, weight: .medium, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(state.source == src
                                              ? Color.black.opacity(0.75)
                                              : .white.opacity(0.55))
@@ -97,9 +99,66 @@ struct LibraryPanel: View {
                     }
                     .buttonStyle(.plain)
                 }
-            } else {
+            } else if state.source == .library {
                 libraryContent(lib)
+            } else {
+                externalContent
             }
+        }
+    }
+
+    // MARK: - 外部播放器
+
+    /// 接「音乐」App 和让位模式共用这一块。
+    ///
+    /// 两者的说明文字不同，但都要强调同一件事：音乐归你的播放器，
+    /// 环境音归我们——这才是把外部音源接进来的意义。
+    @ViewBuilder
+    private var externalContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(spacing: 7) {
+                Image(systemName: state.source == .appleMusic ? "music.note" : "hand.raised")
+                    .font(.system(size: 20))
+                    .foregroundStyle(.white.opacity(0.2))
+                Text(state.source == .appleMusic
+                     ? "播放和曲库都在「音乐」App 那边，这里只是遥控器"
+                     : "我们不出声，你用任何播放器放歌都行")
+                    .font(.system(size: 10.5, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.white.opacity(0.32))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+
+            if let failure = state.appleMusic.failure, state.source == .appleMusic {
+                Text(failure)
+                    .font(.system(size: 9.5, design: .rounded))
+                    .foregroundStyle(palette.accent.color(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Text(state.hasAnyAmbience
+                 ? "环境音照旧在响，垫在你的歌下面。"
+                 : "去「环境音」面板加点雨声或黑胶底噪，垫在你的歌下面。")
+                .font(.system(size: 9, design: .rounded))
+                .foregroundStyle(.white.opacity(0.3))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Button {
+                state.togglePanel(.mixer)
+            } label: {
+                Text("打开环境音")
+                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background {
+                        RoundedRectangle(cornerRadius: Metrics.smallCorner, style: .continuous)
+                            .fill(.white.opacity(0.07))
+                    }
+            }
+            .buttonStyle(.plain)
         }
     }
 

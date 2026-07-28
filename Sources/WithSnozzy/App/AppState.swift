@@ -223,12 +223,21 @@ final class AppState {
     private var radioTitle = ""
     private var radioTempo = ""
 
+    /// 「音乐」App 的遥控器，以及它上一次报告的曲目。
+    @ObservationIgnored let appleMusic = AppleMusicBridge()
+    private var externalTrack = ExternalTrack()
+    @ObservationIgnored private var externalPoller: Timer?
+
     var trackTitle: String {
         switch source {
         case .radio:
             isPlaying && !radioTitle.isEmpty ? radioTitle : MusicSource.radio.label
         case .library:
             library.currentTrack?.title ?? MusicSource.library.label
+        case .appleMusic:
+            externalTrack.title.isEmpty ? MusicSource.appleMusic.label : externalTrack.title
+        case .external:
+            MusicSource.external.label
         }
     }
 
@@ -241,6 +250,13 @@ final class AppState {
             else if library.tracks.isEmpty { "未选择文件夹" }
             else if let i = library.currentIndex { "\(i + 1) / \(library.tracks.count)" }
             else { "\(library.tracks.count) 首" }
+        case .appleMusic:
+            if let f = appleMusic.failure { f }
+            else if !appleMusic.isRunning { "「音乐」App 未运行" }
+            else if !externalTrack.artist.isEmpty { externalTrack.artist }
+            else { externalTrack.isPlaying ? "播放中" : "已暂停" }
+        case .external:
+            hasAnyAmbience ? "只放环境音" : "打开环境音给它垫个底"
         }
     }
 
@@ -249,6 +265,11 @@ final class AppState {
         switch source {
         case .radio: isPlaying ? audio.play() : audio.pause()
         case .library: isPlaying ? library.resume() : library.pause()
+        case .appleMusic:
+            if isPlaying && !appleMusic.isRunning { appleMusic.launch() }
+            appleMusic.toggle()
+        case .external:
+            break          // 别人的播放器，我们不插手
         }
         refreshRadioInfo()
     }
@@ -265,6 +286,11 @@ final class AppState {
         case .library:
             library.next()
             if !isPlaying { isPlaying = true }
+        case .appleMusic:
+            appleMusic.next()
+            pollExternal()
+        case .external:
+            return         // 没有可切的东西，连搭话都免了
         }
         chatter.say(.musicChanged)
     }
@@ -273,7 +299,35 @@ final class AppState {
         switch source {
         case .radio: nextTrack()          // 生成的音乐没有"上一首"，就当再换一首
         case .library: library.previous()
+        case .appleMusic: appleMusic.previous(); pollExternal()
+        case .external: break
         }
+    }
+
+    /// 轮询外部播放器。
+    ///
+    /// 一次 Apple Event 往返几十毫秒，而且要跨进程，不能放进每帧的路径里。
+    /// 只在选中「音乐 App」时开一个 2 秒的定时器；切走就停掉。
+    private func syncExternalPoller() {
+        externalPoller?.invalidate()
+        externalPoller = nil
+        guard source == .appleMusic else { return }
+        pollExternal()
+        externalPoller = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollExternal() }
+        }
+    }
+
+    private func pollExternal() {
+        guard let track = appleMusic.poll() else {
+            externalTrack = ExternalTrack()
+            return
+        }
+        guard track != externalTrack else { return }
+        externalTrack = track
+        // 播放状态以「音乐」App 为准：用户可能直接在那边按了暂停。
+        isPlaying = track.isPlaying
+        nowPlaying.update(title: trackTitle, subtitle: subtitleText, isPlaying: isPlaying)
     }
 
     /// 从列表里点某一首。
@@ -285,14 +339,20 @@ final class AppState {
 
     private func switchSource(from old: MusicSource) {
         // 两个来源同时出声会很吵，切换时先把旧的停掉。
+        // 外部来源不归我们管，切走时也不要替用户按暂停。
         switch old {
         case .radio: audio.pause()
         case .library: library.pause()
+        case .appleMusic, .external: break
         }
+
+        syncExternalPoller()
+
         guard isPlaying else { return }
         switch source {
         case .radio: audio.play()
         case .library: library.resume()
+        case .appleMusic, .external: break
         }
         refreshRadioInfo()
     }

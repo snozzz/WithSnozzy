@@ -30,5 +30,9 @@
 	<false/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Made for Snozzy.</string>
+	<!-- 选「音乐 App」音源时要给它发 Apple Event。缺这一项系统会直接
+	     拒掉请求，而且不弹授权框，表现为静默失败。 -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>用来读取和控制「音乐」App 正在播放的曲目。</string>
 </dict>
 </plist>

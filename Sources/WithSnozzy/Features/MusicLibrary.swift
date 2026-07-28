@@ -20,18 +20,39 @@ struct Track: Identifiable, Hashable {
 }
 
 /// 播放来源。
-enum MusicSource: String, Codable {
+enum MusicSource: String, Codable, CaseIterable {
     /// Snozzy 的电台：实时合成，无限不重复。
     case radio
     /// 本地音乐库。
     case library
+    /// 系统的「音乐」App。我们只当遥控器，音频由它自己出。
+    case appleMusic
+    /// 让位模式：我们一声不吭，你用任何播放器放歌，这边只留环境音。
+    case external
 
     var label: String {
         switch self {
         case .radio: "Snozzy 的电台"
         case .library: "本地音乐库"
+        case .appleMusic: "音乐 App"
+        case .external: "让位给其他播放器"
         }
     }
+
+    var shortLabel: String {
+        switch self {
+        case .radio: "电台"
+        case .library: "本地"
+        case .appleMusic: "音乐 App"
+        case .external: "让位"
+        }
+    }
+
+    /// 音频是不是由我们自己产生。
+    ///
+    /// 外部来源下我们不出音乐，但**环境音照旧**——
+    /// 你自己的歌垫上雨声和黑胶底噪，这才是接外部播放器的意义。
+    var isExternal: Bool { self == .appleMusic || self == .external }
 }
 
 /// 本地音乐库的偏好，需要落盘的部分。
