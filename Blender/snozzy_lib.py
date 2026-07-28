@@ -60,11 +60,7 @@ def unlit_materials():
             if name in bsdf.inputs:
                 bsdf.inputs[name].default_value = 0.0 if name != "Roughness" else 1.0
 
-        # 4.2 之后 blend_method 换成了 surface_render_method
-        if hasattr(mat, "surface_render_method"):
-            mat.surface_render_method = 'BLENDED'
-        elif hasattr(mat, "blend_method"):
-            mat.blend_method = 'HASHED'
+        _alpha_mode(mat)
         mat.use_backface_culling = False
 
 
@@ -88,6 +84,12 @@ def setup_scene(res=1024, transparent=True):
     # 贴图是已经画好的成品色，再过一遍 Filmic/AgX 会发灰
     try:
         scene.view_settings.view_transform = 'Standard'
+    except Exception:
+        pass
+
+    # 抖动 alpha 的噪点靠采样数消化
+    try:
+        scene.eevee.taa_render_samples = 128
     except Exception:
         pass
 
@@ -140,3 +142,138 @@ def frame_bust(scene, meshes, yaw_deg=15, pitch_deg=82, top_margin=0.04, span=0.
     cam.data.type = 'ORTHO'
     cam.data.ortho_scale = span
     return hi.z
+
+
+def toon_materials(shadow=(0.60, 0.58, 0.70), steps=((0.0, 0.62), (0.34, 0.84), (0.60, 1.0))):
+    """卡通着色：贴图颜色 × 分级后的光照。
+
+    和 `unlit_materials` 的区别在于**有没有形体**。无光照版颜色最准，
+    但贴在有明确光源方向的房间里像贴纸——她身上一点方向感都没有。
+
+    做法是 Blender 的标准 cel 着色：漫反射结果过 `Shader to RGB`
+    再用常数插值的色带切成几档。只在 EEVEE 里可用（Cycles 没有
+    Shader to RGB），这也是这条管线选 EEVEE 的原因之一。
+
+    暗部乘的是偏冷的紫灰而不是纯灰——房间的暗部就是这个调子。
+    """
+    for mat in bpy.data.materials:
+        if not mat.use_nodes or mat.name.startswith("Outline"):
+            continue
+        nt = mat.node_tree
+        bsdf = next((n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED'), None)
+        out = next((n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL'), None)
+        if bsdf is None or out is None:
+            continue
+
+        base = bsdf.inputs["Base Color"]
+        tex = base.links[0].from_node if base.is_linked else None
+        alpha_src = bsdf.inputs["Alpha"].links[0].from_socket if bsdf.inputs["Alpha"].is_linked else None
+
+        diffuse = nt.nodes.new("ShaderNodeBsdfDiffuse")
+        diffuse.inputs["Color"].default_value = (1, 1, 1, 1)
+        to_rgb = nt.nodes.new("ShaderNodeShaderToRGB")
+        nt.links.new(diffuse.outputs[0], to_rgb.inputs[0])
+
+        ramp = nt.nodes.new("ShaderNodeValToRGB")
+        ramp.color_ramp.interpolation = 'CONSTANT'
+        # 色带默认两个端点，先把第一个挪到位再补剩下的
+        ramp.color_ramp.elements[0].position = steps[0][0]
+        while len(ramp.color_ramp.elements) > 1:
+            ramp.color_ramp.elements.remove(ramp.color_ramp.elements[-1])
+        for pos, level in steps:
+            el = ramp.color_ramp.elements[0] if pos == steps[0][0] else ramp.color_ramp.elements.new(pos)
+            el.position = pos
+            # 越暗的档越往冷紫偏，和房间暗部一致
+            k = 1.0 - level
+            el.color = (level * (1 - k) + shadow[0] * k,
+                        level * (1 - k) + shadow[1] * k,
+                        level * (1 - k) + shadow[2] * k, 1)
+        nt.links.new(to_rgb.outputs[0], ramp.inputs[0])
+
+        mul = nt.nodes.new("ShaderNodeMixRGB")
+        mul.blend_type = 'MULTIPLY'
+        mul.inputs["Fac"].default_value = 1.0
+        if tex:
+            nt.links.new(tex.outputs["Color"], mul.inputs[1])
+        else:
+            mul.inputs[1].default_value = base.default_value
+        nt.links.new(ramp.outputs[0], mul.inputs[2])
+
+        emit = nt.nodes.new("ShaderNodeEmission")
+        nt.links.new(mul.outputs[0], emit.inputs["Color"])
+
+        if alpha_src:
+            trans = nt.nodes.new("ShaderNodeBsdfTransparent")
+            mix = nt.nodes.new("ShaderNodeMixShader")
+            nt.links.new(alpha_src, mix.inputs["Fac"])
+            nt.links.new(trans.outputs[0], mix.inputs[1])
+            nt.links.new(emit.outputs[0], mix.inputs[2])
+            nt.links.new(mix.outputs[0], out.inputs["Surface"])
+        else:
+            nt.links.new(emit.outputs[0], out.inputs["Surface"])
+
+        _alpha_mode(mat)
+        mat.use_backface_culling = False
+
+
+def _alpha_mode(mat):
+    """统一用抖动 alpha 而不是混合 alpha。
+
+    EEVEE 的 BLENDED 不写深度缓冲，重叠的部件之间没有正确的前后关系——
+    表现就是**能透过裙子看见背后的书架**。DITHERED 是随机抖动 + 正常写深度，
+    遮挡关系完全正确，代价是边缘有噪点，靠提高采样数消掉。
+    """
+    if hasattr(mat, "surface_render_method"):
+        mat.surface_render_method = 'DITHERED'
+    elif hasattr(mat, "blend_method"):
+        mat.blend_method = 'HASHED'
+
+
+def room_lights():
+    """按房间的光位布光：右上暖光台灯为主，左侧窗口冷光补一点。
+
+    方位是照着 `PaintedRoom` 里台灯光晕的位置（x=0.86, y=0.30）来的，
+    她身上的明暗方向必须和房间对得上，否则贴上去就是两个世界。
+    """
+    import math
+    specs = [
+        ("Key",  (1.0, -0.55, 0.75), (1.00, 0.78, 0.52), 3.2),   # 右上台灯
+        ("Fill", (-1.0, -0.45, 0.25), (0.62, 0.72, 0.95), 1.1),  # 左侧窗光
+        ("Back", (0.2, 0.9, 0.5), (0.80, 0.78, 0.92), 0.8),      # 背后轮廓光
+    ]
+    for name, d, color, energy in specs:
+        data = bpy.data.lights.new(name, 'SUN')
+        data.color = color
+        data.energy = energy
+        obj = bpy.data.objects.new(name, data)
+        bpy.context.scene.collection.objects.link(obj)
+        v = Vector(d).normalized()
+        obj.rotation_euler = v.to_track_quat('Z', 'Y').to_euler()
+
+
+def add_outline(meshes, thickness=0.0035, skip=("Hair",)):
+    """反转外壳描边。
+
+    VRoid 的头发是带 alpha 的面片，外壳会沿着面片的矩形边缘描，
+    而不是沿着看得见的发丝——所以默认跳过头发。
+    """
+    mat = bpy.data.materials.new("Outline")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.inputs["Color"].default_value = (0.10, 0.08, 0.12, 1)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(emit.outputs[0], out.inputs["Surface"])
+    mat.use_backface_culling = True
+
+    for o in meshes:
+        if any(s in o.name for s in skip):
+            continue
+        o.data.materials.append(mat)
+        m = o.modifiers.new("Outline", 'SOLIDIFY')
+        m.thickness = thickness
+        m.offset = 1
+        m.use_flip_normals = True
+        m.use_rim = False
+        m.material_offset = len(o.material_slots) - 1

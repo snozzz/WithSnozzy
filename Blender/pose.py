@@ -12,22 +12,41 @@ from mathutils import Vector
 FWD, DOWN, RIGHT = Vector((0, -1, 0)), Vector((0, 0, -1)), Vector((1, 0, 0))
 
 
-def aim(arm, name, direction, roll=None):
-    """把骨骼的指向转到 `direction`（世界坐标）。"""
+def _limb_dir(pb, prefer=None):
+    """骨骼在解剖学意义上的指向：本骨骼头部 → 子骨骼头部。
+
+    **不能用骨骼自身的 Y 轴。** glTF 里节点只有变换没有"长度和朝向"，
+    Blender 导入时按自己的启发式给骨骼定向，胳膊骨骼的 Y 轴完全可能
+    和胳膊本身差着九十度。照着 Y 轴摆姿势，数值上分毫不差，
+    渲出来却是稻草人——这个坑吃过一次。
+    """
+    if prefer:
+        c = next((c for c in pb.children if prefer in c.name), None)
+        if c:
+            return c.head - pb.head
+    if pb.children:
+        # 取最远的子骨骼：手部有五根手指做子骨骼，取拇指会把方向带偏
+        c = max(pb.children, key=lambda c: (c.head - pb.head).length)
+        return c.head - pb.head
+    return pb.tail - pb.head
+
+
+def aim(arm, name, direction, prefer=None):
+    """把骨骼所代表的那一节肢体转到 `direction`（世界坐标）。"""
     pb = arm.pose.bones.get(name)
     if pb is None:
         print(f"POSE 缺骨骼 {name}")
         return
-    d = Vector(direction).normalized()
+    cur = _limb_dir(pb, prefer)
+    if cur.length < 1e-6:
+        return
+    q = cur.normalized().rotation_difference(Vector(direction).normalized())
     m = pb.matrix.copy()
     loc = m.translation.copy()
-    y = Vector(m.col[1][:3]).normalized()
-    m = (y.rotation_difference(d).to_matrix().to_4x4() @ m)
+    m = q.to_matrix().to_4x4() @ m
     m.translation = loc
     pb.matrix = m
     bpy.context.view_layer.update()
-    if roll:
-        pb.rotation_mode = 'XYZ'
     return pb
 
 
@@ -51,16 +70,19 @@ def seated(arm, lean=0.10, head_down=0.18, hands="desk"):
     aim(arm, "J_Bip_L_Shoulder", ( 1, 0, -0.15))
     aim(arm, "J_Bip_R_Shoulder", (-1, 0, -0.15))
 
-    # 大臂垂下并略微内收，小臂伸向桌面
-    aim(arm, "J_Bip_L_UpperArm", ( 0.42, -0.10, -1))
-    aim(arm, "J_Bip_R_UpperArm", (-0.42, -0.10, -1))
-    aim(arm, "J_Bip_L_LowerArm", ( 0.18, -1, -0.30))
-    aim(arm, "J_Bip_R_LowerArm", (-0.18, -1, -0.30))
+    # 大臂几乎垂直下垂：横向分量稍大一点，肘部就会被推到肩宽之外，
+    # 小臂再往前伸，手最后落在身体两侧像稻草人。
+    aim(arm, "J_Bip_L_UpperArm", ( 0.16, -0.06, -1))
+    aim(arm, "J_Bip_R_UpperArm", (-0.16, -0.06, -1))
+    # 小臂往前下方压：太接近水平的话两只手会在胸前糊成一团，
+    # 压下去手就落到桌面线以下，被桌沿自然挡住。
+    aim(arm, "J_Bip_L_LowerArm", (-0.30, -0.82, -0.50))
+    aim(arm, "J_Bip_R_LowerArm", ( 0.30, -0.82, -0.50))
 
     if hands == "desk":
-        aim(arm, "J_Bip_L_Hand", ( 0.10, -1, -0.12))
-        aim(arm, "J_Bip_R_Hand", (-0.10, -1, -0.12))
-        curl(arm, "L", 0.35); curl(arm, "R", 0.35)
+        aim(arm, "J_Bip_L_Hand", (-0.24, -0.90, -0.36), prefer="Middle")
+        aim(arm, "J_Bip_R_Hand", ( 0.24, -0.90, -0.36), prefer="Middle")
+        curl(arm, "L", 0.30); curl(arm, "R", 0.30)
 
     bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -74,5 +96,5 @@ def curl(arm, side, amount):
                 continue
             pb.rotation_mode = 'XYZ'
             # 指节沿自身 Z 轴弯曲，越靠指尖弯得越多
-            pb.rotation_euler[2] = (-1 if side == "L" else 1) * amount * (0.6 + 0.25 * i)
+            pb.rotation_euler[0] = -amount * (0.6 + 0.25 * i)
     bpy.context.view_layer.update()
