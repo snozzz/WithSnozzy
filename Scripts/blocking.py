@@ -21,76 +21,90 @@ from PIL import Image, ImageDraw
 W, H = 1536, 1024
 
 # 构图参数。改构图只动这里。
-HORIZON = 604            # 墙脚线
-DESK_FAR_Y = 690         # 桌面远边（靠她那侧）
-DESK_NEAR_Y = 812        # 桌面近边（靠镜头）
-DESK_FAR = (176, 1204)   # 远边左右端
-DESK_NEAR = (48, 1352)   # 近边左右端
-DESK_LIP = 34            # 桌沿厚度
-LEG_X = (128, 1290)      # 两条前腿
+#
+# 桌子是 L 形，她坐在**内转角**：主台面横在她身前，回折臂从左端朝镜头伸过来。
+# 回折臂是这版构图的关键——它一进画面就带来纵深，否则窗户/人/货架一字排开，
+# 整个房间会像一堵贴了东西的平墙。
+HORIZON = 596
+MAIN_FAR_Y, MAIN_NEAR_Y = 688, 812          # 主台面的远近边
+MAIN_FAR = (296, 1216)
+MAIN_NEAR = (232, 1372)
+RETURN_BOTTOM = (64, 402)                    # 回折臂在画面底边的左右端
+RETURN_SPLIT = 486                           # 主台面近边上，回折臂从这里岔出去
+DESK_LIP = 32
+LEG_X = (1300,)                              # 只画右前腿；左侧被回折臂占了
 LEG_W = 22
-WINDOW = (118, 158, 540, 556)     # 窗洞 x0,y0,x1,y1。右边界要避开角色（她占 x≈583 起）
-SHELF = (984, 150, 1490, 486)
+WINDOW = (272, 132, 636, 488)                # 窗洞。避开她（x≈583 起）也避开回折臂
+SHELF = (1044, 132, 1462, 370)
 
-C_WALL = (58, 54, 74)
-C_FLOOR = (44, 40, 54)
+C_WALL = (52, 48, 68)
+C_FLOOR = (38, 35, 50)
 C_DESK = (92, 88, 112)
-C_LIP = (70, 66, 88)
-C_METAL = (72, 70, 88)
-C_PROP = (118, 114, 138)
+C_LIP = (68, 64, 86)
+C_METAL = (74, 72, 92)
+C_PROP = (120, 116, 142)
 C_SCREEN = (255, 0, 255)
 C_NEON_A = (236, 62, 200)
 C_NEON_B = (66, 224, 236)
 
-# 桌上的东西。都是方块——重绘会把方块变成显示器、书、杯子。
-# 位置按「桌面上的相对坐标」给：u 横向 0…1，v 纵深 0（远）…1（近）。
-PROPS = [
-    ("monitor",  0.30, 0.30, 200, 128, True),
-    ("laptop",   0.62, 0.42, 150, 96, True),
-    ("keyboard", 0.44, 0.74, 210, 30, False),
-    ("mug",      0.20, 0.66, 44, 52, False),
-    ("books",    0.09, 0.44, 120, 46, False),
-    ("papers",   0.72, 0.78, 150, 18, False),
-    ("phone",    0.82, 0.66, 40, 62, False),
-    ("plant",    0.90, 0.36, 66, 86, False),
-    ("lamp",     0.06, 0.24, 40, 150, False),
+# 主台面上的东西：她伸手够得到的。u 横向 0…1，v 纵深 0（远）…1（近）。
+MAIN_PROPS = [
+    ("keyboard", 0.46, 0.80, 250, 26),
+    ("mug",      0.72, 0.62, 46, 56),
+    ("phone",    0.80, 0.80, 42, 66),
+    ("tablet",   0.88, 0.50, 96, 70),
+    ("plant",    0.96, 0.34, 70, 92),
+]
+# 回折臂上的显示器。**侧对着她**，所以镜头看到的是机背——
+# 画成正面矩形就成了"电脑对着观众"，很怪；屏幕内容本来也就看不见，
+# 因此这里不留品红，画面里唯一的品红只有窗户。
+SCREENS = [
+    dict(foot=(268, 916), w=150, h=196, lean=54),
+    dict(foot=(186, 1016), w=162, h=214, lean=60),
 ]
 
 
 def desk_point(u, v):
-    """桌面上的相对坐标 →屏幕坐标。梯形四角之间做双线性插值。"""
-    y = DESK_FAR_Y + (DESK_NEAR_Y - DESK_FAR_Y) * v
-    left = DESK_FAR[0] + (DESK_NEAR[0] - DESK_FAR[0]) * v
-    right = DESK_FAR[1] + (DESK_NEAR[1] - DESK_FAR[1]) * v
+    """主台面上的相对坐标 → 屏幕坐标。梯形四角之间做双线性插值。"""
+    y = MAIN_FAR_Y + (MAIN_NEAR_Y - MAIN_FAR_Y) * v
+    left = MAIN_FAR[0] + (MAIN_NEAR[0] - MAIN_FAR[0]) * v
+    right = MAIN_FAR[1] + (MAIN_NEAR[1] - MAIN_FAR[1]) * v
     return left + (right - left) * u, y
 
 
-def desk_polygon():
-    return [(DESK_FAR[0], DESK_FAR_Y), (DESK_FAR[1], DESK_FAR_Y),
-            (DESK_NEAR[1], DESK_NEAR_Y + DESK_LIP), (DESK_NEAR[0], DESK_NEAR_Y + DESK_LIP)]
+def desk_surface():
+    """L 形台面的多边形。顺时针：主台面远边 → 右端 → 近边 → 岔出回折臂 → 回到左端。"""
+    return [(MAIN_FAR[0], MAIN_FAR_Y), (MAIN_FAR[1], MAIN_FAR_Y),
+            (MAIN_NEAR[1], MAIN_NEAR_Y), (RETURN_SPLIT, MAIN_NEAR_Y),
+            (RETURN_BOTTOM[1], H), (RETURN_BOTTOM[0], H),
+            (MAIN_NEAR[0], MAIN_NEAR_Y)]
 
 
-def draw_desk(d, fill_top, fill_lip, fill_leg):
-    # 桌板
-    d.polygon([(DESK_FAR[0], DESK_FAR_Y), (DESK_FAR[1], DESK_FAR_Y),
-               (DESK_NEAR[1], DESK_NEAR_Y), (DESK_NEAR[0], DESK_NEAR_Y)], fill=fill_top)
-    # 桌沿厚度
-    d.polygon([(DESK_NEAR[0], DESK_NEAR_Y), (DESK_NEAR[1], DESK_NEAR_Y),
-               (DESK_NEAR[1], DESK_NEAR_Y + DESK_LIP), (DESK_NEAR[0], DESK_NEAR_Y + DESK_LIP)],
-              fill=fill_lip)
+def draw_desk(d, top, lip, leg):
+    d.polygon(desk_surface(), fill=top)
+    # 桌沿厚度只画主台面那一段——回折臂是朝镜头伸的，看不到它的沿
+    d.polygon([(RETURN_SPLIT, MAIN_NEAR_Y), (MAIN_NEAR[1], MAIN_NEAR_Y),
+               (MAIN_NEAR[1], MAIN_NEAR_Y + DESK_LIP), (RETURN_SPLIT, MAIN_NEAR_Y + DESK_LIP)],
+              fill=lip)
     # 前腿。桌下必须留空——能看见她的腿是这版构图的全部意义。
     for x in LEG_X:
-        d.rectangle([x - LEG_W // 2, DESK_NEAR_Y + DESK_LIP, x + LEG_W // 2, H], fill=fill_leg)
+        d.rectangle([x - LEG_W // 2, MAIN_NEAR_Y + DESK_LIP, x + LEG_W // 2, H], fill=leg)
 
 
 def draw_props(d, solid=None):
-    for name, u, v, w, h, screen in PROPS:
+    for _, u, v, w, h in MAIN_PROPS:
         cx, base = desk_point(u, v)
-        box = [cx - w / 2, base - h, cx + w / 2, base]
-        d.rectangle(box, fill=solid or C_PROP)
-        if screen and solid is None:
-            # 屏幕填品红，运行时塞程序化内容
-            d.rectangle([box[0] + 8, box[1] + 8, box[2] - 8, box[3] - 14], fill=C_SCREEN)
+        d.rectangle([cx - w / 2, base - h, cx + w / 2, base], fill=solid or C_PROP)
+    for s in SCREENS:
+        x, y = s["foot"]
+        w, h, lean = s["w"], s["h"], s["lean"]
+        # 底边贴在回折臂上（沿着台面往右后方斜），面板竖起来并向右让开一点：
+        # 读起来就是一台立着的显示器，屏幕朝她、机背朝我们
+        quad = [(x, y), (x + w, y - w * 0.30),
+                (x + w + lean, y - w * 0.30 - h), (x + lean, y - h)]
+        d.polygon(quad, fill=solid or C_METAL)
+        if solid is None:
+            d.line([quad[3], quad[2]], fill=C_NEON_B, width=5)   # 机背上沿透出的辉光
 
 
 def build(character_path, out_dir):
@@ -104,9 +118,14 @@ def build(character_path, out_dir):
     for i in range(3):
         y = SHELF[1] + 40 + i * 130
         d.rectangle([SHELF[0] + 12, y, SHELF[2] - 12, y + 12], fill=C_PROP)
-    # 霓虹灯带：给重绘一个明确的光源位置暗示
-    d.rectangle([0, 96, W, 108], fill=C_NEON_A)
-    d.rectangle([0, HORIZON - 14, W, HORIZON - 4], fill=C_NEON_B)
+    # 左侧墙的转角：给平墙加一道纵深暗示，否则整间房像一块贴了东西的板
+    d.polygon([(0, 40), (168, 128), (168, H), (0, H)], fill=(44, 41, 58))
+    # 霓虹：**不要横贯整幅画面**。满宽的横条会把画面切成上中下三层，
+    # 这正是"很分割"的来源。改成几段错落的、带一道竖向重音。
+    d.rectangle([196, 92, 880, 104], fill=C_NEON_A)
+    d.rectangle([1010, 60, 1500, 72], fill=C_NEON_B)
+    d.rectangle([880, 92, 892, 320], fill=C_NEON_A)
+    d.rectangle([176, 520, 640, 530], fill=C_NEON_B)
 
     layout = room.copy()
     if character_path and os.path.exists(character_path):
@@ -131,11 +150,7 @@ def build(character_path, out_dir):
         "room_window": {"x": round(WINDOW[0] / W, 5), "y": round(WINDOW[1] / H, 5),
                         "width": round((WINDOW[2] - WINDOW[0]) / W, 5),
                         "height": round((WINDOW[3] - WINDOW[1]) / H, 5)},
-        "screens": [
-            {"x": round((desk_point(u, v)[0] - w / 2 + 8) / W, 5),
-             "y": round((desk_point(u, v)[1] - h + 8) / H, 5),
-             "width": round((w - 16) / W, 5), "height": round((h - 22) / H, 5)}
-            for name, u, v, w, h, screen in PROPS if screen],
+        "deskMask": "mask_desk.png",
         "source": "blocking",
     }
     json.dump(manifest, open(os.path.join(out_dir, "layout.json"), "w"), indent=2)
