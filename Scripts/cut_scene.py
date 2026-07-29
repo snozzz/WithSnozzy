@@ -99,7 +99,7 @@ def main():
     Image.fromarray(room).save(os.path.join(a.out, "room.png"))
 
     manifest = {
-        "roomFit": "fillWidth", "roomAnchorX": 0.5,
+        "roomFit": "fill", "roomAnchorX": 0.5,
         "deskBottom": 1.0, "deskSurface": 0.0,
         "source": "painted",
     }

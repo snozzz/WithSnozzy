@@ -15,11 +15,8 @@ struct RenderedSnozzy: View, Equatable {
     /// 戴不戴耳机。听歌时她陪你一起听。
     let headphones: Bool
 
-    /// 构图。和 `Scripts/composite_test.py` 里试出来的那组值一致——
-    /// 改构图先在那边试，别直接在这里瞎调。
-    private static let scale = 1.25
-    private static let centerX = 0.54
-    private static let top = 0.25
+    /// 角色图和房间、桌子是同一台相机渲出来的，三层像素级对齐，
+    /// 所以直接满幅绘制。构图在 `Scripts/blocking.py` 里定，不在这里调。
 
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
         a.headphones == b.headphones && a.palette == b.palette
@@ -31,8 +28,6 @@ struct RenderedSnozzy: View, Equatable {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
-            let deskCut = h * (assets.manifest.deskBottom ?? 1.0)
-
             // 没有耳机图时一律用常态图——否则播放时两层都判定为隐藏，
             // 她会整个人消失。
             let wearing = headphones && assets.snozzyHeadphones != nil
@@ -41,9 +36,7 @@ struct RenderedSnozzy: View, Equatable {
                 layer(assets.snozzyIdle, visible: !wearing, w: w, h: h)
                 layer(assets.snozzyHeadphones, visible: wearing, w: w, h: h)
             }
-            // 桌沿以下不该有她——她坐在桌子后面。
-            .frame(width: w, height: h, alignment: .topLeading)
-            .clipShape(Rectangle().path(in: CGRect(x: 0, y: 0, width: w, height: deskCut)))
+            .frame(width: w, height: h)
             .allowsHitTesting(false)
         }
     }
@@ -51,18 +44,15 @@ struct RenderedSnozzy: View, Equatable {
     @ViewBuilder
     private func layer(_ image: NSImage?, visible: Bool, w: CGFloat, h: CGFloat) -> some View {
         if let image {
-            let ih = h * Self.scale
-            let iw = image.size.width * ih / max(image.size.height, 1)
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: iw, height: ih)
+                .frame(width: w, height: h)
                 // 呼吸：整体极轻微地放大，支点放在腰部（图的下方），
                 // 支点放中心的话头会跟着上下浮，看起来像在颠。
                 .scaleEffect(1 + pose.breath * 0.006, anchor: .bottom)
                 .rotationEffect(.degrees(pose.bodySway * 0.8), anchor: .bottom)
                 .offset(x: 0, y: pose.headBob * h * 0.008)
-                .position(x: w * Self.centerX, y: h * Self.top + ih / 2)
                 .opacity(visible ? 1 : 0)
                 .animation(.easeInOut(duration: 0.45), value: visible)
                 // 和房间共用一套时段染色，否则她永远是正午的亮度

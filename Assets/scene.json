@@ -1,5 +1,5 @@
 {
-  "roomFit": "fillWidth",
+  "roomFit": "fill",
   "roomAnchorX": 0.5,
   "deskBottom": 1.0,
   "deskSurface": 0.0,

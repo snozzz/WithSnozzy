@@ -120,6 +120,12 @@ final class SceneAssets {
         let aspect = room.size.width / max(room.size.height, 1)
         let fit = manifest.roomFit ?? "fillHeight"
 
+        // 新素材（房间/角色/桌子三层）是同一台相机渲出来的，尺寸完全一致，
+        // 而且和窗口一样是 3:2。所以直接满幅铺，不做裁切也不留边——
+        // 一旦按比例缩放，三层之间就会错位。
+        if fit == "fill" {
+            return CGRect(origin: .zero, size: size)
+        }
         if fit == "fillWidth" {
             let h = size.width / aspect
             return CGRect(x: 0, y: size.height - h, width: size.width, height: h)
@@ -146,6 +152,8 @@ final class SceneAssets {
     /// 桌面图的绘制矩形。
     func deskFrame(in size: CGSize) -> CGRect {
         guard let desk else { return .zero }
+        // 和房间同源同尺寸时直接满幅，别再按自身比例算一遍
+        if manifest.roomFit == "fill" { return CGRect(origin: .zero, size: size) }
         let aspect = desk.size.width / max(desk.size.height, 1)
         let w = size.width
         let h = w / aspect
