@@ -51,7 +51,7 @@ def head_metrics(meshes):
 
 
 def build(arm, meshes, color=(0.16, 0.15, 0.20), accent=(0.82, 0.55, 0.62),
-          head_bone="J_Bip_C_Head", ear_drop=0.30, over_hair=1.30):
+          head_bone="J_Bip_C_Head", ear_drop=0.26, over_hair=1.20):
     """建好耳机并绑到头骨上。
 
     `over_hair` 是耳机相对头宽的外扩比例——耳机是戴在头发外面的，
@@ -64,7 +64,7 @@ def build(arm, meshes, color=(0.16, 0.15, 0.20), accent=(0.82, 0.55, 0.62),
 
     # 头梁：竖直平面里的一段圆环，跨在头顶
     bpy.ops.mesh.primitive_torus_add(
-        major_radius=r * 0.94, minor_radius=half_w * 0.10,
+        major_radius=r * 0.95, minor_radius=half_w * 0.070,
         major_segments=48, minor_segments=12,
         location=centre + Vector((0, m["depth"] * 0.12, half_w * 0.10)))
     band = bpy.context.object
@@ -78,14 +78,14 @@ def build(arm, meshes, color=(0.16, 0.15, 0.20), accent=(0.82, 0.55, 0.62),
         pos = Vector((centre.x + sx * r * 0.92, centre.y + m["depth"] * 0.10, ear_z))
 
         bpy.ops.mesh.primitive_cylinder_add(
-            radius=half_w * 0.52, depth=half_w * 0.26, vertices=40, location=pos)
+            radius=half_w * 0.38, depth=half_w * 0.20, vertices=40, location=pos)
         cup = bpy.context.object
         cup.name = f"HP_Cup_{side}"
         cup.rotation_euler = (0, math.radians(90), 0)
         parts.append(cup)
 
         bpy.ops.mesh.primitive_torus_add(
-            major_radius=half_w * 0.46, minor_radius=half_w * 0.11,
+            major_radius=half_w * 0.34, minor_radius=half_w * 0.075,
             major_segments=32, minor_segments=10,
             location=pos - Vector((sx * half_w * 0.14, 0, 0)))
         pad = bpy.context.object
