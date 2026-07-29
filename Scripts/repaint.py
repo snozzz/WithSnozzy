@@ -1,24 +1,48 @@
 #!/usr/bin/env python3
-"""把 3D 渲染结果用 img2img 重绘成手绘质感。
+"""用 Gemini 的图像编辑把 3D 渲染结果重绘成手绘质感。
 
-3D 渲染和手绘背景之间最后剩下的差距是**表面质感**：渲染出来的衣服
-是光滑的色块，而画出来的书本有笔触。色调匹配和布光能解决"贴纸感"，
-解决不了这个。
+3D 渲染和手绘背景之间最后剩下的差距是**表面质感**：渲出来的衣服是光滑的
+色块，画出来的书本有笔触。色调匹配和布光解决了"贴纸感"，解决不了这个。
 
-img2img 在低强度下只改表面不改结构，正好对症。强度是唯一要紧的旋钮：
-太低没效果，太高会把角色改成另一个人。
+选 Gemini 而不是本地扩散模型，是因为这台机器只有 16GB，跑 SD 会被 OOM
+杀掉，512px 出来的脸也不可信。选它而不是 OpenAI，是因为它对
+「保持主体不变、只改表面」更稳——我们最怕的就是还回来一个不是 Snozzy 的人。
 
-alpha 要单独伺候：扩散模型只吃 RGB，所以先把角色合到一块接近房间色的
+alpha 要单独伺候：模型只吃不透明图，所以先把角色合到一块接近房间色的
 底色上，重绘完再把原始 alpha 贴回去，并往内收一圈避免边缘挂上底色。
+
+    export GEMINI_API_KEY=...
+    python3 Scripts/repaint.py Assets/snozzy_idle.png --out out.png
 """
-import argparse, sys
+
+import argparse
+import base64
+import io
+import json
+import os
+import sys
+import urllib.request
+
 import numpy as np
 from PIL import Image
 
-BACKDROP = (74, 58, 48)      # 房间的暖褐色，边缘混色时不会太跳
+ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+BACKDROP = (74, 58, 48)          # 房间的暖褐色，边缘混色时不会太跳
+
+PROMPT = (
+    "Repaint this anime character illustration in a soft hand-painted style, "
+    "as if painted for a cozy lo-fi study-room scene. "
+    "Add visible painterly brushwork and subtle texture to the fabric, skin and hair. "
+    "Keep the SAME character: identical face, identical hairstyle and hair colour, "
+    "identical clothing design and colours, identical pose, identical framing and scale. "
+    "Do not move, rotate or redraw anything. Do not add or remove any element. "
+    "Keep the flat background colour exactly as it is. "
+    "This is a texture and shading pass only."
+)
 
 
 def erode_alpha(alpha, px):
+    """把 alpha 往内收几像素，去掉重绘时边缘混进来的底色。"""
     a = alpha.copy()
     for _ in range(px):
         b = a.copy()
@@ -30,58 +54,67 @@ def erode_alpha(alpha, px):
     return a
 
 
+def edit(image, prompt, model, key, timeout=240):
+    """发一次图像编辑请求，返回 PIL 图。"""
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    payload = {
+        "contents": [{"parts": [
+            {"inline_data": {"mime_type": "image/png",
+                             "data": base64.b64encode(buf.getvalue()).decode()}},
+            {"text": prompt},
+        ]}],
+        "generationConfig": {"responseModalities": ["IMAGE"]},
+    }
+    req = urllib.request.Request(
+        ENDPOINT.format(model=model),
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "x-goog-api-key": key})
+
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read())
+
+    for cand in data.get("candidates", []):
+        for part in cand.get("content", {}).get("parts", []):
+            blob = part.get("inlineData") or part.get("inline_data")
+            if blob:
+                return Image.open(io.BytesIO(base64.b64decode(blob["data"]))).convert("RGB")
+    raise RuntimeError("响应里没有图片：" + json.dumps(data)[:400])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("source")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--strength", type=float, default=0.35)
-    ap.add_argument("--steps", type=int, default=30)
-    ap.add_argument("--size", type=int, default=512)
-    ap.add_argument("--seed", type=int, default=7)
-    ap.add_argument("--model", default="Lykon/dreamshaper-8")
+    ap.add_argument("--model", default="gemini-3-pro-image")
+    ap.add_argument("--size", type=int, default=1024)
+    ap.add_argument("--erode", type=int, default=2)
+    ap.add_argument("--prompt", default=PROMPT)
+    ap.add_argument("--raw", action="store_true",
+                    help="不贴回 alpha，用来看模型原始返回（判断构图有没有漂）")
     a = ap.parse_args()
 
-    import torch
-    from diffusers import StableDiffusionImg2ImgPipeline
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        sys.exit("没有 GEMINI_API_KEY")
 
     src = Image.open(a.source).convert("RGBA")
-    alpha = np.array(src)[:, :, 3]
     flat = Image.new("RGB", src.size, BACKDROP)
     flat.paste(src, mask=src)
+    # 模型的输出分辨率有上限，送太大只是浪费额度，回来还是要缩
+    scale = min(1.0, a.size / max(flat.size))
+    small = flat.resize((max(8, int(flat.width * scale)),
+                         max(8, int(flat.height * scale))), Image.LANCZOS)
 
-    # SD1.5 在 512–768 之间最稳，而且边长要是 8 的倍数
-    scale = a.size / max(flat.size)
-    w = int(flat.width * scale) // 8 * 8
-    h = int(flat.height * scale) // 8 * 8
-    small = flat.resize((w, h), Image.LANCZOS)
-
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
-    # 16 GB 的机器上 float32 + 768px 会被系统直接 OOM 杀掉（退出码 137）。
-    # 半精度 + 512px 是这台机器上跑得动的组合。
-    pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
-        a.model, torch_dtype=torch.float16 if device == "mps" else torch.float32,
-        # 安全检查器和它的特征提取器要一起禁掉，只禁前者会因为
-        # 仓库里缺 preprocessor_config.json 而加载失败
-        safety_checker=None, feature_extractor=None,
-        requires_safety_checker=False).to(device)
-    pipe.set_progress_bar_config(disable=True)
-    pipe.enable_attention_slicing()
-
-    out = pipe(
-        prompt="anime illustration of a girl with long silver twintails, "
-               "soft painted shading, warm lamp light, cozy lofi study room, "
-               "muted colours, hand drawn, detailed brushwork",
-        negative_prompt="3d render, cgi, plastic, glossy, photorealistic, "
-                        "blurry, deformed, extra limbs, watermark, text",
-        image=small, strength=a.strength, guidance_scale=6.5,
-        num_inference_steps=a.steps,
-        generator=torch.Generator(device="cpu").manual_seed(a.seed),
-    ).images[0]
-
+    out = edit(small, a.prompt, a.model, key)
+    print(f"REPAINT 模型返回 {out.width}×{out.height}")
     out = out.resize(src.size, Image.LANCZOS)
-    rgba = np.dstack([np.array(out), erode_alpha(alpha, 2)])
-    Image.fromarray(rgba).save(a.out)
-    print("REPAINT", a.out, f"strength={a.strength}")
+
+    if not a.raw:
+        alpha = erode_alpha(np.array(src)[:, :, 3], a.erode)
+        out = Image.fromarray(np.dstack([np.array(out), alpha]))
+    out.save(a.out)
+    print(f"REPAINT {a.out}  model={a.model}")
 
 
 if __name__ == "__main__":
