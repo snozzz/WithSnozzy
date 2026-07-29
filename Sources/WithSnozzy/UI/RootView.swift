@@ -109,7 +109,8 @@ private struct SceneStack: View {
                                                                 playing: state.isPlaying,
                                                                 mood: state.mood,
                                                                 drowsy: state.drowsy),
-                                           headphones: state.isPlaying)
+                                           headphones: state.isPlaying,
+                                           t: t)
                                 .equatable()
                         } else {
                             CharacterView(palette: palette, t: t,

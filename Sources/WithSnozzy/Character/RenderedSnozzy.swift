@@ -14,6 +14,8 @@ struct RenderedSnozzy: View, Equatable {
     let pose: Pose
     /// 戴不戴耳机。听歌时她陪你一起听。
     let headphones: Bool
+    /// 当前时间。腿部姿势由它推导。
+    let t: Double
 
     /// 角色图和房间、桌子是同一台相机渲出来的，三层像素级对齐，
     /// 所以直接满幅绘制。构图在 `Scripts/blocking.py` 里定，不在这里调。
@@ -23,6 +25,8 @@ struct RenderedSnozzy: View, Equatable {
             && abs(a.pose.breath - b.pose.breath) < 0.01
             && abs(a.pose.bodySway - b.pose.bodySway) < 0.01
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
+            // 换腿的过渡期间必须每帧重画；过渡完就不必了
+            && LegPose.at(a.t).blend == LegPose.at(b.t).blend
     }
 
     var body: some View {
@@ -32,9 +36,20 @@ struct RenderedSnozzy: View, Equatable {
             // 她会整个人消失。
             let wearing = headphones && assets.snozzyHeadphones != nil
 
+            let legs = LegPose.at(t)
+            let poses = assets.legPoses
+
             ZStack {
-                layer(assets.snozzyIdle, visible: !wearing, w: w, h: h)
-                layer(assets.snozzyHeadphones, visible: wearing, w: w, h: h)
+                if wearing {
+                    layer(assets.snozzyHeadphones, opacity: 1, w: w, h: h)
+                } else if poses.count == LegPose.count {
+                    // 两套腿叠着放，靠不透明度过渡。共用同一个相机渲的，
+                    // 所以上半身完全重合，看起来就只有腿在动。
+                    layer(poses[legs.from], opacity: 1, w: w, h: h)
+                    layer(poses[legs.to], opacity: legs.blend, w: w, h: h)
+                } else {
+                    layer(assets.snozzyIdle, opacity: 1, w: w, h: h)
+                }
             }
             .frame(width: w, height: h)
             .allowsHitTesting(false)
@@ -42,7 +57,7 @@ struct RenderedSnozzy: View, Equatable {
     }
 
     @ViewBuilder
-    private func layer(_ image: NSImage?, visible: Bool, w: CGFloat, h: CGFloat) -> some View {
+    private func layer(_ image: NSImage?, opacity: Double, w: CGFloat, h: CGFloat) -> some View {
         if let image {
             Image(nsImage: image)
                 .resizable()
@@ -53,8 +68,7 @@ struct RenderedSnozzy: View, Equatable {
                 .scaleEffect(1 + pose.breath * 0.006, anchor: .bottom)
                 .rotationEffect(.degrees(pose.bodySway * 0.8), anchor: .bottom)
                 .offset(x: 0, y: pose.headBob * h * 0.008)
-                .opacity(visible ? 1 : 0)
-                .animation(.easeInOut(duration: 0.45), value: visible)
+                .opacity(opacity)
                 // 和房间共用一套时段染色，否则她永远是正午的亮度
                 .colorMultiply(PaintedRoom.ambient(palette).color)
         }

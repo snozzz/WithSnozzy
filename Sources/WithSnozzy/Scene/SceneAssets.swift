@@ -51,9 +51,14 @@ final class SceneAssets {
     private(set) var room: NSImage?
     private(set) var desk: NSImage?
     private(set) var cats: [NSImage] = []
-    /// Blender 渲出来的 Snozzy。两张图共用同一个相机，像素级对齐。
+    /// Blender 渲出来的 Snozzy。所有图共用同一个相机，像素级对齐，
+    /// 所以运行时直接交叉淡入即可，不用做任何对位。
     private(set) var snozzyIdle: NSImage?
     private(set) var snozzyHeadphones: NSImage?
+    /// 腿部姿势变体。顺序必须和 `LegPose` 里的编号一致。
+    private(set) var legPoses: [NSImage] = []
+
+    static let legPoseNames = ["together", "apart", "crossL", "crossR", "tucked"]
 
     /// 渲染版角色是否可用。缺图就回落到矢量绘制。
     var hasRenderedCharacter: Bool { snozzyIdle != nil }
@@ -86,6 +91,9 @@ final class SceneAssets {
             desk = NSImage(contentsOf: dir.appendingPathComponent("desk.png"))
             snozzyIdle = NSImage(contentsOf: dir.appendingPathComponent("snozzy_idle.png"))
             snozzyHeadphones = NSImage(contentsOf: dir.appendingPathComponent("snozzy_headphones.png"))
+            legPoses = Self.legPoseNames.compactMap {
+                NSImage(contentsOf: dir.appendingPathComponent("snozzy_\($0).png"))
+            }
 
             var found: [NSImage] = []
             for i in 0..<8 {

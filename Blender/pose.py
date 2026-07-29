@@ -61,7 +61,33 @@ def aim(arm, name, direction, prefer=None):
     return pb
 
 
-def sit_down(arm, seat_h=0.50):
+# 坐着的人腿不会一直保持一个姿势。这几套之间随机换，就是"活人"和"雕像"的区别。
+# 方向都是「大腿 / 小腿 / 脚」三段的世界朝向，sx 是左右镜像。
+LEG_STYLES = {
+    "together": (( 0.14, -1.00, -0.10), ( 0.06, -0.08, -1.00), ( 0.05, -0.90, -0.20)),
+    "apart":    (( 0.30, -0.96, -0.10), ( 0.20, -0.06, -1.00), ( 0.14, -0.88, -0.24)),
+    "tucked":   (( 0.14, -1.00, -0.10), ( 0.10,  0.42, -0.90), ( 0.08, -0.30, -0.95)),
+}
+
+
+def cross_legs(arm, over="L"):
+    """二郎腿。`over` 是压在上面的那条腿。
+
+    交叉腿会把上面那条大腿横过身体中线，小腿再垂下去并略微外摆。
+    裙摆得在腿摆完之后再铺，否则布还停在旧的腿形上。
+    """
+    under = "R" if over == "L" else "L"
+    sx = 1 if over == "L" else -1
+    aim(arm, f"J_Bip_{over}_UpperLeg", (-sx * 0.40, -0.90, -0.16))
+    aim(arm, f"J_Bip_{over}_LowerLeg", ( sx * 0.34, -0.06, -0.94))
+    aim(arm, f"J_Bip_{over}_Foot",     ( sx * 0.20, -0.62, -0.76))
+    ux = 1 if under == "L" else -1
+    aim(arm, f"J_Bip_{under}_UpperLeg", (ux * 0.18, -1.00, -0.08))
+    aim(arm, f"J_Bip_{under}_LowerLeg", (ux * 0.08, -0.10, -1.00))
+    aim(arm, f"J_Bip_{under}_Foot",     (ux * 0.06, -0.90, -0.20))
+
+
+def sit_down(arm, seat_h=0.50, legs="together"):
     """把整个人放到椅子高度上，并弯起腿。
 
     VRoid 模型静置是**站姿**，只摆上半身的话她会立在桌子后面而不是坐着。
@@ -75,10 +101,15 @@ def sit_down(arm, seat_h=0.50):
 
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
-    for side, sx in (("L", 1), ("R", -1)):
-        aim(arm, f"J_Bip_{side}_UpperLeg", (sx * 0.14, -1, -0.10))
-        aim(arm, f"J_Bip_{side}_LowerLeg", (sx * 0.06, -0.08, -1))
-        aim(arm, f"J_Bip_{side}_Foot", (sx * 0.05, -0.9, -0.2))
+    if legs in ("crossL", "crossR"):
+        cross_legs(arm, over="L" if legs == "crossL" else "R")
+    else:
+        thigh, shin, foot = LEG_STYLES.get(legs, LEG_STYLES["together"])
+        for side, sx in (("L", 1), ("R", -1)):
+            # tucked 只收一条腿，两条都收会变成跪姿
+            style = LEG_STYLES["together"] if (legs == "tucked" and side == "L") else (thigh, shin, foot)
+            for bone, d in zip(("UpperLeg", "LowerLeg", "Foot"), style):
+                aim(arm, f"J_Bip_{side}_{bone}", (d[0] * sx, d[1], d[2]))
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
@@ -126,11 +157,12 @@ def drape_skirt(arm, spread=1.0):
     print(f"POSE 裙摆 {len(bones)} 根")
 
 
-def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50):
+def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
+           legs="together"):
     """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
     if sit:
-        sit_down(arm, seat_h)
-        drape_skirt(arm)
+        sit_down(arm, seat_h, legs)
+        drape_skirt(arm)     # 必须在腿摆完之后铺，否则布还停在旧腿形上
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
 

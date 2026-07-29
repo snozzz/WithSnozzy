@@ -92,6 +92,14 @@ def setup_scene(res=1024, transparent=True):
         scene.eevee.taa_render_samples = 128
     except Exception:
         pass
+    # 环境光遮蔽：脖子下面、袖口里侧、裙褶之间的接触暗部。
+    # 这类暗部靠平行光的投影是做不出来的，但少了它整个人会像贴纸。
+    for attr, value in (("use_gtao", True), ("gtao_distance", 0.14),
+                        ("use_fast_gi", True), ("fast_gi_distance", 0.14)):
+        try:
+            setattr(scene.eevee, attr, value)
+        except Exception:
+            pass
 
     cam_data = bpy.data.cameras.new("Cam")
     cam = bpy.data.objects.new("Cam", cam_data)
@@ -144,7 +152,8 @@ def frame_bust(scene, meshes, yaw_deg=15, pitch_deg=82, top_margin=0.04, span=0.
     return hi.z
 
 
-def toon_materials(shadow=(0.60, 0.58, 0.70), steps=((0.0, 0.62), (0.34, 0.84), (0.60, 1.0))):
+def toon_materials(shadow=(0.46, 0.44, 0.62),
+                   steps=((0.0, 0.40), (0.26, 0.66), (0.52, 0.88), (0.74, 1.0))):
     """卡通着色：贴图颜色 × 分级后的光照。
 
     和 `unlit_materials` 的区别在于**有没有形体**。无光照版颜色最准，
@@ -155,6 +164,9 @@ def toon_materials(shadow=(0.60, 0.58, 0.70), steps=((0.0, 0.62), (0.34, 0.84), 
     Shader to RGB），这也是这条管线选 EEVEE 的原因之一。
 
     暗部乘的是偏冷的紫灰而不是纯灰——房间的暗部就是这个调子。
+
+    档位刻意做成四级而不是两级：两级是标准 cel 的做法，但在这个尺寸上
+    显得又平又硬；四级还留得住"明媚"的清爽感，同时有足够的层次。
     """
     for mat in bpy.data.materials:
         if not mat.use_nodes or mat.name.startswith("Outline"):
@@ -257,9 +269,13 @@ def room_lights(preset="cyber"):
         data = bpy.data.lights.new(name, 'SUN')
         data.color = color
         data.energy = energy
-        # 关阴影。平行光打在墙上会投出一大块生硬的黑影，
-        # 和 lofi 插画那种柔和的观感完全相反；形体交给色带分级就够了。
-        data.use_shadow = False
+        # 只给主光留阴影。当初关掉是因为平行光打在墙上会投出一大块生硬黑影——
+        # 但角色是单独渲的，画面里根本没有墙，留着主光的阴影正好得到
+        # 头发落在脸上、手臂落在裙子上的自阴影，形体一下就出来了。
+        # 补光和轮廓光仍然关闭，否则多重投影会把画面搅乱。
+        data.use_shadow = (name in ("Key", "Screen"))
+        if data.use_shadow:
+            data.angle = math.radians(6.0)   # 阳光的张角，边缘不至于刀切
         obj = bpy.data.objects.new(name, data)
         bpy.context.scene.collection.objects.link(obj)
         v = Vector(d).normalized()
