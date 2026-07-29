@@ -27,7 +27,9 @@ import numpy as np
 from PIL import Image
 
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-BACKDROP = (74, 58, 48)          # 房间的暖褐色，边缘混色时不会太跳
+BACKDROP = (34, 30, 52)          # 房间的暗紫，边缘混色时不会太跳。
+                                 # 换场景就要跟着改——剪影对齐是拿它做判据的，
+                                 # 底色填错会让整幅图都被判成角色，交并比直接失真。
 
 PROMPT = (
     "Repaint this anime character illustration in a soft hand-painted style, "
@@ -60,49 +62,71 @@ def silhouette(rgb, backdrop, tol=26):
     return d > tol
 
 
-def fit_to(result, original, backdrop=None, scales=None, search=48):
+def _iou(mask, ref, sc, dy, dx):
+    H, W = ref.shape
+    h, w = mask.shape
+    canvas = np.zeros((H, W), bool)
+    y0, x0 = (H - h) // 2 + dy, (W - w) // 2 + dx
+    sy0, sx0 = max(0, -y0), max(0, -x0)
+    ty0, tx0 = max(0, y0), max(0, x0)
+    hh, ww = min(h - sy0, H - ty0), min(w - sx0, W - tx0)
+    if hh <= 0 or ww <= 0:
+        return 0.0
+    canvas[ty0:ty0 + hh, tx0:tx0 + ww] = mask[sy0:sy0 + hh, sx0:sx0 + ww]
+    union = np.count_nonzero(canvas | ref)
+    return np.count_nonzero(canvas & ref) / union if union else 0.0
+
+
+def fit_to(result, original, backdrop=None):
     """把重绘结果对回原始渲染。
 
-    模型重绘时会把画面整体缩放平移几个百分点——直接贴回原始 alpha 的话
-    边缘会错位，露出一圈底色或者削掉一层头发。这里按剪影搜一个
-    缩放 + 平移，让两边的轮廓重合。
+    模型重绘时会改变构图。输入图里角色周围留白越多，它重构图的余地越大——
+    实测过两次：贴着角色裁紧的方图几乎零漂移（交并比 0.99），
+    而角色只占中间一条的宽画幅被缩到了一半（0.08）。所以送图前应当裁紧，
+    这里的搜索是兜底。
 
-    搜索用剪影而不是像素差：重绘后颜色和笔触都变了，只有轮廓是可比的。
+    搜索用剪影而不是像素差：重绘后颜色和笔触全变了，只有轮廓可比。
+    粗到细两轮——直接在全分辨率上扫几十万个组合太慢。
     """
     backdrop = backdrop or BACKDROP
-    scales = scales or [1.0 + i * 0.01 for i in range(-8, 9)]
-    ref = np.asarray(original)[:, :, 3] > 8
-    H, W = ref.shape
-    best, best_score = None, -1.0
+    ref_full = np.asarray(original)[:, :, 3] > 8
+    H, W = ref_full.shape
 
+    def search(scales, shifts, step, down):
+        ref = ref_full[::down, ::down]
+        best, best_score = (1.0, 0, 0), -1.0
+        for sc in scales:
+            w, h = max(8, int(W * sc)), max(8, int(H * sc))
+            small = result.resize((w, h), Image.LANCZOS)
+            mask = silhouette(small, backdrop)[::down, ::down]
+            for dy in range(-shifts, shifts + 1, step):
+                for dx in range(-shifts, shifts + 1, step):
+                    sco = _iou(mask, ref, sc, dy // down, dx // down)
+                    if sco > best_score:
+                        best_score, best = sco, (sc, dy, dx)
+        return best, best_score
+
+    # 粗扫：缩放 0.45–1.20，位移 ±480，八分之一分辨率
+    coarse, _ = search([0.45 + i * 0.05 for i in range(16)], 480, 24, 8)
+    # 细扫：在粗扫结果附近收紧
+    sc0, dy0, dx0 = coarse
+    scales = [max(0.2, sc0 + i * 0.01) for i in range(-6, 7)]
+    best, score = (sc0, dy0, dx0), -1.0
+    ref = ref_full[::2, ::2]
     for sc in scales:
         w, h = max(8, int(W * sc)), max(8, int(H * sc))
-        cand = result.resize((w, h), Image.LANCZOS)
-        mask = silhouette(cand, backdrop)
-        step = max(4, search // 8)
-        for dy in range(-search, search + 1, step):
-            for dx in range(-search, search + 1, step):
-                # 把候选剪影摆到参考画布上，算交并比
-                canvas = np.zeros((H, W), bool)
-                y0, x0 = (H - h) // 2 + dy, (W - w) // 2 + dx
-                sy0, sx0 = max(0, -y0), max(0, -x0)
-                ty0, tx0 = max(0, y0), max(0, x0)
-                hh = min(h - sy0, H - ty0)
-                ww = min(w - sx0, W - tx0)
-                if hh <= 0 or ww <= 0:
-                    continue
-                canvas[ty0:ty0 + hh, tx0:tx0 + ww] = mask[sy0:sy0 + hh, sx0:sx0 + ww]
-                inter = np.count_nonzero(canvas & ref)
-                union = np.count_nonzero(canvas | ref)
-                score = inter / union if union else 0
-                if score > best_score:
-                    best_score, best = score, (sc, dy, dx)
+        mask = silhouette(result.resize((w, h), Image.LANCZOS), backdrop)[::2, ::2]
+        for dy in range(dy0 - 32, dy0 + 33, 4):
+            for dx in range(dx0 - 32, dx0 + 33, 4):
+                sco = _iou(mask, ref, sc, dy // 2, dx // 2)
+                if sco > score:
+                    score, best = sco, (sc, dy, dx)
 
     sc, dy, dx = best
     w, h = max(8, int(W * sc)), max(8, int(H * sc))
     out = Image.new("RGB", (W, H), backdrop)
     out.paste(result.resize((w, h), Image.LANCZOS), ((W - w) // 2 + dx, (H - h) // 2 + dy))
-    print(f"REPAINT 对齐 缩放{sc:.2f} dy{dy} dx{dx} 轮廓吻合度 {best_score:.3f}")
+    print(f"REPAINT 对齐 缩放{sc:.2f} dy{dy} dx{dx} 轮廓吻合度 {score:.3f}")
     return out
 
 
@@ -141,6 +165,8 @@ def main():
     ap.add_argument("--model", default="gemini-3-pro-image")
     ap.add_argument("--size", type=int, default=1024)
     ap.add_argument("--erode", type=int, default=2)
+    ap.add_argument("--backdrop", default=None,
+                    help="送图时填的底色，形如 34,30,52。默认用 BACKDROP")
     ap.add_argument("--prompt", default=PROMPT)
     ap.add_argument("--raw", action="store_true",
                     help="不贴回 alpha，用来看模型原始返回（判断构图有没有漂）")
@@ -150,9 +176,11 @@ def main():
     a = ap.parse_args()
 
     src = Image.open(a.source).convert("RGBA")
+    backdrop = tuple(int(v) for v in a.backdrop.split(",")) if a.backdrop else BACKDROP
 
     if a.fit:
-        out = fit_to(Image.open(a.fit).convert("RGB").resize(src.size, Image.LANCZOS), src)
+        out = fit_to(Image.open(a.fit).convert("RGB").resize(src.size, Image.LANCZOS),
+                     src, backdrop)
         alpha = erode_alpha(np.array(src)[:, :, 3], a.erode)
         Image.fromarray(np.dstack([np.array(out), alpha])).save(a.out)
         print(f"REPAINT {a.out}  (对齐已有结果)")
@@ -162,8 +190,15 @@ def main():
     if not key:
         sys.exit("没有 GEMINI_API_KEY")
 
-    flat = Image.new("RGB", src.size, BACKDROP)
+    flat = Image.new("RGB", src.size, backdrop)
     flat.paste(src, mask=src)
+    # 裁到角色的包围盒再送。周围留白越多，模型重新构图的余地越大。
+    alpha = np.array(src)[:, :, 3]
+    ys, xs = np.where(alpha > 8)
+    if len(ys):
+        pad = int(0.06 * max(src.size))
+        flat = flat.crop((max(0, xs.min() - pad), max(0, ys.min() - pad),
+                          min(src.width, xs.max() + pad), min(src.height, ys.max() + pad)))
     # 模型的输出分辨率有上限，送太大只是浪费额度，回来还是要缩
     scale = min(1.0, a.size / max(flat.size))
     small = flat.resize((max(8, int(flat.width * scale)),
