@@ -27,6 +27,10 @@ struct RenderedSnozzy: View, Equatable {
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
             // 换腿的过渡期间必须每帧重画；过渡完就不必了
             && LegPose.at(a.t).blend == LegPose.at(b.t).blend
+            // 眨眼是逐帧变化的，挡掉就不会眨了
+            && abs(a.pose.blink - b.pose.blink) < 0.02
+            && abs(a.pose.lookX - b.pose.lookX) < 0.02
+            && abs(a.pose.happyEyes - b.pose.happyEyes) < 0.02
     }
 
     var body: some View {
@@ -53,6 +57,12 @@ struct RenderedSnozzy: View, Equatable {
                 } else {
                     layer(assets.snozzyIdle, opacity: 1, w: w, h: h)
                 }
+
+                // 眨眼、视线、嘴角。贴片和底图共用同一台相机，直接盖上即可。
+                FaceOverlay(assets: assets, pose: pose, palette: palette, width: w, height: h)
+                    .scaleEffect(1 + pose.breath * 0.006, anchor: .bottom)
+                    .rotationEffect(.degrees(pose.bodySway * 0.8), anchor: .bottom)
+                    .offset(x: 0, y: pose.headBob * h * 0.008)
             }
             .frame(width: w, height: h)
             .allowsHitTesting(false)

@@ -60,6 +60,11 @@ final class SceneAssets {
 
     static let legPoseNames = ["together", "apart", "crossL", "crossR", "tucked"]
 
+    /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
+    /// 单独出贴片比整张重渲便宜三个数量级。
+    private(set) var facePatches: [String: NSImage] = [:]
+    private(set) var face = FaceManifest()
+
     /// 渲染版角色是否可用。缺图就回落到矢量绘制。
     var hasRenderedCharacter: Bool { snozzyIdle != nil }
     private(set) var manifest = SceneManifest.default
@@ -103,6 +108,14 @@ final class SceneAssets {
                 found.append(img)
             }
             cats = found
+
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("face.json")),
+               let m = try? JSONDecoder().decode(FaceManifest.self, from: data) {
+                face = m
+                facePatches = m.patches.keys.reduce(into: [:]) { out, key in
+                    out[key] = NSImage(contentsOf: dir.appendingPathComponent("face_\(key).png"))
+                }
+            }
 
             if let data = try? Data(contentsOf: dir.appendingPathComponent("scene.json")),
                var m = try? JSONDecoder().decode(SceneManifest.self, from: data) {
