@@ -4,6 +4,12 @@ import SwiftUI
 struct RootView: View {
     @Environment(AppState.self) private var state
 
+    /// 唤出区的高度：控制条本身加一圈余量。
+    ///
+    /// 这个应用大部分时间是"看着"而不是"用着"的，控制条常驻会一直压着
+    /// 画面下缘。所以默认让位，指针靠近才浮出来。
+    private static let dockReveal: CGFloat = Metrics.dockHeight + 78
+
     var body: some View {
         switch state.windowMode {
         case .normal: fullScene
@@ -11,6 +17,10 @@ struct RootView: View {
         case .pet: PetView()
         }
     }
+
+    /// 控制条该不该显示。
+    /// 面板开着时强制显示——面板是从控制条点开的，收起来会让人找不到回去的路。
+    private var dockVisible: Bool { state.pointer.nearBottom || state.panel != nil }
 
     private var fullScene: some View {
         let pal = state.palette
@@ -25,7 +35,14 @@ struct RootView: View {
             VStack(spacing: 0) {
                 TopBar(palette: pal)
                 Spacer(minLength: 0)
-                Dock(palette: pal).padding(.bottom, 18)
+                Dock(palette: pal)
+                    .padding(.bottom, 18)
+                    // 面板开着的时候必须一直可见——面板是从控制条点开的，
+                    // 收起来会让人找不到回去的路。
+                    .opacity(dockVisible ? 1 : 0)
+                    .offset(y: dockVisible ? 0 : 26)
+                    .allowsHitTesting(dockVisible)
+                    .animation(.easeOut(duration: 0.22), value: dockVisible)
             }
 
             // 面板从右侧滑入。

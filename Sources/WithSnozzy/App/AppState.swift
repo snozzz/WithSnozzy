@@ -77,6 +77,9 @@ final class AppState {
     /// 手绘房间素材。缺失时场景自动回落到程序化绘制。
     let sceneAssets = SceneAssets()
 
+    /// 指针位置。底部控制条靠它决定显隐。
+    let pointer = PointerWatcher()
+
     /// 角色的渲染方式。
     var characterStyle: CharacterStyle = .rendered {
         didSet {

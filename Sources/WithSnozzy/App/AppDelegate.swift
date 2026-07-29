@@ -121,6 +121,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func wireState() {
+        // 底部控制条靠它决定显隐。**必须在这里启动**：
+        // state 是 SwiftUI 在 onAppear 里赋进来的，比
+        // applicationDidFinishLaunching 晚，在那里启动时它还是 nil。
+        state?.pointer.start()
+
         state?.onWindowModeChange = { [weak self] mode in
             self?.styler.apply(mode)
         }

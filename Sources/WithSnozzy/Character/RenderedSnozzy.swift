@@ -43,9 +43,12 @@ struct RenderedSnozzy: View, Equatable {
                 if wearing {
                     layer(assets.snozzyHeadphones, opacity: 1, w: w, h: h)
                 } else if poses.count == LegPose.count {
-                    // 两套腿叠着放，靠不透明度过渡。共用同一个相机渲的，
-                    // 所以上半身完全重合，看起来就只有腿在动。
-                    layer(poses[legs.from], opacity: 1, w: w, h: h)
+                    // 两套腿叠着放，靠**互补**的不透明度过渡。
+                    // 旧的那层如果一直画全不透明，新姿势盖不住它的腿，
+                    // 桌下就会永久出现四条腿——两套姿势的腿位置本来就不一样。
+                    if legs.blend < 1 {
+                        layer(poses[legs.from], opacity: 1 - legs.blend, w: w, h: h)
+                    }
                     layer(poses[legs.to], opacity: legs.blend, w: w, h: h)
                 } else {
                     layer(assets.snozzyIdle, opacity: 1, w: w, h: h)
