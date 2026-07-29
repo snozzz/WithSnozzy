@@ -63,10 +63,13 @@ def aim(arm, name, direction, prefer=None):
 
 # 坐着的人腿不会一直保持一个姿势。这几套之间随机换，就是"活人"和"雕像"的区别。
 # 方向都是「大腿 / 小腿 / 脚」三段的世界朝向，sx 是左右镜像。
+# 小腿一律带一点**向后**的分量，脚收到椅子下面。
+# 这既是坐着的自然姿势，也解决一个取景问题：脚比躯干更靠近镜头，
+# 而画幅下边界在近处更高——脚往后收，离镜头远了，才落得进画面。
 LEG_STYLES = {
-    "together": (( 0.14, -1.00, -0.10), ( 0.06, -0.08, -1.00), ( 0.05, -0.90, -0.20)),
-    "apart":    (( 0.30, -0.96, -0.10), ( 0.20, -0.06, -1.00), ( 0.14, -0.88, -0.24)),
-    "tucked":   (( 0.14, -1.00, -0.10), ( 0.10,  0.42, -0.90), ( 0.08, -0.30, -0.95)),
+    "together": (( 0.14, -1.00, -0.10), ( 0.06,  0.78, -0.63), ( 0.05, -0.62, -0.60)),
+    "apart":    (( 0.30, -0.96, -0.10), ( 0.22,  0.80, -0.56), ( 0.16, -0.58, -0.64)),
+    "tucked":   (( 0.14, -1.00, -0.10), ( 0.10,  0.90, -0.42), ( 0.08, -0.20, -0.96)),
 }
 
 
@@ -79,11 +82,11 @@ def cross_legs(arm, over="L"):
     under = "R" if over == "L" else "L"
     sx = 1 if over == "L" else -1
     aim(arm, f"J_Bip_{over}_UpperLeg", (-sx * 0.40, -0.90, -0.16))
-    aim(arm, f"J_Bip_{over}_LowerLeg", ( sx * 0.34, -0.06, -0.94))
+    aim(arm, f"J_Bip_{over}_LowerLeg", ( sx * 0.34,  0.70, -0.62))
     aim(arm, f"J_Bip_{over}_Foot",     ( sx * 0.20, -0.62, -0.76))
     ux = 1 if under == "L" else -1
     aim(arm, f"J_Bip_{under}_UpperLeg", (ux * 0.18, -1.00, -0.08))
-    aim(arm, f"J_Bip_{under}_LowerLeg", (ux * 0.08, -0.10, -1.00))
+    aim(arm, f"J_Bip_{under}_LowerLeg", (ux * 0.08,  0.76, -0.64))
     aim(arm, f"J_Bip_{under}_Foot",     (ux * 0.06, -0.90, -0.20))
 
 
@@ -157,12 +160,38 @@ def drape_skirt(arm, spread=1.0):
     print(f"POSE 裙摆 {len(bones)} 根")
 
 
+def ground(arm, floor=0.0):
+    """把整个人抬到鞋底刚好贴地。
+
+    坐高是拍脑袋给的，而她的腿长和那双厚底鞋是模型定死的——两者对不上时
+    小腿垂下来就会穿到地板下面（实测鞋底在 −0.16 米）。与其反复试坐高，
+    不如摆完姿势之后量一次最低点再整体平移，换姿势、换鞋都不用重调。
+    """
+    dg = bpy.context.evaluated_depsgraph_get()
+    low = None
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH' or not o.material_slots:
+            continue
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        for v in me.vertices:
+            z = (ev.matrix_world @ v.co).z
+            if low is None or z < low:
+                low = z
+        ev.to_mesh_clear()
+    if low is not None:
+        arm.location.z += floor - low
+        bpy.context.view_layer.update()
+    return low
+
+
 def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
            legs="together"):
     """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
     if sit:
         sit_down(arm, seat_h, legs)
         drape_skirt(arm)     # 必须在腿摆完之后铺，否则布还停在旧腿形上
+        ground(arm)          # 再把整个人落到地面上
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
 

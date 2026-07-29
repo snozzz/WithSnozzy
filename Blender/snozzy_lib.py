@@ -330,3 +330,81 @@ def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32
     direction = target - cam.location
     cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
     return cam
+
+
+def place_hip(scene, arm, y_fraction, bone="J_Bip_C_Hips", tries=4):
+    """把胯部挪到画面纵向的某个位置上。
+
+    **不要用"落到地面"来定位**：3D 的地面 z=0 和画上去的地板毫无关系——
+    桌子是 2D 灰模里画的，位置由构图定，不由世界坐标定。按 z=0 落地的结果是
+    胯部落在桌沿上方，大腿全露在桌面上。
+    唯一有意义的参照是画面坐标：胯部对准桌沿稍下方，人就"坐进"桌子后面了。
+    """
+    from bpy_extras.object_utils import world_to_camera_view
+    cam = scene.camera
+    for _ in range(tries):
+        pb = arm.pose.bones[bone]
+        world = arm.matrix_world @ pb.head
+        p = world_to_camera_view(scene, cam, world)
+        err = (1 - y_fraction) - p.y          # 视图 y 向上为正
+        if abs(err) < 0.002:
+            break
+        arm.location.z += err * _view_height_at(scene, cam, world)
+        bpy.context.view_layer.update()
+    return p.y
+
+
+def frame_extent(scene, meshes):
+    """角色在画面上的纵向占位，0（顶）…1（底）。用来检查有没有出画。"""
+    from bpy_extras.object_utils import world_to_camera_view
+    dg = bpy.context.evaluated_depsgraph_get()
+    lo, hi = 1.0, 0.0
+    for o in meshes:
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        for v in me.vertices:
+            y = 1 - world_to_camera_view(scene, scene.camera, ev.matrix_world @ v.co).y
+            lo = min(lo, y); hi = max(hi, y)
+        ev.to_mesh_clear()
+    return lo, hi
+
+
+def lift_into_frame(scene, arm, meshes, margin=0.015, tries=4):
+    """把角色抬到最低点落进画面里。
+
+    「鞋底贴地」不等于「脚在画面里」：脚比躯干更靠近镜头，而画幅的下边界
+    在近处更高。差多少是透视决定的，跟姿势有关，试坐高试不出来——
+    直接把最低点投到相机视图里，看差多少就抬多少，迭代两三次收敛。
+
+    抬起来的那点距离在画面上看不出：桌下本来就是暗的，也没有地面参照。
+    """
+    from bpy_extras.object_utils import world_to_camera_view
+    cam = scene.camera
+    for _ in range(tries):
+        dg = bpy.context.evaluated_depsgraph_get()
+        worst = None
+        for o in meshes:
+            ev = o.evaluated_get(dg)
+            me = ev.to_mesh()
+            for v in me.vertices:
+                p = world_to_camera_view(scene, cam, ev.matrix_world @ v.co)
+                if worst is None or p.y < worst[0]:
+                    worst = (p.y, ev.matrix_world @ v.co)
+            ev.to_mesh_clear()
+        if worst is None or worst[0] >= margin:
+            return worst[0] if worst else None
+        # 视图坐标 y 是 0…1，换算成世界高度：拿当前最低点的深度做线性近似
+        deficit = margin - worst[0]
+        arm.location.z += deficit * _view_height_at(scene, cam, worst[1])
+        bpy.context.view_layer.update()
+    return worst[0] if worst else None
+
+
+def _view_height_at(scene, cam, point):
+    """相机视图里 1.0 个单位对应该点深度上的多少世界高度。"""
+    import math
+    depth = (point - cam.matrix_world.translation).length
+    sensor = cam.data.sensor_width
+    vfov = 2 * math.atan(sensor * scene.render.resolution_y
+                         / scene.render.resolution_x / 2 / cam.data.lens)
+    return 2 * depth * math.tan(vfov / 2)

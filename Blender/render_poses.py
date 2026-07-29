@@ -11,8 +11,11 @@ for style in ("together", "apart", "crossL", "crossR", "tucked"):
     scene.render.resolution_x, scene.render.resolution_y = 1536, 1024
     S.toon_materials(); S.room_lights()
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
-    P.seated(arm, sit=True, legs=style)
     S.scene_camera(scene)
+    P.seated(arm, sit=True, legs=style)
+    S.place_hip(scene, arm, 0.704)   # 胯部落在桌沿（0.673）稍下方
+    lo, hi = S.frame_extent(scene, meshes)
+    print(f'FRAME 纵向占位 {lo:.3f}…{hi:.3f}' + ('  ← 出画' if hi > 0.995 else ''))
     scene.render.filepath = os.path.join(OUT, f"snozzy_{style}.png")
     bpy.ops.render.render(write_still=True)
     print("POSE", style)

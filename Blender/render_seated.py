@@ -14,8 +14,11 @@ scene = S.setup_scene(res=1536)
 scene.render.resolution_x, scene.render.resolution_y = 1536, 1024
 S.toon_materials(); S.room_lights()
 arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
-P.seated(arm, sit=True)
 S.scene_camera(scene)
+P.seated(arm, sit=True)
+S.place_hip(scene, arm, 0.704)
+lo, hi = S.frame_extent(scene, meshes)
+print(f'FRAME 纵向占位 {lo:.3f}…{hi:.3f}')
 scene.render.filepath = OUT
 bpy.ops.render.render(write_still=True)
 print("SEATED", OUT)
