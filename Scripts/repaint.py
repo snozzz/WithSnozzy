@@ -54,6 +54,58 @@ def erode_alpha(alpha, px):
     return a
 
 
+def silhouette(rgb, backdrop, tol=26):
+    """离底色足够远的像素就算角色。用来做对齐，比亮度稳。"""
+    d = np.abs(np.asarray(rgb, np.int16) - np.array(backdrop, np.int16)).max(axis=2)
+    return d > tol
+
+
+def fit_to(result, original, backdrop=None, scales=None, search=48):
+    """把重绘结果对回原始渲染。
+
+    模型重绘时会把画面整体缩放平移几个百分点——直接贴回原始 alpha 的话
+    边缘会错位，露出一圈底色或者削掉一层头发。这里按剪影搜一个
+    缩放 + 平移，让两边的轮廓重合。
+
+    搜索用剪影而不是像素差：重绘后颜色和笔触都变了，只有轮廓是可比的。
+    """
+    backdrop = backdrop or BACKDROP
+    scales = scales or [1.0 + i * 0.01 for i in range(-8, 9)]
+    ref = np.asarray(original)[:, :, 3] > 8
+    H, W = ref.shape
+    best, best_score = None, -1.0
+
+    for sc in scales:
+        w, h = max(8, int(W * sc)), max(8, int(H * sc))
+        cand = result.resize((w, h), Image.LANCZOS)
+        mask = silhouette(cand, backdrop)
+        step = max(4, search // 8)
+        for dy in range(-search, search + 1, step):
+            for dx in range(-search, search + 1, step):
+                # 把候选剪影摆到参考画布上，算交并比
+                canvas = np.zeros((H, W), bool)
+                y0, x0 = (H - h) // 2 + dy, (W - w) // 2 + dx
+                sy0, sx0 = max(0, -y0), max(0, -x0)
+                ty0, tx0 = max(0, y0), max(0, x0)
+                hh = min(h - sy0, H - ty0)
+                ww = min(w - sx0, W - tx0)
+                if hh <= 0 or ww <= 0:
+                    continue
+                canvas[ty0:ty0 + hh, tx0:tx0 + ww] = mask[sy0:sy0 + hh, sx0:sx0 + ww]
+                inter = np.count_nonzero(canvas & ref)
+                union = np.count_nonzero(canvas | ref)
+                score = inter / union if union else 0
+                if score > best_score:
+                    best_score, best = score, (sc, dy, dx)
+
+    sc, dy, dx = best
+    w, h = max(8, int(W * sc)), max(8, int(H * sc))
+    out = Image.new("RGB", (W, H), backdrop)
+    out.paste(result.resize((w, h), Image.LANCZOS), ((W - w) // 2 + dx, (H - h) // 2 + dy))
+    print(f"REPAINT 对齐 缩放{sc:.2f} dy{dy} dx{dx} 轮廓吻合度 {best_score:.3f}")
+    return out
+
+
 def edit(image, prompt, model, key, timeout=240):
     """发一次图像编辑请求，返回 PIL 图。"""
     buf = io.BytesIO()
@@ -92,13 +144,24 @@ def main():
     ap.add_argument("--prompt", default=PROMPT)
     ap.add_argument("--raw", action="store_true",
                     help="不贴回 alpha，用来看模型原始返回（判断构图有没有漂）")
+    ap.add_argument("--fit", metavar="RESULT",
+                    help="跳过调用，直接把已有的重绘结果对齐并贴回 alpha。"
+                         "手动在网页上生成时走这条")
     a = ap.parse_args()
+
+    src = Image.open(a.source).convert("RGBA")
+
+    if a.fit:
+        out = fit_to(Image.open(a.fit).convert("RGB").resize(src.size, Image.LANCZOS), src)
+        alpha = erode_alpha(np.array(src)[:, :, 3], a.erode)
+        Image.fromarray(np.dstack([np.array(out), alpha])).save(a.out)
+        print(f"REPAINT {a.out}  (对齐已有结果)")
+        return
 
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         sys.exit("没有 GEMINI_API_KEY")
 
-    src = Image.open(a.source).convert("RGBA")
     flat = Image.new("RGB", src.size, BACKDROP)
     flat.paste(src, mask=src)
     # 模型的输出分辨率有上限，送太大只是浪费额度，回来还是要缩

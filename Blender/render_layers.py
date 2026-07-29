@@ -7,7 +7,7 @@ import bpy, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import snozzy_lib as S, pose as P, headphones as HP
 
-VRM, OUT = sys.argv[-2], sys.argv[-1]
+VRM, OUT = sys.argv[-2], sys.argv[-1]   # OUT 应指向 Art/render/，成品在 Assets/
 os.makedirs(OUT, exist_ok=True)
 
 meshes = S.load(VRM)
