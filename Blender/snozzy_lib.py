@@ -280,3 +280,25 @@ def add_outline(meshes, thickness=0.0035, skip=("Hair",)):
         m.use_flip_normals = True
         m.use_rim = False
         m.material_offset = len(o.material_slots) - 1
+
+
+def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32):
+    """房间场景的**唯一**相机定义。
+
+    角色和房间必须共用同一个相机，否则透视对不上，事后再怎么凑都是错的。
+    参数的意义：她坐在原点、面朝 −Y，相机在她正前方稍偏一点，
+    架在坐姿视平线附近略往下看。
+
+    高度是关键：太高会变成俯拍、看不见桌下；太低则桌面被压成一条线。
+    1.24 米配 0.74 米的桌面，视线正好能从桌板下缘穿过去看到她的腿。
+    """
+    import math
+    cam = scene.camera
+    cam.data.type = 'PERSP'
+    cam.data.lens = lens
+    a = math.radians(yaw_deg)
+    target = Vector((0.06, 0.0, look_z))
+    cam.location = Vector((math.sin(a) * dist, -math.cos(a) * dist, height)) + Vector((target.x, 0, 0))
+    direction = target - cam.location
+    cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
+    return cam
