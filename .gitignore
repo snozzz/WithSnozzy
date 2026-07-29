@@ -15,3 +15,5 @@ __pycache__/
 
 # 生图中间产物：输入图和模型返回，成品在 Assets/
 Art/repaint_*.png
+Art/scene_*.png
+Art/blocking_for_repaint.png

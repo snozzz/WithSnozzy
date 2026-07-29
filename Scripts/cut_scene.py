@@ -87,7 +87,14 @@ def main():
 
     # 房间层：整幅画，把窗洞挖空
     room_alpha = np.full((H, W), 255, np.uint8)
-    room_alpha[hole] = 0
+    # 按**包围盒**挖洞，而不是按连通域本身。窗户本来就是矩形，
+    # 而边缘那一圈被霓虹辉光染过的像素纯度不够、进不了连通域，
+    # 照着连通域挖会在窗角留下豁口。
+    if rect:
+        x0, y0, x1, y1 = rect
+        room_alpha[y0:y1, x0:x1] = 0
+    else:
+        room_alpha[hole] = 0
     room = np.dstack([rgb, feather(room_alpha, 1)])
     Image.fromarray(room).save(os.path.join(a.out, "room.png"))
 
