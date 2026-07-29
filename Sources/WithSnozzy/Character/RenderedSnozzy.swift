@@ -33,9 +33,13 @@ struct RenderedSnozzy: View, Equatable {
             let w = geo.size.width, h = geo.size.height
             let deskCut = h * (assets.manifest.deskBottom ?? 1.0)
 
+            // 没有耳机图时一律用常态图——否则播放时两层都判定为隐藏，
+            // 她会整个人消失。
+            let wearing = headphones && assets.snozzyHeadphones != nil
+
             ZStack {
-                layer(assets.snozzyIdle, visible: !headphones, w: w, h: h)
-                layer(assets.snozzyHeadphones, visible: headphones, w: w, h: h)
+                layer(assets.snozzyIdle, visible: !wearing, w: w, h: h)
+                layer(assets.snozzyHeadphones, visible: wearing, w: w, h: h)
             }
             // 桌沿以下不该有她——她坐在桌子后面。
             .frame(width: w, height: h, alignment: .topLeading)

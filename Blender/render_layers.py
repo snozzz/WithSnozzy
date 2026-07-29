@@ -27,4 +27,6 @@ def render(name, show_hp):
 
 
 render("snozzy_idle.png", False)
-render("snozzy_headphones.png", True)
+# 耳机层暂时不出：耳罩太大，观感不过关。Blender 那边的建模留着，
+# 想恢复把下面这行取消注释再跑一遍即可。
+# render("snozzy_headphones.png", True)

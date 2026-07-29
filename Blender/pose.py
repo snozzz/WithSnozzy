@@ -13,20 +13,27 @@ FWD, DOWN, RIGHT = Vector((0, -1, 0)), Vector((0, 0, -1)), Vector((1, 0, 0))
 
 
 def _limb_dir(pb, prefer=None):
-    """骨骼在解剖学意义上的指向：本骨骼头部 → 子骨骼头部。
+    """骨骼在解剖学意义上的指向。
 
-    **不能用骨骼自身的 Y 轴。** glTF 里节点只有变换没有"长度和朝向"，
-    Blender 导入时按自己的启发式给骨骼定向，胳膊骨骼的 Y 轴完全可能
-    和胳膊本身差着九十度。照着 Y 轴摆姿势，数值上分毫不差，
-    渲出来却是稻草人——这个坑吃过一次。
+    **只跟人形骨架（J_Bip_*）走。** 头骨底下挂着十几根头发弹簧骨，
+    最远的那根比眼睛远得多；照"取最远子骨骼"的规则会挑中一撮头发，
+    于是"把头摆正"实际变成"把那撮头发摆正"，头被带得又低又歪。
+    次级骨（J_Sec_*）和辅助骨（J_Adj_*）一律不参与。
+
+    没有人形子骨骼时（比如头骨）退回骨骼自身的 tail 方向——
+    对头骨来说那正好是穿过颅顶的轴。
+
+    也**不能用骨骼自身的 Y 轴**：glTF 里节点只有变换没有朝向，
+    Blender 导入时按自己的启发式定向，胳膊骨骼的 Y 轴能和胳膊差 90°。
     """
+    kids = [c for c in pb.children if "J_Bip_" in c.name]
     if prefer:
-        c = next((c for c in pb.children if prefer in c.name), None)
+        c = next((c for c in kids if prefer in c.name), None)
         if c:
             return c.head - pb.head
-    if pb.children:
-        # 取最远的子骨骼：手部有五根手指做子骨骼，取拇指会把方向带偏
-        c = max(pb.children, key=lambda c: (c.head - pb.head).length)
+    if kids:
+        # 取最远的：手部有五根手指做子骨骼，取拇指会把方向带偏
+        c = max(kids, key=lambda c: (c.head - pb.head).length)
         return c.head - pb.head
     return pb.tail - pb.head
 
@@ -71,7 +78,7 @@ def sit_down(arm, seat_h=0.50):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
-def seated(arm, lean=0.10, head_down=0.18, hands="desk", sit=False, seat_h=0.50):
+def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50):
     """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
     if sit:
         sit_down(arm, seat_h)
