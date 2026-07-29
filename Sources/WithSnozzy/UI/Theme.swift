@@ -61,6 +61,14 @@ struct Palette: Equatable {
 
 extension Palette {
     /// 清晨 ~06:00 —— 冷蓝转微暖，薄雾感
+    /// 窗外城市的霓虹三色。和时段无关——霓虹不会因为天亮就换颜色，
+    /// 只会被白天的天光压过去，所以亮度交给调用方按 `star` 缩放。
+    static let neonPink = RGB(hex: 0xFF3EC8)
+    static let neonCyan = RGB(hex: 0x3EE8FF)
+    static let neonWarm = RGB(hex: 0xFFC98A)
+    /// 白天的雾霾色。赛博朋克的白天是发黄的霾，不是晴空。
+    static let smog = RGB(hex: 0xC9A87A)
+
     static let dawn = Palette(
         skyTop: RGB(hex: 0x3B4A78), skyBottom: RGB(hex: 0xE8A48C),
         wall: RGB(hex: 0x3A3550), wallShade: RGB(hex: 0x272338),

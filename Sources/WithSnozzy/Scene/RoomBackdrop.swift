@@ -77,15 +77,12 @@ struct SkyView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [palette.skyTop.color, palette.skyBottom.color],
-                startPoint: .top, endPoint: .bottom)
-
             if palette.star > 0.01 {
-                Stars(opacity: palette.star)
+                Stars(opacity: palette.star * 0.6)
             }
-            Cityscape(palette: palette)
-            Precipitation(weather: weather, t: t, tint: palette.skyBottom)
+            // 城市自带天空渐变和降水。之前是「渐变 + 灰色方块剪影」，
+            // 配暖色手绘房还行，配霓虹房间就整个出戏了。
+            CyberCity(palette: palette, weather: weather, t: t)
         }
     }
 }

@@ -24,7 +24,21 @@ struct PaintedRoomBackdrop: View {
                 if let win = assets.windowFrame(in: size) {
                     SkyView(palette: palette, weather: weather, t: t)
                         .frame(width: win.width, height: win.height)
+                        // 玻璃：窗外的光往画面里渗一点，再压一道从左上来的反光。
+                        // 不做这两笔的话天空像一块贴上去的补丁，边缘是刀切的。
+                        .overlay {
+                            LinearGradient(
+                                colors: [.white.opacity(0.05), .clear, .white.opacity(0.02)],
+                                startPoint: .topLeading, endPoint: .bottomTrailing)
+                        }
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 2)
+                                .stroke(palette.skyBottom.color(0.5), lineWidth: 3)
+                                .blur(radius: 3)
+                        }
                         .offset(x: win.minX, y: win.minY)
+                        .shadow(color: Palette.neonCyan.color(0.30 * palette.star),
+                                radius: win.width * 0.10)
                 }
 
                 // 2. 手绘房间
