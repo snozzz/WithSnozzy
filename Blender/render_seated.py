@@ -16,7 +16,7 @@ S.toon_materials(); S.room_lights()
 arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
 S.scene_camera(scene)
 P.seated(arm, sit=True)
-S.place_hip(scene, arm, 0.615)
+S.place_hip(scene, arm)
 lo, hi = S.frame_extent(scene, meshes)
 print(f'FRAME 纵向占位 {lo:.3f}…{hi:.3f}')
 scene.render.filepath = OUT

@@ -57,7 +57,7 @@ def build(variant=None):
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
     P.seated(arm, sit=True, legs="together")
-    S.place_hip(scene, arm, 0.704)
+    S.place_hip(scene, arm)
     if variant:
         for k, v in variant.get("shapes", {}).items():
             shape(meshes, k, v)

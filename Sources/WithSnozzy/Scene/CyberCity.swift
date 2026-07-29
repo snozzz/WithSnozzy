@@ -15,6 +15,10 @@ struct CyberCity: View {
     let weather: Weather
     var t: Double = 0
 
+    /// 房间的明度。窗外要跟着屋里走：一间浅色明亮的屋子配一片浓黑的
+    /// 楼群，窗户会变成画面上最重的一块，喧宾夺主。值越大城市越淡、越柔。
+    var airy: Double = 0.72
+
     var body: some View {
         Canvas(rendersAsynchronously: false) { ctx, size in
             draw(ctx: &ctx, size: size, night: clamp(palette.star, 0, 1))
@@ -28,13 +32,19 @@ struct CyberCity: View {
                 LinearGradient(
                     colors: [Palette.smog.color(0.30), Palette.smog.color(0.70)],
                     startPoint: .top, endPoint: .bottom)
-                .opacity(1 - clamp(palette.star, 0, 1))
+                .opacity((1 - clamp(palette.star, 0, 1)) * (1 - airy * 0.45))
+                // 空气感：往整片窗景上盖一层很淡的天光，把纵深压柔
+                LinearGradient(
+                    colors: [palette.skyTop.lighter(0.5).color(0.10 * airy),
+                             palette.skyBottom.lighter(0.6).color(0.30 * airy)],
+                    startPoint: .top, endPoint: .bottom)
             }
         }
         .overlay {
             // 地平线附近的光污染。城市的光把低空染亮，是"这是个大城市"最直接的暗示。
             LinearGradient(
-                colors: [.clear, Palette.neonWarm.color(0.34 * clamp(palette.star, 0, 1))],
+                colors: [.clear, Palette.neonWarm.color(0.34 * clamp(palette.star, 0, 1)
+                                                        * (1 - airy * 0.4))],
                 startPoint: .center, endPoint: .bottom)
             .blendMode(.plusLighter)
         }
@@ -65,7 +75,9 @@ struct CyberCity: View {
             // 只按 haze 压暗的话，白天的楼是一片死黑，大气透视是反的。
             let solid = base.darker(0.62 * (1 - haze) + 0.10)
             let washed = RGB.lerp(solid, Palette.smog.darker(0.18), (1 - night) * (0.35 + haze * 0.45))
-            ctx.fill(towers, with: .color(washed.color(1 - haze * 0.55)))
+            // 往天空色里回混一部分：楼群不再是剪影，而是浸在空气里的形体
+            let soft = RGB.lerp(washed, palette.skyBottom.lighter(0.22), airy * (0.35 + haze * 0.4))
+            ctx.fill(towers, with: .color(soft.color(1 - haze * 0.55 * (1 - airy * 0.3))))
 
             // 亮着的窗。成片而不是均匀撒点——整栋楼一起亮/一起黑才像有人住。
             var lit = Path()
@@ -78,7 +90,8 @@ struct CyberCity: View {
 
         // 招牌和广告牌白天也不会全关，只是被天光压过去。
         // 完全按 star 关掉的话白天就只剩灰剪影了。
-        let glow = max(night, 0.26)
+        // airy 越高整体越收敛——明亮的房间里，窗外不该有刺眼的霓虹。
+        let glow = max(night, 0.26) * (1 - airy * 0.34)
 
         // 霓虹招牌：贴在近景楼体上的竖条和横条
         for s in Self.signs {

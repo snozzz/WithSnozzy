@@ -152,8 +152,8 @@ def frame_bust(scene, meshes, yaw_deg=15, pitch_deg=82, top_margin=0.04, span=0.
     return hi.z
 
 
-def toon_materials(shadow=(0.46, 0.44, 0.62),
-                   steps=((0.0, 0.40), (0.26, 0.66), (0.52, 0.88), (0.74, 1.0))):
+def toon_materials(shadow=(0.72, 0.70, 0.80),
+                   steps=((0.0, 0.66), (0.24, 0.80), (0.50, 0.92), (0.74, 1.0))):
     """卡通着色：贴图颜色 × 分级后的光照。
 
     和 `unlit_materials` 的区别在于**有没有形体**。无光照版颜色最准，
@@ -249,7 +249,15 @@ LIGHTS = {
         ("Fill", (-1.0, -0.45, 0.25), (0.62, 0.72, 0.95), 1.1),
         ("Back", (0.2, 0.9, 0.5), (0.80, 0.78, 0.92), 0.8),
     ],
-    # 赛博朋克房：主光来自左前方的显示器（冷白偏青），
+    # 明亮房：浅色墙面把光弹得到处都是，所以主光柔、补光足、暗部浅。
+    # 沿用暗房那套的话她会整个压暗，头发直接发黑——布光要跟着房间走。
+    "bright": [
+        ("Key",    (-0.55, -0.95, 0.45), (1.00, 0.97, 0.98), 3.0),
+        ("Fill",   (0.85, -0.45, 0.30), (0.92, 0.95, 1.00), 2.0),
+        ("Bounce", (0.10, -0.30, -1.00), (1.00, 0.93, 0.96), 1.2),
+        ("Rim",    (0.55, 0.85, 0.55), (0.96, 0.86, 1.00), 1.6),
+    ],
+    # 赛博朋克暗房：主光来自左前方的显示器（冷白偏青），
     # 右侧墙上的青色霓虹给轮廓光，左上的品红灯管补一层冷紫，
     # 桌下的青色灯带从下往上打——这一盏是"她真的坐在这间房里"的关键。
     "cyber": [
@@ -261,7 +269,7 @@ LIGHTS = {
 }
 
 
-def room_lights(preset="cyber"):
+def room_lights(preset="bright"):
     """按房间的光位布光。"""
     import math
     specs = LIGHTS[preset]
@@ -332,7 +340,12 @@ def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32
     return cam
 
 
-def place_hip(scene, arm, y_fraction, bone="J_Bip_C_Hips", tries=4):
+# 胯部在画面上的纵向位置。**只此一份**——渲染脚本有好几个，
+# 各写各的数值必然走偏（面部贴片就因此错了一整轮）。
+HIP_Y = 0.615
+
+
+def place_hip(scene, arm, y_fraction=None, bone="J_Bip_C_Hips", tries=4):
     """把胯部挪到画面纵向的某个位置上。
 
     **不要用"落到地面"来定位**：3D 的地面 z=0 和画上去的地板毫无关系——
@@ -341,6 +354,7 @@ def place_hip(scene, arm, y_fraction, bone="J_Bip_C_Hips", tries=4):
     唯一有意义的参照是画面坐标：胯部对准桌沿稍下方，人就"坐进"桌子后面了。
     """
     from bpy_extras.object_utils import world_to_camera_view
+    y_fraction = HIP_Y if y_fraction is None else y_fraction
     cam = scene.camera
     for _ in range(tries):
         pb = arm.pose.bones[bone]

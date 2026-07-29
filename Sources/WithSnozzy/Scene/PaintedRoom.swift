@@ -57,7 +57,7 @@ struct PaintedRoomBackdrop: View {
             .overlay {
                 // 4. 台灯光晕
                 RadialGradient(
-                    colors: [palette.lamp.color(0.20 * palette.lampGlow), .clear],
+                    colors: [palette.lamp.color(0.10 * palette.lampGlow), .clear],
                     center: .init(x: 0.86, y: 0.30),
                     startRadius: 0,
                     endRadius: max(size.width, size.height) * 0.5)
@@ -67,7 +67,7 @@ struct PaintedRoomBackdrop: View {
             .overlay {
                 // 5. 暗角
                 RadialGradient(
-                    colors: [.clear, .black.opacity(0.42)],
+                    colors: [.clear, .black.opacity(0.20)],
                     center: .init(x: 0.5, y: 0.45),
                     startRadius: min(size.width, size.height) * 0.30,
                     endRadius: max(size.width, size.height) * 0.78)
@@ -111,6 +111,8 @@ enum PaintedRoom {
     /// 手绘图里画师已经把暖光画进去了，再整体染一遍橙色只会让它变脏。
     static func ambient(_ palette: Palette) -> RGB {
         let glow = clamp(palette.lampGlow, 0, 1)
-        return RGB.lerp(RGB(1.0, 1.0, 1.0), RGB(0.62, 0.58, 0.66), glow)
+        // 房间本身是浅色明亮的，夜里压得太狠会把整张画变脏、变灰。
+        // 只轻微压暗并往冷紫偏一点点，"入夜"的感觉主要交给窗外和灯带。
+        return RGB.lerp(RGB(1.0, 1.0, 1.0), RGB(0.88, 0.86, 0.93), glow)
     }
 }
