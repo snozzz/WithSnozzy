@@ -26,7 +26,11 @@ def _limb_dir(pb, prefer=None):
     也**不能用骨骼自身的 Y 轴**：glTF 里节点只有变换没有朝向，
     Blender 导入时按自己的启发式定向，胳膊骨骼的 Y 轴能和胳膊差 90°。
     """
-    kids = [c for c in pb.children if "J_Bip_" in c.name]
+    # 跟**同族**的子骨骼走。头骨底下挂的是头发弹簧骨（J_Sec_），
+    # 跟着它们会把头带歪；而裙骨本身就是 J_Sec_，它的链只能靠 J_Sec_ 子骨骼
+    # 才走得下去。按前缀分族是唯一同时满足这两种情况的规则。
+    family = "J_Sec_" if pb.name.startswith("J_Sec_") else "J_Bip_"
+    kids = [c for c in pb.children if c.name.startswith(family)]
     if prefer:
         c = next((c for c in kids if prefer in c.name), None)
         if c:
@@ -78,10 +82,55 @@ def sit_down(arm, seat_h=0.50):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def drape_skirt(arm, spread=1.0):
+    """把裙摆铺到大腿上。
+
+    VRoid 的裙子由独立的弹簧骨驱动，本意是运行时做物理模拟。
+    只摆腿不管裙子，大腿会直接穿透裙面——正面看就是穿模加走光。
+    不跑布料解算（慢且难调），直接按段把裙骨摆出垂坠。
+
+    命名要看清楚：`SkirtFront1_02` 里 **Front 后面的数字才是段号**
+    （0 在腰、2 在下摆），`_02` 是裙子周向的第几片。按后缀分段是错的，
+    等于把第一段的方向套给整条裙子。
+
+    段必须从腰往下依次摆：裙骨是父子链，先摆下段的话上段一转就把它带跑。
+    """
+    plan = {
+        "Front": ((0.00, -0.74, -0.67), (0.00, -0.86, -0.51), (0.00, -0.24, -0.97)),
+        "Side":  ((0.52, -0.30, -0.80), (0.40, -0.20, -0.89), (0.24, -0.10, -0.97)),
+        "Back":  ((0.08,  0.22, -0.97), (0.04,  0.11, -0.99), (0.00,  0.04, -1.00)),
+    }
+    bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.mode_set(mode='POSE')
+
+    bones = []
+    for pb in arm.pose.bones:
+        n = pb.name
+        if "Skirt" not in n or n.endswith("_end"):
+            continue
+        for kind in ("Front", "Side", "Back"):
+            i = n.find(kind)
+            if i < 0:
+                continue
+            digit = n[i + len(kind):i + len(kind) + 1]
+            if digit.isdigit():
+                bones.append((int(digit), n, kind))
+            break
+
+    for seg, n, kind in sorted(bones):
+        sx = 1 if "_L_" in n else -1
+        dx, dy, dz = plan[kind][min(seg, 2)]
+        aim(arm, n, (dx * sx * spread, dy, dz))
+
+    bpy.ops.object.mode_set(mode='OBJECT')
+    print(f"POSE 裙摆 {len(bones)} 根")
+
+
 def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50):
     """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
     if sit:
         sit_down(arm, seat_h)
+        drape_skirt(arm)
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
 
