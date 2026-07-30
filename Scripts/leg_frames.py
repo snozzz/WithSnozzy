@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""把整张的姿势图/过渡帧切成「共用的上半身 + 一小块腿」。
+
+    python3 Scripts/leg_frames.py Art/poses --out Assets
+
+为什么要切：加上过渡帧一共有五十来张整画幅图，全存下来是 30 MB 包体、
+200 MB 运行内存——而**上半身在所有这些图里是同一份**（同一台相机、
+同一个上半身姿势，实测缝线以上的最大像素差只有百分之几，全是抖动 alpha
+的边缘噪点）。所以上半身只留一张，每一帧只存变了的那一块腿。
+
+缝线（`--seam`）要挑在两个条件都满足的行上：
+
+1. **各姿势在这一行以上没有真差异**——不然上半身那一张只能代表其中一套，
+   别的姿势会露出错的裙摆。裙摆的差异从 y≈600 起。
+2. 尽量落在桌板完全不透明的那一段里（实测 y≥604 桌板 alpha 满值），
+   万一有残差也被桌子挡住。这是保险，不是主要依据。
+
+腿那一块的矩形是**量出来的**：取所有帧在缝线以下的非透明像素的并集。
+写死一个矩形迟早会在某套新姿势上切掉脚。
+"""
+import argparse
+import glob
+import json
+import os
+import re
+
+import numpy as np
+from PIL import Image
+
+SEAM = 600
+PAD = 10
+
+
+def alpha_bbox(paths, seam):
+    """所有帧在 seam 以下的非透明像素的并集矩形。"""
+    x0, x1, y1 = 10**9, -1, -1
+    for p in paths:
+        a = np.asarray(Image.open(p).convert("RGBA"))[:, :, 3] > 4
+        ys, xs = np.where(a[seam:])
+        if len(xs) == 0:
+            continue
+        x0 = min(x0, int(xs.min())); x1 = max(x1, int(xs.max()))
+        y1 = max(y1, int(ys.max()) + seam)
+    if x1 < 0:
+        raise SystemExit("缝线以下一个非透明像素都没有——缝线是不是太靠下了？")
+    return x0, x1, y1
+
+
+def _erode(mask):
+    """3×3 腐蚀。只留下四周都超阈值的像素。"""
+    out = mask.copy()
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            out &= np.roll(np.roll(mask, dy, 0), dx, 1)
+    return out
+
+
+def seam_residual(paths, seam, threshold=150):
+    """缝线以上各帧之间的**结构性**差异占比。验证"上半身共用"这个前提成立。
+
+    不能直接取最大像素差：抖动 alpha（`_alpha_mode` 那条，EEVEE 的 DITHERED）
+    是随机的，同一个场景渲两遍，头发边缘就有几百个孤立像素不一样，
+    最大差能到 700 多——那不是姿势带来的差异，纯粹是渲染噪点。
+    实测这种噪点在缝线以上散布到 y=267（头顶），而腿根本影响不到头发。
+
+    所以先按阈值二值化再做 3×3 腐蚀：孤立的噪点被腐蚀掉，
+    成片的真差异留得住。实测这一刀下去，缝线以上剩 0.04%、
+    缝线以下（本来就该有差异）剩 6.4%，差两个数量级，判据很稳。
+    """
+    ref = np.asarray(Image.open(paths[0]).convert("RGBA"), np.int16)[:seam]
+    hit = np.zeros(ref.shape[:2], bool)
+    for p in paths[1:]:
+        a = np.asarray(Image.open(p).convert("RGBA"), np.int16)[:seam]
+        hit |= np.abs(a - ref).sum(axis=2) > threshold
+    return _erode(hit).sum() / hit.size
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("src", help="render_poses.py / render_layers.py 的输出目录")
+    ap.add_argument("--out", default="Assets")
+    ap.add_argument("--seam", type=int, default=SEAM)
+    a = ap.parse_args()
+    seam = a.seam
+
+    poses = [os.path.basename(p)[7:-4]
+             for p in sorted(glob.glob(os.path.join(a.src, "snozzy_*.png")))]
+    poses = [p for p in poses if p != "headphones"]
+    if not poses:
+        raise SystemExit(f"{a.src} 里没有 snozzy_<姿势>.png")
+    # 中枢排在 0：`LegPose.hub` 就是这个下标
+    hub = "together" if "together" in poses else poses[0]
+    poses = [hub] + sorted(p for p in poses if p != hub)
+
+    trans = sorted(glob.glob(os.path.join(a.src, "trans_*_*.png")))
+    steps = {}
+    for p in trans:
+        m = re.match(r"trans_(.+)_(\d+)\.png$", os.path.basename(p))
+        steps.setdefault(m.group(1), []).append(int(m.group(2)))
+    counts = {len(v) for v in steps.values()}
+    if len(counts) > 1:
+        raise SystemExit(f"各分支的中间帧数不一致：{ {k: len(v) for k, v in steps.items()} }")
+    n_steps = counts.pop() if counts else 0
+
+    hp = os.path.join(a.src, "snozzy_headphones.png")
+    frames = [os.path.join(a.src, f"snozzy_{p}.png") for p in poses] + trans
+
+    canvas = Image.open(frames[0]).size
+    resid = seam_residual(frames + ([hp] if os.path.exists(hp) else []), seam)
+    x0, x1, y1 = alpha_bbox(frames, seam)
+    rect = {"x": max(0, x0 - PAD), "y": seam,
+            "w": min(canvas[0], x1 + PAD + 1) - max(0, x0 - PAD),
+            "h": min(canvas[1], y1 + PAD + 1) - seam}
+    box = (rect["x"], rect["y"], rect["x"] + rect["w"], rect["y"] + rect["h"])
+
+    print(f"缝线 y={seam}，以上的结构性差异 {resid * 100:.3f}% "
+          f"（{'共用上半身成立' if resid < 0.005 else '偏大 ← 缝线要往上挪'}）")
+    print(f"腿那一块 {rect['w']}×{rect['h']} @ ({rect['x']},{rect['y']})")
+
+    os.makedirs(a.out, exist_ok=True)
+    total = 0
+
+    def cut(src, dst, region):
+        nonlocal total
+        Image.open(src).convert("RGBA").crop(region).save(os.path.join(a.out, dst))
+        total += os.path.getsize(os.path.join(a.out, dst))
+
+    # 上半身：整幅宽、缝线以上。取自中枢那一张
+    body = (0, 0, canvas[0], seam)
+    cut(os.path.join(a.src, f"snozzy_{hub}.png"), "snozzy_body.png", body)
+    if os.path.exists(hp):
+        cut(hp, "snozzy_body_headphones.png", body)
+        # 耳机层的腿是按中枢姿势渲的，切掉不要——戴耳机时腿照样换姿势，
+        # 由下面这些腿图负责。原来戴耳机直接盖整张图，腿是冻住的。
+    else:
+        print("  没有 snozzy_headphones.png，跳过耳机上半身")
+
+    # 保底：一张完整的整幅图。腿图或 legs.json 缺了的时候还能画出个人来
+    cut(os.path.join(a.src, f"snozzy_{hub}.png"), "snozzy_idle.png",
+        (0, 0, canvas[0], canvas[1]))
+
+    for p in poses:
+        cut(os.path.join(a.src, f"snozzy_{p}.png"), f"snozzy_legs_{p}.png", box)
+    for p in trans:
+        name = os.path.basename(p)[6:-4]     # 去掉 "trans_"，剩 <姿势>_<编号>
+        cut(p, f"snozzy_move_{name}.png", box)
+
+    manifest = {"canvas": list(canvas), "seam": seam, "rect": rect,
+                "poses": poses, "steps": n_steps}
+    with open(os.path.join(a.out, "legs.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+    print(f"LEGS 上半身 1 张 + 腿 {len(poses)} 张 + 过渡 {len(trans)} 张，"
+          f"共 {total / 1024 / 1024:.1f} MB")
+    print(f"     姿势顺序 {poses}，每段过渡 {n_steps} 帧")
+
+
+if __name__ == "__main__":
+    main()

@@ -62,32 +62,71 @@ def aim(arm, name, direction, prefer=None):
 
 
 # 坐着的人腿不会一直保持一个姿势。这几套之间随机换，就是"活人"和"雕像"的区别。
-# 方向都是「大腿 / 小腿 / 脚」三段的世界朝向，sx 是左右镜像。
-# 小腿一律带一点**向后**的分量，脚收到椅子下面。
-# 这既是坐着的自然姿势，也解决一个取景问题：脚比躯干更靠近镜头，
-# 而画幅下边界在近处更高——脚往后收，离镜头远了，才落得进画面。
-LEG_STYLES = {
-    "together": (( 0.14, -1.00, -0.10), ( 0.06,  0.42, -0.91), ( 0.05, -0.90, -0.22)),
-    "apart":    (( 0.30, -0.96, -0.10), ( 0.22,  0.40, -0.92), ( 0.16, -0.88, -0.26)),
-    "tucked":   (( 0.14, -1.00, -0.10), ( 0.10,  0.90, -0.42), ( 0.08, -0.20, -0.96)),
+#
+# 每套写成「左腿三段 + 右腿三段」的世界朝向，两条腿分开写。之前是
+# 「一套方向 + 左右镜像」，有两个问题：二郎腿这种非对称姿势塞不进去
+# （只好另开一个 `cross_legs` 函数），而且**没法在两套之间插值**——
+# 换姿势的过渡帧就是插出来的，所以这个结构是 `blend_legs` 的前提。
+#
+# 三段依次是大腿、小腿、脚。她面朝 −Y，**+X 是她的左手边**。
+# 小腿一律带一点 +Y（向后），脚收到椅子下面：这既是坐着的自然姿势，
+# 也解决一个取景问题——脚比躯干更靠近镜头，而画幅下边界在近处更高，
+# 脚往后收、离镜头远了，才落得进画面。
+#
+# **女生坐姿的关键是脚踝不比膝盖宽。** 之前大腿和小腿的横向分量都朝外，
+# 从胯往下一路外分，成了外八字（实测膝间距 153 px、踝间距 178 px），
+# 配上厚底鞋，整个下半身很"横"。现在小腿一律往内收：膝盖并拢、
+# 脚踝落在膝盖内侧，横向占位从胯往下是收窄的。
+LEG_POSES = {
+    # 并膝并踝。最规矩的一套，也是所有过渡的中枢姿势（见 render_transitions.py）
+    "together": {
+        "L": (( 0.02, -1.00, -0.12), (-0.06,  0.42, -0.90), (-0.02, -0.92, -0.20)),
+        "R": ((-0.02, -1.00, -0.12), ( 0.06,  0.42, -0.90), ( 0.02, -0.92, -0.20)),
+    },
+    # 双腿并拢、整体斜向她右手边（画面左）。取代原来的 "apart"——
+    # 那一套是两腿大幅外分，实测踝间距 336 px，就是"粗旷"的主要来源。
+    # 斜放同样能和并膝拉开区别，但不牺牲仪态。外侧那条腿要多摆一点才贴得住。
+    "angled": {
+        "L": ((-0.24, -0.95, -0.13), (-0.32,  0.40, -0.85), (-0.20, -0.90, -0.20)),
+        "R": ((-0.13, -0.98, -0.13), (-0.22,  0.44, -0.86), (-0.12, -0.92, -0.20)),
+    },
+    # 二郎腿。上面那条大腿横过身体中线，小腿再垂下去略微外摆；
+    # 支撑腿收到接近垂直（原来带 0.18 的外张，一条腿岔开就白搭了）
+    "crossL": {
+        "L": ((-0.38, -0.90, -0.18), ( 0.30,  0.72, -0.62), ( 0.16, -0.60, -0.78)),
+        "R": (( 0.00, -1.00, -0.10), (-0.10,  0.78, -0.62), (-0.04, -0.92, -0.18)),
+    },
+    "crossR": {
+        "L": (( 0.00, -1.00, -0.10), ( 0.10,  0.78, -0.62), ( 0.04, -0.92, -0.18)),
+        "R": (( 0.38, -0.90, -0.18), (-0.30,  0.72, -0.62), (-0.16, -0.60, -0.78)),
+    },
+    # 一条腿收到椅子底下，脚尖点地。两条都收会变成跪姿
+    "tucked": {
+        "L": (( 0.02, -1.00, -0.12), (-0.06,  0.42, -0.90), (-0.02, -0.92, -0.20)),
+        "R": (( 0.02, -1.00, -0.10), (-0.06,  0.90, -0.42), (-0.05, -0.20, -0.96)),
+    },
 }
 
+# 过渡的中枢姿势。换姿势一律先收回到这里再摆出去，于是 N 套姿势只需要
+# N−1 段过渡序列，而不是 N×(N−1) 段。真人换腿也确实是先收回的。
+HUB = "together"
 
-def cross_legs(arm, over="L"):
-    """二郎腿。`over` 是压在上面的那条腿。
+# 一段过渡（中枢 ↔ 某套姿势）的中间帧数，两端的成品姿势不计。
+# 这个数字三处要一致：这里渲多少张、`Scripts/leg_frames.py` 切多少张、
+# `LegPose.swift` 播多少张。所以只写在这里，另两处从 legs.json 读。
+TRANS_STEPS = 11
 
-    交叉腿会把上面那条大腿横过身体中线，小腿再垂下去并略微外摆。
-    裙摆得在腿摆完之后再铺，否则布还停在旧的腿形上。
+
+def blend_legs(a, b, t):
+    """在两套腿姿之间插值，给过渡帧用。
+
+    逐段做球面插值而不是线性插值：方向是单位向量，线性插值会让中间帧
+    的向量变短，归一化之后角速度不均匀——表现是过渡的中段"赶"了一下。
     """
-    under = "R" if over == "L" else "L"
-    sx = 1 if over == "L" else -1
-    aim(arm, f"J_Bip_{over}_UpperLeg", (-sx * 0.40, -0.90, -0.16))
-    aim(arm, f"J_Bip_{over}_LowerLeg", ( sx * 0.34,  0.70, -0.62))
-    aim(arm, f"J_Bip_{over}_Foot",     ( sx * 0.20, -0.62, -0.76))
-    ux = 1 if under == "L" else -1
-    aim(arm, f"J_Bip_{under}_UpperLeg", (ux * 0.18, -1.00, -0.08))
-    aim(arm, f"J_Bip_{under}_LowerLeg", (ux * 0.08,  0.76, -0.64))
-    aim(arm, f"J_Bip_{under}_Foot",     (ux * 0.06, -0.90, -0.20))
+    pa, pb = LEG_POSES[a], LEG_POSES[b]
+    return {side: tuple(Vector(u).normalized().slerp(Vector(v).normalized(), t)
+                        for u, v in zip(pa[side], pb[side]))
+            for side in ("L", "R")}
 
 
 def sit_down(arm, seat_h=0.50, legs="together"):
@@ -96,23 +135,21 @@ def sit_down(arm, seat_h=0.50, legs="together"):
     VRoid 模型静置是**站姿**，只摆上半身的话她会立在桌子后面而不是坐着。
     先把骨架整体下移到坐高，再把大腿折向前、小腿垂下去。
     腿基本会被桌子挡住，但不折的话会从桌板底下穿出来。
+
+    `legs` 可以是 `LEG_POSES` 里的姿势名，也可以直接是 `blend_legs`
+    返回的那种六段方向字典。
     """
     hips = arm.pose.bones.get("J_Bip_C_Hips")
     if hips is not None:
         cur = (arm.matrix_world @ hips.head).z
         arm.location.z += seat_h - cur
 
+    dirs = LEG_POSES.get(legs, LEG_POSES[HUB]) if isinstance(legs, str) else legs
     bpy.context.view_layer.objects.active = arm
     bpy.ops.object.mode_set(mode='POSE')
-    if legs in ("crossL", "crossR"):
-        cross_legs(arm, over="L" if legs == "crossL" else "R")
-    else:
-        thigh, shin, foot = LEG_STYLES.get(legs, LEG_STYLES["together"])
-        for side, sx in (("L", 1), ("R", -1)):
-            # tucked 只收一条腿，两条都收会变成跪姿
-            style = LEG_STYLES["together"] if (legs == "tucked" and side == "L") else (thigh, shin, foot)
-            for bone, d in zip(("UpperLeg", "LowerLeg", "Foot"), style):
-                aim(arm, f"J_Bip_{side}_{bone}", (d[0] * sx, d[1], d[2]))
+    for side in ("L", "R"):
+        for bone, d in zip(("UpperLeg", "LowerLeg", "Foot"), dirs[side]):
+            aim(arm, f"J_Bip_{side}_{bone}", d)
     bpy.ops.object.mode_set(mode='OBJECT')
 
 

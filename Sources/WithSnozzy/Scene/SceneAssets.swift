@@ -40,6 +40,30 @@ struct SceneManifest: Codable {
     }
 }
 
+/// 腿部素材的位置表，由 `Scripts/leg_frames.py` 生成。
+///
+/// 角色图被 `seam` 这条横线切成两半：以上是所有姿势共用的上半身，
+/// 以下每一帧单独存一小块。加上过渡帧一共五十来张，整幅存是 30 MB 包体、
+/// 200 MB 内存，而上半身在这些图里本来就是同一份。
+struct LegManifest: Codable {
+    struct Rect: Codable { var x, y, w, h: Int }
+    var canvas: [Int] = [1536, 1024]
+    /// 上下半身的分界行（画布坐标）。挑在各姿势没有真差异、
+    /// 而且被桌板挡住的那一段上，具体依据见 `leg_frames.py`。
+    var seam: Int = 600
+    /// 腿那一块在画布上的位置。是量出来的：所有帧在缝线以下的非透明像素的并集。
+    var rect = Rect(x: 0, y: 600, w: 1536, h: 424)
+    /// 姿势名，顺序即下标；`LegPose.hub` 指的是第 0 个。
+    var poses: [String] = []
+    /// 每段过渡有几张中间帧。
+    var steps: Int = 0
+
+    /// 上半身那一块。整幅宽、缝线以上。
+    var bodyRect: Rect { Rect(x: 0, y: 0, w: canvas.first ?? 1536, h: seam) }
+    var canvasW: CGFloat { CGFloat(canvas.first ?? 1536) }
+    var canvasH: CGFloat { CGFloat(canvas.count > 1 ? canvas[1] : 1024) }
+}
+
 /// 手绘素材的加载与持有。
 ///
 /// 素材缺失时 `isAvailable` 为 false，场景自动回落到程序化绘制的房间。
@@ -51,14 +75,19 @@ final class SceneAssets {
     private(set) var room: NSImage?
     private(set) var desk: NSImage?
     private(set) var cats: [NSImage] = []
-    /// Blender 渲出来的 Snozzy。所有图共用同一个相机，像素级对齐，
-    /// 所以运行时直接交叉淡入即可，不用做任何对位。
+    /// Blender 渲出来的 Snozzy。所有图共用同一台相机，像素级对齐，
+    /// 所以运行时按清单里的矩形贴回去就行，不用做任何对位。
+    ///
+    /// 整幅的那张只作保底：新素材缺了还能画出个人来。
     private(set) var snozzyIdle: NSImage?
-    private(set) var snozzyHeadphones: NSImage?
-    /// 腿部姿势变体。顺序必须和 `LegPose` 里的编号一致。
-    private(set) var legPoses: [NSImage] = []
-
-    static let legPoseNames = ["together", "apart", "crossL", "crossR", "tucked"]
+    /// 上半身。缝线以上，所有姿势共用一张；戴耳机时换成戴着的那张。
+    private(set) var snozzyBody: NSImage?
+    private(set) var snozzyBodyPhones: NSImage?
+    /// 每套姿势的静止腿图，下标即 `legs.poses` 的下标。
+    private(set) var legStills: [NSImage] = []
+    /// 过渡帧。`legMoves[姿势][第几帧]`，中枢那一支是空的。
+    private(set) var legMoves: [[NSImage]] = []
+    private(set) var legs = LegManifest()
 
     /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
     /// 单独出贴片比整张重渲便宜三个数量级。
@@ -95,10 +124,10 @@ final class SceneAssets {
             room = roomImage
             desk = NSImage(contentsOf: dir.appendingPathComponent("desk.png"))
             snozzyIdle = NSImage(contentsOf: dir.appendingPathComponent("snozzy_idle.png"))
-            snozzyHeadphones = NSImage(contentsOf: dir.appendingPathComponent("snozzy_headphones.png"))
-            legPoses = Self.legPoseNames.compactMap {
-                NSImage(contentsOf: dir.appendingPathComponent("snozzy_\($0).png"))
-            }
+            snozzyBody = NSImage(contentsOf: dir.appendingPathComponent("snozzy_body.png"))
+            snozzyBodyPhones = NSImage(contentsOf:
+                dir.appendingPathComponent("snozzy_body_headphones.png"))
+            loadLegs(dir)
 
             var found: [NSImage] = []
             for i in 0..<8 {
@@ -127,6 +156,41 @@ final class SceneAssets {
             return
         }
         loadedFrom = nil
+    }
+
+    /// 腿图和过渡帧。
+    ///
+    /// 一套姿势的过渡帧只要缺一张就整支不要——播到缺的那一帧会空一格，
+    /// 比不做过渡还难看。缺了就退回"直接换成品图"，`LegPose` 那边
+    /// `steps == 0` 自然就不生成 `moving` 了。
+    private func loadLegs(_ dir: URL) {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("legs.json")),
+              let m = try? JSONDecoder().decode(LegManifest.self, from: data),
+              !m.poses.isEmpty else { return }
+
+        let stills = m.poses.compactMap {
+            NSImage(contentsOf: dir.appendingPathComponent("snozzy_legs_\($0).png"))
+        }
+        guard stills.count == m.poses.count else { return }
+
+        // 中枢那一支本来就没有过渡帧（它是所有过渡的起点/终点），
+        // 所以"这一支是不是缺帧"只对别的姿势成立。
+        var moves: [[NSImage]] = []
+        var complete = m.steps > 0
+        for (i, name) in m.poses.enumerated() {
+            guard i != LegPose.hub, m.steps > 0 else { moves.append([]); continue }
+            let frames = (0..<m.steps).compactMap { step in
+                NSImage(contentsOf: dir.appendingPathComponent(
+                    String(format: "snozzy_move_%@_%02d.png", name, step)))
+            }
+            if frames.count != m.steps { complete = false }
+            moves.append(frames)
+        }
+
+        legs = m
+        legs.steps = complete ? m.steps : 0
+        legStills = stills
+        legMoves = moves
     }
 
     // MARK: - 布局计算

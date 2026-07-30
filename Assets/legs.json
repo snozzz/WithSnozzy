@@ -1,0 +1,21 @@
+{
+  "canvas": [
+    1536,
+    1024
+  ],
+  "seam": 600,
+  "rect": {
+    "x": 535,
+    "y": 600,
+    "w": 336,
+    "h": 410
+  },
+  "poses": [
+    "together",
+    "angled",
+    "crossL",
+    "crossR",
+    "tucked"
+  ],
+  "steps": 11
+}

@@ -345,13 +345,19 @@ def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32
 HIP_Y = 0.615
 
 
-def place_hip(scene, arm, y_fraction=None, bone="J_Bip_C_Hips", tries=4):
+def place_hip(scene, arm, y_fraction=None, bone="J_Bip_C_Hips", tries=8,
+              tol=0.0002):
     """把胯部挪到画面纵向的某个位置上。
 
     **不要用"落到地面"来定位**：3D 的地面 z=0 和画上去的地板毫无关系——
     桌子是 2D 灰模里画的，位置由构图定，不由世界坐标定。按 z=0 落地的结果是
     胯部落在桌沿上方，大腿全露在桌面上。
     唯一有意义的参照是画面坐标：胯部对准桌沿稍下方，人就"坐进"桌子后面了。
+
+    胯是腿链的根，摆腿不会动它，所以每套姿势收敛到的高度**本该完全一样**。
+    容差原来是 0.002，在 1024 高的画幅上就是 2 像素——静态图之间看不出来，
+    但换姿势的过渡序列只替换下半身、上半身取自固定的那张图，2 像素的
+    上下抖动会在接缝处露出来。收到 0.0002（0.2 像素）就没有了。
     """
     from bpy_extras.object_utils import world_to_camera_view
     y_fraction = HIP_Y if y_fraction is None else y_fraction
@@ -361,7 +367,7 @@ def place_hip(scene, arm, y_fraction=None, bone="J_Bip_C_Hips", tries=4):
         world = arm.matrix_world @ pb.head
         p = world_to_camera_view(scene, cam, world)
         err = (1 - y_fraction) - p.y          # 视图 y 向上为正
-        if abs(err) < 0.002:
+        if abs(err) < tol:
             break
         arm.location.z += err * _view_height_at(scene, cam, world)
         bpy.context.view_layer.update()
