@@ -43,6 +43,18 @@ enum Snapshot {
         arg("--facestrip")
     }
 
+    /// 敲键盘的手，逐帧平铺。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip out.png
+    /// ```
+    ///
+    /// 这一条要**连房间和桌子一起画**，不能只画手：手的整个意义就是
+    /// "盖在桌面层上面"，单独看一层手是看不出层序对不对的。
+    static var handStripPath: String? {
+        arg("--handstrip")
+    }
+
     private static func arg(_ name: String) -> String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
@@ -187,6 +199,46 @@ enum Snapshot {
         }
     }
 
+    static func runHandStrip(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hands.isUsable, !assets.handFrames.isEmpty else {
+            print("手部素材没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        let renderer = ImageRenderer(content: HandStrip(assets: assets))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            print("快照渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+            // 敲不敲、敲多久：按档统计，样本要够多才稳
+            for working in [true, false] {
+                var typing = 0
+                let n = 40_000
+                let t0 = Date().timeIntervalSinceReferenceDate
+                for i in 0..<n {
+                    let t = t0 + Double(i) * 0.05
+                    if TypingRig.frame(at: t, working: working,
+                                       frames: assets.hands.frames) != 0 { typing += 1 }
+                }
+                print("\(working ? "专注阶段" : "平时")：手在动的时间占 "
+                      + String(format: "%.0f%%", Double(typing) / Double(n) * 100))
+            }
+            exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
     static func run(path: String) {
         // 只用来拍角色和场景。
         //
@@ -213,6 +265,65 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+}
+
+/// 敲键盘的手，逐帧平铺。**连房间和桌子一起画**——手的意义就是盖在桌面层
+/// 上面，只画一层手看不出层序对没对。
+private struct HandStrip: View {
+    let assets: SceneAssets
+
+    /// 每格里键盘那一块画多宽。
+    private static let keysW: CGFloat = 300
+
+    var body: some View {
+        let m = assets.hands
+        let canvasW = CGFloat(m.canvas.first ?? 1536)
+        let canvasH = CGFloat(m.canvas.count > 1 ? m.canvas[1] : 1024)
+        let r = m.rect
+        // 取手那一块并往外放宽，把键盘和桌沿都框进来
+        let x0 = CGFloat(r.x) - 40, y0 = CGFloat(r.y) - 70
+        let x1 = CGFloat(r.x + r.w) + 40, y1 = CGFloat(r.y + r.h) + 40
+        let scale = Self.keysW / (x1 - x0)
+        let cw = (x1 - x0) * scale, ch = (y1 - y0) * scale
+
+        VStack(spacing: 2) {
+            ForEach(0..<((m.frames + 1) / 2), id: \.self) { row in
+                HStack(spacing: 2) {
+                    ForEach(0..<2, id: \.self) { col in
+                        let i = row * 2 + col
+                        if i < m.frames {
+                            cell(i, canvasW: canvasW * scale, canvasH: canvasH * scale,
+                                 crop: CGRect(x: x0 * scale, y: y0 * scale,
+                                              width: cw, height: ch))
+                        } else {
+                            Color.clear.frame(width: cw, height: ch)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(white: 0.12))
+    }
+
+    private func cell(_ i: Int, canvasW: CGFloat, canvasH: CGFloat,
+                      crop: CGRect) -> some View {
+        let pose = SnozzyRig.pose(time: 3.0, kick: 0, playing: false)
+        let face = FaceRig.expression(t: 3.0, playing: false, mood: 0.5, drowsy: 0,
+                                      working: true, speaking: false)
+        return ZStack(alignment: .topLeading) {
+            // 真实层序：房间 → 角色 → 桌子 → 手
+            PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: 3)
+            RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
+                           headphones: false, t: 3)
+            PaintedRoomForeground(assets: assets, palette: .day)
+            TypingHands(assets: assets, palette: .day, frame: i)
+        }
+        .frame(width: canvasW, height: canvasH)
+        .offset(x: -crop.minX, y: -crop.minY)
+        .frame(width: crop.width, height: crop.height, alignment: .topLeading)
+        .clipped()
     }
 }
 

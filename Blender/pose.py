@@ -228,8 +228,11 @@ def ground(arm, floor=0.0):
 
 
 def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
-           legs="together"):
-    """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。"""
+           legs="together", scene=None, press=0.0, side_first="L"):
+    """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。
+
+    `hands="keys"` 是手伸到键盘上打字，需要传 `scene`（要拿相机反投影）。
+    """
     if sit:
         sit_down(arm, seat_h, legs)
         drape_skirt(arm)     # 必须在腿摆完之后铺，否则布还停在旧腿形上
@@ -257,12 +260,129 @@ def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
     aim(arm, "J_Bip_L_LowerArm", (-0.30, -0.82, -0.50))
     aim(arm, "J_Bip_R_LowerArm", ( 0.30, -0.82, -0.50))
 
-    if hands == "desk":
+    if hands == "keys" and scene is not None:
+        type_hands(arm, scene, press=press, side_first=side_first)
+    elif hands == "desk":
         aim(arm, "J_Bip_L_Hand", (-0.24, -0.90, -0.36), prefer="Middle")
         aim(arm, "J_Bip_R_Hand", ( 0.24, -0.90, -0.36), prefer="Middle")
         curl(arm, "L", 0.30); curl(arm, "R", 0.30)
 
     bpy.ops.object.mode_set(mode='OBJECT')
+
+
+def screen_point(scene, u, v, dist):
+    """画面坐标 `(u, v)` 上、距相机 `dist` 米处的那个世界点。
+
+    `u`/`v` 是 0…1 的画布坐标，**v 向下为正**（和贴片清单一致，
+    不是 Blender 视图那套向上为正）。
+
+    为什么需要它：桌子和键盘只存在于 2D 重绘图里，3D 场景里什么都没有。
+    想让手落在键盘上，唯一有意义的参照就是画面坐标——和 `place_hip`
+    定位胯部是同一个道理（第 6 条）。
+    """
+    cam = scene.camera
+    f, sw = cam.data.lens, cam.data.sensor_width
+    rx, ry = scene.render.resolution_x, scene.render.resolution_y
+    d = Vector(((u - 0.5) * sw, (0.5 - v) * sw * ry / rx, -f)).normalized()
+    return cam.matrix_world.translation + (cam.matrix_world.to_3x3() @ d) * dist
+
+
+def reach(arm, side, target, pole):
+    """两段 IK：把手腕送到 `target`。`pole` 决定肘往哪边拐。
+
+    解析解，不用 IK 约束——约束要建空物体、还得等依赖图，
+    而这里两段链的解就是个余弦定理，二十行写完还能精确落点。
+
+    先摆大臂再摆小臂：`aim` 摆完大臂会刷新依赖图，肘的位置正好落到
+    解出来的 E 上，这时候小臂指向 `target − E` 就把手腕送到位了。
+    """
+    def head(name):
+        return arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_{name}"].head
+
+    S = head("UpperArm")
+    a = (head("LowerArm") - S).length          # 大臂长
+    b = (head("Hand") - head("LowerArm")).length  # 小臂长
+
+    v = Vector(target) - S
+    d = min(max(v.length, abs(a - b) + 1e-4), a + b - 1e-4)   # 够不着就伸直
+    n = v.normalized()
+    # 肘的方向：把 pole 投影到垂直于 n 的平面上
+    p = Vector(pole) - S
+    p -= n * p.dot(n)
+    if p.length < 1e-6:
+        p = Vector((0, 0, -1))
+    p.normalize()
+
+    cos_a = max(-1.0, min(1.0, (a * a + d * d - b * b) / (2 * a * d)))
+    import math
+    ang = math.acos(cos_a)
+    E = S + a * (math.cos(ang) * n + math.sin(ang) * p)
+
+    aim(arm, f"J_Bip_{side}_UpperArm", E - S)
+    aim(arm, f"J_Bip_{side}_LowerArm", Vector(target) - head("LowerArm"))
+
+
+# 手腕在键盘上的落点，画布坐标（0…1）。
+#
+# 键盘在成品图里是 x 630–880、y 605–665。**放的是手腕不是指尖**，
+# 手指还要往前伸出去一截——按 0.622（键盘正中）摆，手指会挂到键盘前沿外面，
+# 看着像两只手悬在桌子外。手腕要抬到键盘**后沿**上，指尖才落在键上。
+KEYS = {
+    "R": (0.452, 0.586),      # 她的右手在画面左边
+    "L": (0.537, 0.590),
+}
+# 手离相机多远。她的身体在 2.45–2.6，手要明显更靠前才像"伸到桌面上"。
+# 但受手臂长度限制（总长 0.43 米）：太靠前就够不着，IK 会夹到伸直，
+# 落点反而偏掉。2.40 配 lean=0.18 够得着，手的透视也合适。
+KEYS_DIST = 2.40
+# 手背的朝向。她面朝 −Y，打字时手指也指向 −Y（她的正前方）。
+# 往下压太多手指就竖着挂到键盘前沿外面，压太少又像悬空。
+# 拉了一条梯度逐个看，(−0.95, −0.30) 这一档手正好摊在键上。
+HAND_DIR = (0.08, -0.95, -0.30)
+# 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
+TYPING_LEAN = 0.18
+
+
+def type_hands(arm, scene, press=0.0, side_first="L"):
+    """手伸到键盘上打字。
+
+    `press` 0…1 是"按下去"的程度，`side_first` 是这一帧哪只手在按。
+    **两只手交替按**比一起上下更像打字，而且在这个尺寸下动静更明显——
+    手在画面上只有四十来像素宽，手指自己弯那点位移基本看不见。
+    """
+    for side in ("L", "R"):
+        u, v = KEYS[side]
+        down = press if side == side_first else press * 0.25
+        # 按下去就是手腕沉一点。手指弯曲那点变化在这个尺寸下看不出来，
+        # 真正读得出来的是整只手的上下位移。
+        target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
+        # 肘往身体外侧、略靠下拐，和真人打字一样
+        sx = 1 if side == "L" else -1
+        pole = target + Vector((sx * 0.6, 0.25, -0.5))
+        reach(arm, side, target, pole)
+        # 手背朝上、指尖朝前下方，压在键上
+        aim(arm, f"J_Bip_{side}_Hand",
+            (sx * HAND_DIR[0], HAND_DIR[1], HAND_DIR[2]), prefer="Middle")
+        curl(arm, side, 0.42 + down * 0.30)
+
+
+# 打字循环的帧。0 号是"手放在键上不动"，也是不打字时用的那一张。
+# 两只手交替按，比一起上下更像打字，在这个尺寸下动静也更明显。
+TYPING_FRAMES = [(0.0, "L"), (1.0, "L"), (0.0, "R"), (1.0, "R")]
+
+
+def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L"):
+    """摆好整个人：坐姿 → 落位 → 手放到键盘上。
+
+    **这三步的顺序不能颠倒。** 手是按画面坐标放的（见 `screen_point`），
+    而 `place_hip` 会把整个骨架上下平移——先摆手再落位，手会被一起挪走。
+    第一次就是这么错的：手腕在画面上差了七十多像素，怎么调参数都对不上。
+    """
+    import snozzy_lib as S
+    seated(arm, sit=True, legs=HUB if legs is None else legs,
+           lean=TYPING_LEAN if lean is None else lean)
+    S.place_hip(scene, arm)
+    type_hands(arm, scene, press=press, side_first=side_first)
 
 
 def curl(arm, side, amount):

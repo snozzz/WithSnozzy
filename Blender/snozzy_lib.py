@@ -290,6 +290,44 @@ def room_lights(preset="bright"):
         obj.rotation_euler = v.to_track_quat('Z', 'Y').to_euler()
 
 
+# 手臂那条链上的所有骨骼。手要单独渲一层，靠它挑顶点。
+ARM_BONES = ["UpperArm", "LowerArm", "Hand"] + [
+    f"{finger}{i}" for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
+    for i in (1, 2, 3)
+]
+
+
+def isolate_arms(meshes, sides=("L", "R"), cutoff=0.5):
+    """只留手臂和手，别的顶点全部遮掉。
+
+    **为什么需要单独渲一层**：桌面层是画在角色**之上**的（不然桌子挡不住她
+    的下半身），于是手伸到键盘上会被桌子盖掉。手必须再画一层、盖在桌子上面。
+
+    但不能直接把角色图里那一块裁出来贴上去——那一块里除了小臂和手，
+    后面还有她的大腿和裙子，一起贴上去就是一片裙子糊在桌面上（试过，很明显）。
+    要的是"只有手臂"的那一层。
+
+    按**骨骼权重**挑顶点，不按材质：手臂和大腿共用同一个皮肤材质，
+    材质分不开；而蒙皮权重天然就是按骨骼分的，袖子也会跟着手臂一起留下。
+    肩膀那里会切得毛糙，但那一段在缝线以上、根本不会画到，无所谓。
+    """
+    names = {f"J_Bip_{s}_{b}" for s in sides for b in ARM_BONES}
+    for o in meshes:
+        idx = {g.index for g in o.vertex_groups if g.name in names}
+        if not idx:
+            o.hide_render = True        # 这个物体一点手臂都没有（头发之类）
+            continue
+        keep = [v.index for v in o.data.vertices
+                if sum(g.weight for g in v.groups if g.group in idx) > cutoff]
+        if not keep:
+            o.hide_render = True
+            continue
+        vg = o.vertex_groups.new(name="_ARMS")
+        vg.add(keep, 1.0, 'REPLACE')
+        m = o.modifiers.new("ArmMask", 'MASK')
+        m.vertex_group = "_ARMS"
+
+
 def add_outline(meshes, thickness=0.0035, skip=("Hair",)):
     """反转外壳描边。
 

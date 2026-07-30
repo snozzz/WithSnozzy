@@ -159,6 +159,18 @@ private struct SceneStack: View {
                             RoomForeground(palette: palette).equatable()
                         }
 
+                        // 3.5 敲键盘的手。**必须画在桌面层之后**——
+                        //     手伸到键盘上，而桌子是盖在角色之上的，
+                        //     画在前面就被桌子吃掉了。
+                        if state.sceneAssets.hands.isUsable {
+                            TypingHands(assets: state.sceneAssets, palette: palette,
+                                        frame: TypingRig.frame(
+                                            at: t,
+                                            working: state.focus.phase == .work,
+                                            frames: state.sceneAssets.hands.frames))
+                                .equatable()
+                        }
+
                         // 蒸汽只在程序化房间里画。手绘素材自带氛围，
                         // 再叠一层程序化蒸汽只会飘在错的位置。
                         if !state.sceneAssets.isAvailable {

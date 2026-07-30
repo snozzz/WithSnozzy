@@ -1,0 +1,93 @@
+#!/usr/bin/env python3
+"""把打字的手切成小块，并算出该从哪一行开始画。
+
+    python3 Scripts/hand_frames.py Art/hands --out Assets
+
+手是**盖在桌面层上面**的，但只能盖住桌板挡住的那一段：
+桌板上沿以上（y 更小）那截小臂本来就在房间背景前面，由角色图自己画，
+再盖一次没意义，还会在桌沿上留一条边。
+
+所以起始行取**桌板变成完全不透明的那一行**——那正好是"桌子开始挡人"的位置。
+从素材里量，不写死：换一张重绘图桌沿的高度就变了。
+"""
+import argparse
+import glob
+import json
+import os
+
+import numpy as np
+from PIL import Image
+
+PAD = 6
+
+
+def desk_top(desk_path, x0, x1, opaque=250):
+    """桌面层在 `x0…x1` 这一段里，从哪一行起完全不透明。"""
+    a = np.asarray(Image.open(desk_path).convert("RGBA"))[:, :, 3]
+    for y in range(a.shape[0]):
+        if a[y, x0:x1].min() >= opaque:
+            return y
+    return None
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("src", help="render_hands.py 的输出目录")
+    ap.add_argument("--out", default="Assets")
+    ap.add_argument("--desk", default="Assets/desk.png")
+    a = ap.parse_args()
+
+    paths = sorted(glob.glob(os.path.join(a.src, "hand_*.png")))
+    if not paths:
+        raise SystemExit(f"{a.src} 里没有 hand_*.png")
+
+    imgs = [Image.open(p).convert("RGBA") for p in paths]
+    canvas = imgs[0].size
+    masks = [np.asarray(im)[:, :, 3] > 4 for im in imgs]
+
+    # 所有帧的手臂横向范围，用来问桌子"这一段从哪行开始挡"
+    cols = np.zeros(canvas[0], bool)
+    for m in masks:
+        cols |= m.any(axis=0)
+    xs = np.where(cols)[0]
+    top = desk_top(a.desk, int(xs.min()), int(xs.max()) + 1)
+    if top is None:
+        raise SystemExit("桌面层在手臂那一段上没有完全不透明的行，--desk 对吗？")
+
+    # 起始行以下的手臂像素并集
+    x0, x1, y1 = 10**9, -1, -1
+    for m in masks:
+        ys, xx = np.where(m[top:])
+        if len(xx) == 0:
+            continue
+        x0 = min(x0, int(xx.min())); x1 = max(x1, int(xx.max()))
+        y1 = max(y1, int(ys.max()) + top)
+    if x1 < 0:
+        raise SystemExit(f"桌板上沿 y={top} 以下一个手臂像素都没有——手是不是没伸到桌上？")
+
+    rect = {"x": max(0, x0 - PAD), "y": top,
+            "w": min(canvas[0], x1 + PAD + 1) - max(0, x0 - PAD),
+            "h": min(canvas[1], y1 + PAD + 1) - top}
+    box = (rect["x"], rect["y"], rect["x"] + rect["w"], rect["y"] + rect["h"])
+
+    os.makedirs(a.out, exist_ok=True)
+    total = 0
+    for i, im in enumerate(imgs):
+        dst = os.path.join(a.out, f"snozzy_hand_{i:02d}.png")
+        im.crop(box).save(dst)
+        total += os.path.getsize(dst)
+
+    # 逐帧变化量：全是零就说明按键那几帧根本没动，白渲
+    changes = [int((masks[i] ^ masks[(i + 1) % len(masks)])[top:].sum())
+               for i in range(len(masks))]
+
+    json.dump({"canvas": list(canvas), "rect": rect, "frames": len(imgs)},
+              open(os.path.join(a.out, "hands.json"), "w"), indent=2)
+    print(f"桌板上沿 y={top}（手从这一行起画在桌子上面）")
+    print(f"手那一块 {rect['w']}×{rect['h']} @ ({rect['x']},{rect['y']})")
+    print(f"逐帧剪影变化 {changes}（有 0 就是那两帧一样，动画白做）")
+    print(f"HAND 共 {len(imgs)} 帧，{total / 1024:.0f} KB")
+
+
+if __name__ == "__main__":
+    main()

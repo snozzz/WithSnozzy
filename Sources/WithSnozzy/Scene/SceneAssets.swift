@@ -64,6 +64,19 @@ struct LegManifest: Codable {
     var canvasH: CGFloat { CGFloat(canvas.count > 1 ? canvas[1] : 1024) }
 }
 
+/// 打字的手的位置表，由 `Scripts/hand_frames.py` 生成。
+///
+/// 手要**画在桌面层上面**：桌子是盖在角色之上的（不然挡不住她的下半身），
+/// 手伸到键盘上就会被桌子吃掉。`rect.y` 是桌板变成完全不透明的那一行，
+/// 也就是"桌子开始挡人"的位置——以上那截小臂由角色图自己画。
+struct HandManifest: Codable {
+    var canvas: [Int] = [1536, 1024]
+    var rect = LegManifest.Rect(x: 0, y: 0, w: 0, h: 0)
+    var frames: Int = 0
+
+    var isUsable: Bool { frames > 0 && rect.w > 0 && rect.h > 0 }
+}
+
 /// 手绘素材的加载与持有。
 ///
 /// 素材缺失时 `isAvailable` 为 false，场景自动回落到程序化绘制的房间。
@@ -88,6 +101,9 @@ final class SceneAssets {
     /// 过渡帧。`legMoves[姿势][第几帧]`，中枢那一支是空的。
     private(set) var legMoves: [[NSImage]] = []
     private(set) var legs = LegManifest()
+    /// 打字的手。画在桌面层**之上**。
+    private(set) var handFrames: [NSImage] = []
+    private(set) var hands = HandManifest()
 
     /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
     /// 单独出贴片比整张重渲便宜三个数量级。
@@ -128,6 +144,7 @@ final class SceneAssets {
             snozzyBodyPhones = NSImage(contentsOf:
                 dir.appendingPathComponent("snozzy_body_headphones.png"))
             loadLegs(dir)
+            loadHands(dir)
 
             var found: [NSImage] = []
             for i in 0..<8 {
@@ -191,6 +208,20 @@ final class SceneAssets {
         legs.steps = complete ? m.steps : 0
         legStills = stills
         legMoves = moves
+    }
+
+    /// 打字的手。缺一帧就整套不要——播到缺的那一帧手会闪一下不见。
+    private func loadHands(_ dir: URL) {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("hands.json")),
+              let m = try? JSONDecoder().decode(HandManifest.self, from: data),
+              m.isUsable else { return }
+        let frames = (0..<m.frames).compactMap { i in
+            NSImage(contentsOf: dir.appendingPathComponent(
+                String(format: "snozzy_hand_%02d.png", i)))
+        }
+        guard frames.count == m.frames else { return }
+        hands = m
+        handFrames = frames
     }
 
     // MARK: - 布局计算

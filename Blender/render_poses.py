@@ -29,8 +29,8 @@ def render(legs, path):
     S.toon_materials(); S.room_lights()
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
-    P.seated(arm, sit=True, legs=legs)
-    S.place_hip(scene, arm)   # 胯部落在桌沿（0.673）稍下方
+    # 坐姿 → 落位 → 手放到键盘上。顺序由 `pose.settle` 保证
+    P.settle(scene, arm, legs=legs)
     lo, hi = S.frame_extent(scene, meshes)
     scene.render.filepath = os.path.join(OUT, path)
     bpy.ops.render.render(write_still=True)

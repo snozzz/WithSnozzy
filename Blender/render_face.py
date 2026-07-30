@@ -115,8 +115,7 @@ def build(variant=None):
     S.toon_materials(); S.room_lights()
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
-    P.seated(arm, sit=True, legs=P.HUB)
-    S.place_hip(scene, arm)
+    P.settle(scene, arm)
     if variant:
         for k, v in variant.get("shapes", {}).items():
             shape(meshes, k, v)

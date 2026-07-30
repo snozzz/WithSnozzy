@@ -39,7 +39,7 @@ macOS 上的 lofi 陪伴应用，对标《放松时光：与你共享 Lo-Fi 故�
                                     Scripts/cut_scene.py
                                               ↓
                                   Assets/room.png + desk.png
-运行时叠加顺序： room（窗洞挖空，塞程序化天空） → 角色 → desk
+运行时叠加顺序： room（窗洞挖空，塞程序化天空） → 角色 → desk → 手（敲键盘）
 ```
 
 三层都是 1536×1024、同一台相机，**像素级对齐**，所以运行时全部满幅绘制，
@@ -65,7 +65,14 @@ python3 Scripts/leg_metrics.py Assets       # 顺手量一下腿的横向占位
 # 面部贴片（视线/眼型/眨眼/嘴，13 块，约 1 分钟）
 blender --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm 输出目录
 python3 Scripts/face_patches.py 输出目录 --out Assets
+
+# 敲键盘的手（4 帧，只渲手臂）
+blender --background --factory-startup --python Blender/render_hands.py -- Snozzy.vrm 手部目录
+python3 Scripts/hand_frames.py 手部目录 --out Assets
 ```
+
+**改了手臂姿势，上面这几趟都得重跑**：手臂在缝线以上，姿势一变，
+所有姿势图和面部贴片共用的那张上半身就跟着变了。
 
 Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 
@@ -98,6 +105,20 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 驱动在 `FaceRig`：每 5.5 秒掷一次骰子挑个短表情演一下再收回，权重跟着
 心情 / 是否放歌 / 番茄钟阶段 / 困倦走。**贴片再多不驱动也是白搭**（第 23 条）。
 改完用 `--facestrip` 验。
+
+**敲键盘的手**（`Blender/render_hands.py` + `Character/TypingHands.swift`）：
+
+运行时的层序是 房间 → 角色 → **桌子** → **手**。手必须画在桌面层之后，
+因为桌子是盖在角色之上的（不然挡不住她的下半身），手伸到键盘上会被吃掉。
+素材也不能直接从角色图上裁那一块——里面还有她的大腿和裙子（第 26 条）。
+
+手的落点按**画面坐标**定（`pose.KEYS`）：键盘只存在于 2D 重绘图里，
+3D 场景里什么都没有。`pose.reach` 是解析的两段 IK，`pose.settle`
+把「坐姿 → 落位 → 摆手」的顺序固定下来（顺序错了手会偏，见第 27 条）。
+
+手**一直搭在键盘上**，工作时才动起来。让手时有时无就得给手臂也做过渡帧，
+而手臂在缝线以上、要连带换掉共用的上半身那张图，代价比这个功能本身大。
+改完用 `--handstrip` 验。
 
 ### 场景：灰模 → 重绘 → 切层
 
@@ -276,6 +297,22 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 第一版给了 6 Hz，看着像在抖；3 Hz 才对。而且纯正弦是等幅的，像机械开合，
 要再叠慢包络把幅度压得忽大忽小（实测峰值起伏 3.8 倍）。
 
+**26. 桌子画在角色之上，所以桌面上的动作都得再开一层。** 手伸到键盘上会被
+桌子完全吃掉（实测桌板从 y=602 起满不透明）。而且**不能直接裁角色图那一块**
+贴上去——那块里除了小臂还有她的大腿和裙子，贴上去就是一片裙子糊在桌面上。
+要的是"只有手臂"的一层：按**骨骼权重**挑顶点，加 Mask 修改器
+（`snozzy_lib.isolate_arms`）。不能按材质挑，手臂和大腿共用同一个皮肤材质。
+
+**27. 手是按画面坐标放的，所以必须先落位再摆手。** `place_hip` 会把整个骨架
+上下平移，先摆手会被一起挪走——第一次就这么错的，手腕在画面上差了七十多像素，
+怎么调参数都对不上。`pose.settle` 把「坐姿 → 落位 → 摆手」的顺序固定住了。
+另外手臂总长只有 0.43 米，够不着的目标会被 IK 夹到伸直，落点悄悄偏掉；
+`lean` 调大一点能换来一点行程。
+
+**28. 手腕的落点不是指尖的落点。** 按键盘正中（y 的 0.622）摆手腕，
+手指会往前伸出去一截、挂到键盘前沿外面，看着像两只手悬在桌子外。
+手腕要抬到键盘**后沿**（0.586），指尖才落在键上。
+
 ---
 
 ## 四、验证纪律
@@ -296,6 +333,10 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
   **一段时间里她的脸出现过多少种不同的样子**——把每档的表情压成一句描述
   再统计。现在 600 档里有 16 种，最高频的一种占 21.7%。
   统计要多采几百档，28 格那张图样本太少，换个墙钟结论就晃
+- **敲键盘的手对不对**：`--handstrip out.png`。它**连房间和桌子一起画**，
+  因为手的整个意义就是"盖在桌面层上面"，只画一层手看不出层序对没对。
+  同时报"手在动的时间占比"（专注 54%、平时 11%）。
+  逐帧剪影异或有 0 就是那两帧一样，动画白做——`hand_frames.py` 会报
 - **哪些表情变化根本看不见**：拿变体和中性脸做差、数变化像素，
   用 `blink_shut`（764 个）当尺子。脸只有八十来像素宽，
   低于百来个像素的变化基本白做——眉毛全军覆没就是这么发现的（第 20 条）
@@ -323,7 +364,7 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 - 明亮赛博朋克房间 + 程序化窗外城市（`CyberCity`，昼夜天气都活）
 - 角色：五套腿部姿势随机切换（**播真的过渡帧，不是淡入**）、
   表情节拍（视线/眼型/眨眼/嘴，跟着心情和番茄钟阶段走，说话时嘴会动）、
-  听歌时戴耳机（戴着也照样换腿）
+  **手搭在键盘上，工作时敲字**、听歌时戴耳机（戴着也照样换腿）
 - 底部控制条鼠标靠近才浮出
 - 窗口三形态（完整 / 迷你 / 桌宠）、菜单栏常驻
 
@@ -410,10 +451,11 @@ python3 Scripts/leg_frames.py /tmp/poses --out Assets && python3 Scripts/leg_met
 $B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/face
 python3 Scripts/face_patches.py /tmp/face --out Assets
 
-# 矢量版表情对照表 / 换腿过渡逐帧 / 表情节拍逐格
+# 矢量版表情对照表 / 换腿过渡逐帧 / 表情节拍逐格 / 打字逐帧
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot  /tmp/poses.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip  /tmp/legs.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip /tmp/face.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip /tmp/hands.png
 ```
 
 用户的机器：16GB M 系列 Mac，走 ClashX 代理（`127.0.0.1:7890`）。

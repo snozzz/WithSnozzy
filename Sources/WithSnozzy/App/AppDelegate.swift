@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runFaceStrip(path: path)
             return
         }
+        if let path = Snapshot.handStripPath {
+            Snapshot.runHandStrip(path: path)
+            return
+        }
         if let path = IconMaker.requestedPath {
             IconMaker.run(dir: path)
             return
