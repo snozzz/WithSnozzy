@@ -7,8 +7,9 @@ macOS 上的 lofi 陪伴应用，作者自用。女主叫 Snozzy。
 
 ## 硬约束
 
-- 包体 < 1GB、运行内存 < 500MB。当前包 11MB、闲时约 118MB
-  （内存要量了再写——NSImage 懒解码，刚启动量不准，得跑够一分钟）
+- 包体 < 1GB、运行内存 < 500MB。当前包 11MB、闲时 80–120MB
+  （内存要量了再写，而且只能给区间——NSImage 懒解码，
+  过渡帧要等真的用到才占内存，跑得越久越接近上限）
 - 零第三方 Swift 依赖。`Package.swift` + `Scripts/build_app.sh` 就是全部构建系统
 - 代码优化到极致，**同时**要方便维护
 - 每完成一个功能就 push 到 `git@github.com:snozzz/WithSnozzy.git`

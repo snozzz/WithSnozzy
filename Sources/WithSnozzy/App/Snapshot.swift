@@ -30,6 +30,19 @@ enum Snapshot {
         arg("--legstrip")
     }
 
+    /// 表情节拍的逐格平铺。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip out.png
+    /// ```
+    ///
+    /// "表情丰不丰富"是主观的，但它背后有个客观量：**一段时间里她的脸出现过
+    /// 多少种不同的样子**。这里按 `FaceRig.slot` 逐档采样真正的
+    /// `RenderedSnozzy`，把脸那一块裁出来平铺——格子之间长得都一样就是没做到。
+    static var faceStripPath: String? {
+        arg("--facestrip")
+    }
+
     private static func arg(_ name: String) -> String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
@@ -106,6 +119,74 @@ enum Snapshot {
         return nil
     }
 
+    static func runFaceStrip(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hasRenderedCharacter, !assets.facePatches.isEmpty else {
+            print("面部贴片没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        // 每档取保持段的中点：那是节拍演到最足的时刻。
+        //
+        // 起点必须**对齐到档位边界**，否则 `offset` 落不进保持段——
+        // 墙钟随便取一个值，`into` 就是任意相位，采出来全是中性脸。
+        // （腿那条踩过同一个坑：采样点和时间轴的分档没对上。）
+        let now = Date().timeIntervalSinceReferenceDate
+        let start = (now / FaceRig.slot).rounded(.down) * FaceRig.slot
+        let offset = FaceRig.fadeIn + FaceRig.dwell * 0.5
+
+        let renderer = ImageRenderer(content:
+            FaceStrip(assets: assets, start: start, offset: offset))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            print("快照渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+            // 图里只有 28 格，拿它统计"有几种脸"样本太少，换个墙钟就晃。
+            // 统计另外跑一遍，多采一些档位才稳。
+            let n = 600
+            var tally: [String: Int] = [:]
+            for i in 0..<n {
+                let t = start + Double(i) * FaceRig.slot + offset
+                let e = FaceRig.expression(t: t, playing: FaceStrip.playing(i),
+                                           mood: FaceStrip.mood(i), drowsy: 0,
+                                           working: FaceStrip.working(i), speaking: false)
+                tally[FaceStrip.describe(e), default: 0] += 1
+            }
+            let sorted = tally.sorted { $0.value > $1.value }
+            print("采样 \(n) 档，出现了 \(tally.count) 种不同的脸：")
+            for (k, v) in sorted {
+                // 不要用 String(format:) 的 %s：它要的是 C 字符串，
+                // 传 Swift String 轻则乱码重则崩（腿那边模拟脚本已经段错误过一次）。
+                let pct = String(format: "%.1f", Double(v) / Double(n) * 100)
+                print("  " + k + String(repeating: " ", count: max(1, 26 - k.count * 2))
+                      + pct + "%")
+            }
+            // 困倦那一档单独看：它会压过别的节拍，容易写错
+            var sleepy: [String: Int] = [:]
+            for i in 0..<n {
+                let t = start + Double(i) * FaceRig.slot + offset
+                let e = FaceRig.expression(t: t, playing: false, mood: 0.5,
+                                           drowsy: 0.9, working: false, speaking: false)
+                sleepy[FaceStrip.describe(e), default: 0] += 1
+            }
+            print("困倦（drowsy=0.9）时：" + sleepy.sorted { $0.value > $1.value }
+                .map { "\($0.key) \(Int(Double($0.value) / Double(n) * 100))%" }
+                .joined(separator: "  "))
+            exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
     static func run(path: String) {
         // 只用来拍角色和场景。
         //
@@ -132,6 +213,93 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+}
+
+/// 表情节拍的逐格平铺。只取脸那一块。
+private struct FaceStrip: View {
+    let assets: SceneAssets
+    let start: Double
+    /// 在每一档里往后取多少秒。取保持段的中点。
+    let offset: Double
+
+    static let count = 28
+    static let cols = 7
+    /// 脸那一块画多宽。脸在画布上只有八十来像素，得放大好几倍才看得清。
+    private static let faceW: CGFloat = 150
+
+    /// 每格换一组状态，一张图里同时看到不同心情/是否在放歌/是否在专注。
+    static func mood(_ i: Int) -> Double { [0.45, 0.62, 0.88, 0.55][i % 4] }
+    static func playing(_ i: Int) -> Bool { i % 3 == 0 }
+    static func working(_ i: Int) -> Bool { i % 5 < 2 }
+
+    /// 把一个表情压成一句可比对的描述，用来统计"出现了几种脸"。
+    static func describe(_ e: FaceExpression) -> String {
+        func lv(_ v: Double) -> String { v < 0.15 ? "" : v < 0.5 ? "轻" : "强" }
+        var parts: [String] = []
+        for (n, v) in [("眯眼笑", e.eyeSmile), ("柔和", e.eyeSoft),
+                       ("睁大", e.eyeWide), ("垂眼", e.eyeSad)] where !lv(v).isEmpty {
+            parts.append(n + lv(v))
+        }
+        for (n, v) in [("笑", e.mouthSmile), ("张嘴", e.mouthOpen),
+                       ("哦", e.mouthO)] where !lv(v).isEmpty {
+            parts.append(n + lv(v))
+        }
+        if e.lookY > 0.45 { parts.append("抬眼") }
+        if e.lookY < -0.45 { parts.append("低头") }
+        return parts.isEmpty ? "中性" : parts.joined(separator: "+")
+    }
+
+    var body: some View {
+        let canvasW = assets.legs.canvasW, canvasH = assets.legs.canvasH
+        // 脸那一块，从贴片清单里推：取所有贴片的并集再往外放宽
+        let rects = assets.face.patches.values
+        let x0 = CGFloat(rects.map(\.x).min() ?? 660) - 16
+        let y0 = CGFloat(rects.map(\.y).min() ?? 330) - 22
+        let x1 = CGFloat(rects.map { $0.x + $0.w }.max() ?? 780) + 16
+        let y1 = CGFloat(rects.map { $0.y + $0.h }.max() ?? 410) + 16
+        let scale = Self.faceW / (x1 - x0)
+        let cw = (x1 - x0) * scale, ch = (y1 - y0) * scale
+        let rows = (Self.count + Self.cols - 1) / Self.cols
+
+        VStack(spacing: 2) {
+            ForEach(0..<rows, id: \.self) { row in
+                HStack(spacing: 2) {
+                    ForEach(0..<Self.cols, id: \.self) { col in
+                        let i = row * Self.cols + col
+                        if i < Self.count {
+                            cell(i, canvasW: canvasW * scale, canvasH: canvasH * scale,
+                                 crop: CGRect(x: x0 * scale, y: y0 * scale,
+                                              width: cw, height: ch))
+                        } else {
+                            Color.clear.frame(width: cw, height: ch)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(white: 0.12))
+    }
+
+    private func cell(_ i: Int, canvasW: CGFloat, canvasH: CGFloat,
+                      crop: CGRect) -> some View {
+        let t = start + Double(i) * FaceRig.slot + offset
+        var pose = SnozzyRig.pose(time: t, kick: 0, playing: Self.playing(i),
+                                  mood: Self.mood(i))
+        pose.blink = 0                      // 挡掉眨眼，否则半数格子只是闭着眼
+        let face = FaceRig.expression(t: t, playing: Self.playing(i),
+                                      mood: Self.mood(i), drowsy: 0,
+                                      working: Self.working(i), speaking: false)
+        return ZStack(alignment: .topLeading) {
+            Color(white: 0.85)
+            RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
+                           headphones: false, t: t)
+        }
+        .frame(width: canvasW, height: canvasH)
+        .offset(x: -crop.minX, y: -crop.minY)
+        .frame(width: crop.width, height: crop.height, alignment: .topLeading)
+        .clipped()
     }
 }
 
@@ -193,6 +361,9 @@ private struct LegStrip: View {
             Color(white: 0.85)
             RenderedSnozzy(assets: assets, palette: .day,
                            pose: SnozzyRig.pose(time: t, kick: 0, playing: false),
+                           face: FaceRig.expression(t: t, playing: false, mood: 0.5,
+                                                    drowsy: 0, working: false,
+                                                    speaking: false),
                            headphones: false, t: t)
         }
         .frame(width: canvasW, height: canvasH)

@@ -11,10 +11,11 @@ macOS 上的 lofi 陪伴应用，对标《放松时光：与你共享 Lo-Fi 故�
 
 **硬约束**（用户反复强调过）：
 
-- 包体 < 1GB，运行内存 < 500MB。目前包 11MB，闲时内存约 118MB
-  （**这个数要量了再写**。之前一直写着 66MB，实测早就不对了——
-  改换腿之前那一版就已经 107MB。NSImage 是**懒解码**的，
-  刚启动量不到真实占用，要跑够一分钟等素材都画过一遍）
+- 包体 < 1GB，运行内存 < 500MB。目前包 11MB，闲时内存 **80–120MB**
+  （**这个数要量了再写，而且只能给区间**。NSImage 是**懒解码**的，
+  一张图要等真的画过一次才占内存——换腿的过渡帧平均两分多钟才用到一支，
+  所以刚跑起来是 78MB，跑久了各支陆续解码上去才到 120MB 左右。
+  文档里一直写的 66MB 实测早就不对了，改换腿之前那一版就已经 107MB。）
 - **代码优化到极致，同时要方便维护**——后者是后来补的，优先级同样高
 - 零第三方 Swift 依赖。`Package.swift` + `Scripts/build_app.sh` 就是全部构建系统
 - 每完成一个功能就 push 到 `git@github.com:snozzz/WithSnozzy.git`
@@ -61,7 +62,7 @@ blender --background --factory-startup --python Blender/render_layers.py -- Snoz
 python3 Scripts/leg_frames.py 输出目录 --out Assets
 python3 Scripts/leg_metrics.py Assets       # 顺手量一下腿的横向占位
 
-# 面部贴片（眨眼/视线/嘴角）
+# 面部贴片（视线/眼型/眨眼/嘴，13 块，约 1 分钟）
 blender --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm 输出目录
 python3 Scripts/face_patches.py 输出目录 --out Assets
 ```
@@ -85,6 +86,18 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 素材按 `legs.json` 的 `seam`（y=600）切成上下两半：**缝线以上所有帧共用一张**
 （同一台相机、同一个上半身姿势）。不切的话五十来张整幅图是 30MB 包体、
 200MB 内存。顺带解决了一个老问题——原来戴耳机时盖的是一整张图，腿是冻住的。
+
+**表情**（`Blender/render_face.py` 的 `VARIANTS` + `Character/FaceRig.swift`）：
+
+贴片分 `eye` 和 `mouth` 两个通道。眼通道是**优先级栈**（视线 → 眼型 → 眨眼），
+跨通道必须不相交——这两条都是硬约束，见第 22 条，切图脚本会自己检查。
+
+**没有眉毛**：她的刘海把眉毛盖住了，五个 `Fcl_BRW_*` 形态键实测全部看不见
+（第 20 条）。所以表情的信息量八成靠眼睛，嘴是配角而且必须过驱（第 21 条）。
+
+驱动在 `FaceRig`：每 5.5 秒掷一次骰子挑个短表情演一下再收回，权重跟着
+心情 / 是否放歌 / 番茄钟阶段 / 困倦走。**贴片再多不驱动也是白搭**（第 23 条）。
+改完用 `--facestrip` 验。
 
 ### 场景：灰模 → 重绘 → 切层
 
@@ -207,6 +220,39 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 取帧中点（`+ 0.5`）就没有这个问题。真实运行不受影响：`TimelineView`
 给的时刻本来就是任意的，不会正好落在边界。
 
+**20. 她的刘海把眉毛盖住了，眉毛做不了表情。** 动漫脸的情绪大半在眉毛上，
+所以"表情呆板"第一反应就是去加眉毛——VRM 自带 `Fcl_BRW_*` 五个形态键。
+全试过，变化像素只有 39–83 个（`blink_shut` 是 764），超过阈值 40 的
+只有 3–5 个，等于看不见。**过驱到 3.0、6.0 也没用**：数值反而更小
+（x1=40、x3=26、x6=35），因为眉毛是往刘海**后面**动。
+这条不是调参能救的，除非改发型或者把脸拍大。
+脸只有八十来像素宽，表情的信息量八成得从眼睛出。
+
+**21. 嘴的形态键必须过驱，但别照着"变化像素越多越好"调。**
+`slider_max` 默认是 1.0，不先抬上限赋再大的值也会被夹回去。
+`Fcl_MTH_Joy` 给 0.8 只有 94 个像素变化，给 3.0 是 389——数值最漂亮，
+但画出来是**张大嘴在喊**。1.3 左右才是"看得出在笑"又不失态的位置。
+可见度只能当下限，好不好看得眼睛判——我照着指标调过一轮，直接跑偏。
+另外这个模型没有闭嘴的笑（`MTH_Up` 26 个像素、`MTH_Fun` 27 个，几乎不动）。
+
+**22. 贴片是"整块覆盖"，所以叠放顺序和通道不重叠都是硬约束。**
+贴片存的是那块 bbox 里的**全部**像素，后画的会连带把先画的抹掉。
+
+- 眼通道实测是**套娃**：`look ⊂ 眼型 ⊂ blink`。顺序必须是
+  视线 → 眼型 → 眨眼（眼皮在眼球前面）。原来是反的，而 `lookX` 常年在
+  ±0.9 之间漂，于是**她一看向侧面眨眼就被抹掉一半**——眨眼是"活着"
+  最主要的信号，这个 bug 白白吃掉了它。
+- 跨通道（眼 vs 嘴）必须**完全不相交**。它们本来就差着十行，
+  相交纯粹是 bbox 那 6 像素余量跨过了缝。`face_patches.py` 现在自己
+  按数据找那条缝再把各通道夹在自己一侧，实测代价 0 个像素。
+
+**23. 贴片再多，不驱动也是白搭。** 原来的表情几乎不变：`smile` 的不透明度是
+`(0.22 + mood×0.5 − 0.35)/0.65`，而 `mood` 平时在 0.40…0.66，算出来只有
+0.11…0.31；`happyEyes` 要 `mood > 0.82` 才出现，也就是只在番茄钟刚完成
+那一百秒里。于是九成以上的时间她脸上只有眨眼和眼球漂移。
+所以 `FaceRig` 做的是**节拍**：每 5.5 秒掷一次骰子挑个短表情演一下再收回，
+权重跟着状态走。`rest` 的权重给得最高——一直在演比不演更假，要留白。
+
 ---
 
 ## 四、验证纪律
@@ -223,6 +269,13 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 - 过渡帧动没动、匀不匀：逐帧算剪影异或的像素数。有零就是卡住了，
   有尖峰就是跳了。别拿"最低点的坐标"当锚——它会在两只脚之间跳来跳去，
   而且只动一条腿的姿势（tucked）根本量不到
+- **表情丰不丰富**：`--facestrip out.png`。背后的客观量是
+  **一段时间里她的脸出现过多少种不同的样子**——把每档的表情压成一句描述
+  再统计。现在 600 档里有 16 种，最高频的一种占 21.7%。
+  统计要多采几百档，28 格那张图样本太少，换个墙钟结论就晃
+- **哪些表情变化根本看不见**：拿变体和中性脸做差、数变化像素，
+  用 `blink_shut`（764 个）当尺子。脸只有八十来像素宽，
+  低于百来个像素的变化基本白做——眉毛全军覆没就是这么发现的（第 20 条）
 - **换腿到底是"挪过去"还是"虚化过去"**：`--legstrip out.png`。
   它按时间轴采样**真正的 `RenderedSnozzy`**，把一整段过渡平铺成一张图。
   截屏抓不到这个——一段过渡只有 1.5 秒，`screencapture` 一张就要两三百毫秒。
@@ -245,7 +298,8 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 - 环境音混音器、番茄钟、待办、本地音乐库
 - 音乐源：电台 / 本地 / **音乐 App（AppleScript 遥控）** / **让位模式**
 - 明亮赛博朋克房间 + 程序化窗外城市（`CyberCity`，昼夜天气都活）
-- 角色：五套腿部姿势随机切换（**播真的过渡帧，不是淡入**）、眨眼/视线/嘴角、
+- 角色：五套腿部姿势随机切换（**播真的过渡帧，不是淡入**）、
+  表情节拍（视线/眼型/眨眼/嘴，跟着心情和番茄钟阶段走，说话时嘴会动）、
   听歌时戴耳机（戴着也照样换腿）
 - 底部控制条鼠标靠近才浮出
 - 窗口三形态（完整 / 迷你 / 桌宠）、菜单栏常驻
@@ -329,9 +383,14 @@ $B --background --factory-startup --python Blender/render_poses.py  -- Snozzy.vr
 $B --background --factory-startup --python Blender/render_layers.py -- Snozzy.vrm /tmp/poses
 python3 Scripts/leg_frames.py /tmp/poses --out Assets && python3 Scripts/leg_metrics.py Assets
 
-# 表情对照表 / 换腿过渡的逐帧平铺
-dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot /tmp/poses.png
-dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip /tmp/strip.png
+# 面部贴片重出（改完 render_face.py 的 VARIANTS 之后）。约 1 分钟
+$B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/face
+python3 Scripts/face_patches.py /tmp/face --out Assets
+
+# 矢量版表情对照表 / 换腿过渡逐帧 / 表情节拍逐格
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot  /tmp/poses.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip  /tmp/legs.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip /tmp/face.png
 ```
 
 用户的机器：16GB M 系列 Mac，走 ClashX 代理（`127.0.0.1:7890`）。

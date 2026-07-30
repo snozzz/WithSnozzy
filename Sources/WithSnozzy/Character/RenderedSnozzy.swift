@@ -17,6 +17,8 @@ struct RenderedSnozzy: View, Equatable {
     let assets: SceneAssets
     let palette: Palette
     let pose: Pose
+    /// 表情。由 `FaceRig` 从时间和状态推出来。
+    let face: FaceExpression
     /// 戴不戴耳机。听歌时她陪你一起听。
     let headphones: Bool
     /// 当前时间。腿部姿势由它推导。
@@ -35,8 +37,9 @@ struct RenderedSnozzy: View, Equatable {
             && LegPose.at(a.t, in: a.assets.legs) == LegPose.at(b.t, in: b.assets.legs)
             // 眨眼是逐帧变化的，挡掉就不会眨了
             && abs(a.pose.blink - b.pose.blink) < 0.02
-            && abs(a.pose.lookX - b.pose.lookX) < 0.02
-            && abs(a.pose.happyEyes - b.pose.happyEyes) < 0.02
+            // 表情也是逐帧变的。这里挡掉的话节拍就演不出来——
+            // 逐字段比太啰嗦，`FaceExpression` 直接是 Equatable
+            && a.face == b.face
     }
 
     var body: some View {
@@ -46,8 +49,9 @@ struct RenderedSnozzy: View, Equatable {
                 character(w: w, h: h)
                     // 和房间共用一套时段染色，否则她永远是正午的亮度
                     .colorMultiply(PaintedRoom.ambient(palette).color)
-                // 眨眼、视线、嘴角。贴片和底图共用同一台相机，直接盖上即可。
-                FaceOverlay(assets: assets, pose: pose, palette: palette, width: w, height: h)
+                // 眨眼、视线、眼型、嘴。贴片和底图共用同一台相机，直接盖上即可。
+                FaceOverlay(assets: assets, pose: pose, face: face,
+                            palette: palette, width: w, height: h)
             }
             .frame(width: w, height: h, alignment: .topLeading)
             // 呼吸、摇摆、点头对**整个人**一起做。分头做的话上下半身、

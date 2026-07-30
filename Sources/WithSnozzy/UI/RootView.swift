@@ -126,6 +126,15 @@ private struct SceneStack: View {
                                                                 playing: state.isPlaying,
                                                                 mood: state.mood,
                                                                 drowsy: state.drowsy),
+                                           // 表情单独一层：番茄钟阶段和"正在说话"
+                                           // 都会改她的脸，这些 SnozzyRig 不知道
+                                           face: FaceRig.expression(
+                                               t: t,
+                                               playing: state.isPlaying,
+                                               mood: state.mood,
+                                               drowsy: state.drowsy,
+                                               working: state.focus.phase == .work,
+                                               speaking: state.chatter.current != nil),
                                            headphones: state.isPlaying,
                                            t: t)
                                 .equatable()
