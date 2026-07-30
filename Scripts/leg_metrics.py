@@ -11,6 +11,7 @@
 """
 import argparse
 import glob
+import json
 import os
 
 import numpy as np
@@ -56,15 +57,31 @@ def main():
     a = ap.parse_args()
     knee_y, ankle_y = a.rows
 
-    paths = sorted(glob.glob(os.path.join(a.src, "snozzy_*.png")))
-    paths = [p for p in paths if "trans" not in os.path.basename(p)]
+    # 素材目录里存的是切好的腿块（`leg_frames.py` 的产物），取样行要减掉
+    # 它在画布上的纵向偏移；渲染输出目录里是整画幅图，直接用画布坐标。
+    manifest = os.path.join(a.src, "legs.json")
+    if os.path.exists(manifest):
+        m = json.load(open(manifest))
+        dy = m["rect"]["y"]
+        paths = [os.path.join(a.src, f"snozzy_legs_{p}.png") for p in m["poses"]]
+        paths = [p for p in paths if os.path.exists(p)]
+        strip = len("snozzy_legs_")
+    else:
+        dy = 0
+        paths = sorted(glob.glob(os.path.join(a.src, "snozzy_*.png")))
+        paths = [p for p in paths if "trans" not in os.path.basename(p)]
+        strip = len("snozzy_")
     if not paths:
-        raise SystemExit(f"{a.src} 里没有 snozzy_*.png")
+        raise SystemExit(f"{a.src} 里没有腿部素材")
+    knee_y -= dy
+    ankle_y -= dy
 
     print(f"{'姿势':<12} {'膝行外宽':>9} {'踝行外宽':>9} {'收窄':>7}   判定")
     for p in paths:
-        name = os.path.basename(p)[7:-4]
+        name = os.path.basename(p)[strip:-4]
         mask = np.asarray(Image.open(p).convert("RGBA"))[:, :, 3] > 96
+        if not 0 <= knee_y < mask.shape[0] or not 0 <= ankle_y < mask.shape[0]:
+            raise SystemExit(f"取样行超出图高（{mask.shape[0]}）——--rows 是画布坐标")
         knee, _ = width(mask, knee_y)
         ankle, _ = width(mask, ankle_y)
         if knee is None or ankle is None:

@@ -11,7 +11,10 @@ macOS 上的 lofi 陪伴应用，对标《放松时光：与你共享 Lo-Fi 故�
 
 **硬约束**（用户反复强调过）：
 
-- 包体 < 1GB，运行内存 < 500MB。目前包 11MB，闲时内存约 66MB
+- 包体 < 1GB，运行内存 < 500MB。目前包 11MB，闲时内存约 118MB
+  （**这个数要量了再写**。之前一直写着 66MB，实测早就不对了——
+  改换腿之前那一版就已经 107MB。NSImage 是**懒解码**的，
+  刚启动量不到真实占用，要跑够一分钟等素材都画过一遍）
 - **代码优化到极致，同时要方便维护**——后者是后来补的，优先级同样高
 - 零第三方 Swift 依赖。`Package.swift` + `Scripts/build_app.sh` 就是全部构建系统
 - 每完成一个功能就 push 到 `git@github.com:snozzz/WithSnozzy.git`
@@ -50,7 +53,7 @@ macOS 上的 lofi 陪伴应用，对标《放松时光：与你共享 Lo-Fi 故�
 58 个形态键、20 个未合并的材质。
 
 ```bash
-# 五套腿部姿势 + 姿势之间的过渡帧（49 张，约 2 分 20 秒）
+# 五套腿部姿势 + 姿势之间的过渡帧（37 张，约 1 分 50 秒）
 blender --background --factory-startup --python Blender/render_poses.py -- Snozzy.vrm 输出目录
 # 戴耳机那一层（要和上面渲进同一个目录）
 blender --background --factory-startup --python Blender/render_layers.py -- Snozzy.vrm 输出目录
@@ -74,6 +77,10 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 换姿势**不是交叉淡入**，是播真的中间帧。所有过渡都经过 `HUB`（并膝那一套），
 于是 5 套姿势只要 4 段序列而不是 20 段；A → B 播成「A 收回中枢」倒放接
 「中枢摆到 B」正放，物理上也对。运行时那一半在 `LegPose.swift`。
+
+每支 8 张中间帧、每帧 1/12 秒 → 一支 0.75 秒、姿势→姿势 1.5 秒。
+**帧数受帧长约束，不是越多越好**——见第 18 条。
+改完用 `--legstrip` 验，判据在第四节。
 
 素材按 `legs.json` 的 `seam`（y=600）切成上下两半：**缝线以上所有帧共用一张**
 （同一台相机、同一个上半身姿势）。不切的话五十来张整幅图是 30MB 包体、
@@ -181,6 +188,25 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 "不一致"像素——全是假的。要么用 `paste` 直接拷块（两块不重叠时就该这样），
 要么比**预乘后**的值，那才是真正上屏的东西。这一条让我差点以为切图错了。
 
+**18. 逐帧动画的帧长必须比 app 的动画 tick 长，"相等"都不行。** 过渡帧是被
+`TimelineView(.animation(minimumInterval:))` 采样的，空闲档 tick 是 1/15 秒。
+
+- 帧长 0.055（≈18fps）**比 tick 短** → 12 张只显示 10 张，而且丢得不均匀
+- 帧长 1/15 **正好等于 tick** → 理想情况不重不漏，但余量为零。模拟 5% 的
+  掉帧卡顿，平均每次换腿跳掉 0.27 帧，最坏一次跨两帧
+- 帧长 1/12 **比 tick 长四分之一** → 每帧稳定占 1~2 个 tick，同样卡顿下一帧不漏
+
+所以帧数不是越多越好：帧长被 tick 卡在 1/12 秒，再多渲只会把一次换腿拖长。
+现在是每支 8 张、姿势→姿势 1.5 秒。
+
+**19. 采样时间轴不要正好踩在帧边界上。** 时间轴是墙钟
+（`timeIntervalSinceReferenceDate`，8×10⁸ 量级），双精度在那个量级的分辨率是
+1e-7，而 `into` 还是两个大数相减来的。边界上 `Int(into / frameTime)` 有一半
+会落到前一帧——`--legstrip` 第一版按 `start + i*frameTime` 采样，25 格里
+11 格是重复的、5 帧根本没出现，**我差点据此以为过渡没生效**。
+取帧中点（`+ 0.5`）就没有这个问题。真实运行不受影响：`TimelineView`
+给的时刻本来就是任意的，不会正好落在边界。
+
 ---
 
 ## 四、验证纪律
@@ -197,6 +223,11 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 - 过渡帧动没动、匀不匀：逐帧算剪影异或的像素数。有零就是卡住了，
   有尖峰就是跳了。别拿"最低点的坐标"当锚——它会在两只脚之间跳来跳去，
   而且只动一条腿的姿势（tucked）根本量不到
+- **换腿到底是"挪过去"还是"虚化过去"**：`--legstrip out.png`。
+  它按时间轴采样**真正的 `RenderedSnozzy`**，把一整段过渡平铺成一张图。
+  截屏抓不到这个——一段过渡只有 1.5 秒，`screencapture` 一张就要两三百毫秒。
+  两个判据：相邻格不能有完全相同的（=丢帧）；**每格腿的面积要基本恒定**
+  （实测 ±6%）——交叉淡入时中段会有两套腿同时半透明，面积接近翻倍
 - 分层合成对没对上：把上半身和腿拼回去，和原整幅图比预乘后的像素。
   中枢那一套必须**完全为零**（它的上半身就是切出来的那张），这条一错整个切图就是错的
 
@@ -292,11 +323,15 @@ open dist/WithSnozzy.app
 # 场景重出（改完 blocking.py 之后）
 python3 Scripts/blocking.py && cp Art/blocking/layout.png Art/blocking_for_repaint.png
 
-# 角色重出（改完 pose.py 的 LEG_POSES 之后）。约 2 分半
+# 角色重出（改完 pose.py 的 LEG_POSES 之后）。约 2 分钟
 B=/Applications/Blender.app/Contents/MacOS/Blender
 $B --background --factory-startup --python Blender/render_poses.py  -- Snozzy.vrm /tmp/poses
 $B --background --factory-startup --python Blender/render_layers.py -- Snozzy.vrm /tmp/poses
 python3 Scripts/leg_frames.py /tmp/poses --out Assets && python3 Scripts/leg_metrics.py Assets
+
+# 表情对照表 / 换腿过渡的逐帧平铺
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot /tmp/poses.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip /tmp/strip.png
 ```
 
 用户的机器：16GB M 系列 Mac，走 ClashX 代理（`127.0.0.1:7890`）。

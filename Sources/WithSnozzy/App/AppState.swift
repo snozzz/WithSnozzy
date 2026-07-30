@@ -454,6 +454,9 @@ final class AppState {
     /// - 播放中 24fps —— 要跟上底鼓的点头，帧率低了会看出顿挫。
     /// - 空闲 15fps  —— 只剩呼吸和眨眼这种慢动作，15fps 完全看不出来。
     /// - 省电 10fps  —— 明显省电，代价是动作略有台阶感。
+    ///
+    /// 改空闲那一档要连着看 `LegPose.frameTime`：换腿的过渡帧是被这个间隔
+    /// 采样的，帧长必须**比它长**才不丢帧——相等都不行，一次卡顿就跳帧。
     var frameInterval: Double {
         if lowPower { return 1.0 / 10.0 }
         return isPlaying ? 1.0 / 24.0 : 1.0 / 15.0

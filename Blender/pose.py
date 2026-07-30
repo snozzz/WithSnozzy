@@ -114,7 +114,12 @@ HUB = "together"
 # 一段过渡（中枢 ↔ 某套姿势）的中间帧数，两端的成品姿势不计。
 # 这个数字三处要一致：这里渲多少张、`Scripts/leg_frames.py` 切多少张、
 # `LegPose.swift` 播多少张。所以只写在这里，另两处从 legs.json 读。
-TRANS_STEPS = 11
+#
+# 为什么是 8 而不是更多：帧停留时长必须**大于** app 的动画 tick，
+# 否则会不均匀地丢帧（见 `LegPose.frameTime`）。tick 是 1/15 秒，
+# 于是帧长取 1/12 秒；再多渲几张只会把一次换腿拖到两秒以上。
+# 8 张 × 1/12 秒 = 一支 0.75 秒，姿势→姿势 1.5 秒，正好是真人的节奏。
+TRANS_STEPS = 8
 
 
 def blend_legs(a, b, t):

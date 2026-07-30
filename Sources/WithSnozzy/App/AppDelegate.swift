@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.run(path: path)
             return
         }
+        if let path = Snapshot.legStripPath {
+            Snapshot.runLegStrip(path: path)
+            return
+        }
         if let path = IconMaker.requestedPath {
             IconMaker.run(dir: path)
             return
