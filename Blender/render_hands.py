@@ -20,9 +20,9 @@ import snozzy_lib as S, pose as P
 VRM, OUT = sys.argv[-2], sys.argv[-1]
 os.makedirs(OUT, exist_ok=True)
 
-# 2D 桌面上沿在画布上的位置（0…1）。实测 desk.png 从 y=602 起满不透明，
-# 602/1024 = 0.588。挡板按这一行反推位置，换了重绘图要重新量。
-DESK_TOP_V = 602 / 1024
+# 切在离相机多远。手腕实测 2.39、肘 2.56，桌沿在两者之间。
+# 这个数是拉梯度看出来的：太大袖子留在桌上（穿模），太小连手腕一起切掉。
+CUT_DEPTH = float(os.environ.get("CUT_DEPTH", 2.44))
 
 from bpy_extras.object_utils import world_to_camera_view
 
@@ -37,22 +37,18 @@ for i, (press, first) in enumerate(P.TYPING_FRAMES):
     P.settle(scene, arm, press=press, side_first=first)
     S.isolate_arms(meshes)          # 只留手臂，别的顶点遮掉
 
-    # 摆一块和 2D 桌面对齐的水平挡板，替桌子挡住袖子和肘。
+    # 按**深度**切掉桌沿后面那一段手臂。
     #
-    # 桌面高度要按**指尖**取，不是手腕：手腕比指尖高五公分，照手腕摆挡板
-    # 会把手指整个削掉（试过，只剩指尖尖还露在键上）。指尖才是碰到键的那一层。
-    tips = [(arm.matrix_world @ arm.pose.bones[f"J_Bip_{s}_{f}3"].head).z
-            for s in ("L", "R")
-            for f in ("Index", "Middle", "Ring", "Little")
-            if f"J_Bip_{s}_{f}3" in arm.pose.bones]
-    z = min(tips) - 0.015
-    S.desk_occluder(scene, DESK_TOP_V, z)
-    cut = z
+    # 不能用水平挡板（"桌面"）来切：袖子的 z 是 0.655–0.79、手是 0.698–0.756，
+    # **两者在高度上是重叠的**，水平面切不开——摆低了什么都挡不住，
+    # 摆高了连手一起削掉。它们真正的区别在深度：袖子挂在肘上（2.5），
+    # 手伸在前面（2.39）。所以挡板要正对镜头，按深度切。
+    S.depth_clip(scene, CUT_DEPTH)
 
     scene.render.filepath = os.path.join(OUT, f"hand_{i:02d}.png")
     bpy.ops.render.render(write_still=True)
-    print(f"HAND {i:02d} press={press} first={first}  桌面高度 {z:.3f}")
+    print(f"HAND {i:02d} press={press} first={first}  切深度 {CUT_DEPTH}")
 
 with open(os.path.join(OUT, "hands_meta.json"), "w") as f:
-    json.dump({"frames": len(P.TYPING_FRAMES), "desk_height": cut}, f, indent=2)
+    json.dump({"frames": len(P.TYPING_FRAMES), "cut_depth": CUT_DEPTH}, f, indent=2)
 print(f"HAND 共 {len(P.TYPING_FRAMES)} 帧")

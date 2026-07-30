@@ -335,45 +335,6 @@ def isolate_arms(meshes, sides=("L", "R"), cutoff=0.5):
         m.vertex_group = "_ARMS"
 
 
-def desk_occluder(scene, top_v, height, depth=2.5, width=6.0):
-    """按 2D 桌面的上沿，在 3D 里摆一块**水平**挡板，替 2D 的桌子挡住东西。
-
-    手要画在桌面之上，但只有真的搭在桌面上那一段才该画。她那两只蓬蓬袖挂在
-    肘上、垂到画面 y≈660，而肘在桌沿**后面**——袖子被 2D 的桌板挡着才对，
-    一起画上去就是穿模（看着像小臂插进了桌子）。
-
-    挡板必须是**水平**的，不能是正对镜头的那种：桌面是个平面，
-    它在画面上越往下、深度越近，所以"该切在多深"是随行变化的。
-    用一块固定深度的挡板切，上边切多了、下边切少了，两头都不对。
-
-    位置是**从画面反推**的：桌面只存在于 2D 重绘图里，3D 场景里什么都没有。
-    高度取手腕高度（手搭在桌面上），上沿则由「相机穿过画面第 `top_v` 行的
-    射线打到这个高度」定出来——和 `place_hip`、`screen_point` 一个路数。
-
-    挡板用 Holdout 材质：自己不显影，但遮住背后的东西并把 alpha 写成 0。
-    比走合成器省事得多——Blender 5 把 `scene.node_tree`、
-    `CompositorNodeMapRange`、`OutputFile.base_path` 全改了名字。
-    """
-    cam = scene.camera
-    o = cam.matrix_world.translation
-    f, sw = cam.data.lens, cam.data.sensor_width
-    rx, ry = scene.render.resolution_x, scene.render.resolution_y
-    d = Vector((0.0, (0.5 - top_v) * sw * ry / rx, -f)).normalized()
-    d = cam.matrix_world.to_3x3() @ d
-    back = o + d * ((height - o.z) / d.z)     # 桌面上沿在 3D 里的位置
-
-    mesh = bpy.data.meshes.new("Desk")
-    # 从上沿往镜头方向铺开（她面朝 −Y，所以镜头那边是 y 更小的一侧）
-    mesh.from_pydata([(-width, back.y, height), (width, back.y, height),
-                      (width, back.y - depth, height), (-width, back.y - depth, height)],
-                     [], [(0, 1, 2, 3)])
-    mesh.update()
-    plane = bpy.data.objects.new("Desk", mesh)
-    scene.collection.objects.link(plane)
-    _holdout(plane)
-    return plane
-
-
 def _holdout(obj):
     mat = bpy.data.materials.new("Holdout")
     mat.use_nodes = True
@@ -392,9 +353,16 @@ def depth_clip(scene, dist):
     她那两只蓬蓬袖挂在肘上、实测深度 2.5，手腕是 2.39——袖子在桌沿后面，
     一起画到桌面上就是穿模（看着像小臂插进了桌子）。
 
-    这条分界既不是"画面上哪一行"（袖子和手指落在同样的行上），
-    也不是"身上哪一段"（袖子和手腕同属小臂那根骨头，按骨骼挑分不开），
-    只能按**深度**切。
+    这条分界试错过三轮，前两条都不成立：
+
+    - **不是"画面上哪一行"**——袖子和手指落在同样的行上
+    - **不是"身上哪一段"**——袖子和手腕同属小臂那根骨头，按骨骼挑分不开
+      （实测把大臂剔掉，缝线以下的像素一个没少）
+    - **也不能用水平的"桌面"来切**——袖子的 z 是 0.655–0.79、手是 0.698–0.756，
+      两者在**高度上是重叠的**：摆低了什么都挡不住，摆高了连手一起削掉
+
+    真正的区别在**深度**：袖子挂在肘上（2.5），手伸在前面（2.39）。
+    所以挡板正对镜头、按深度切。
 
     挡板用 Holdout 材质：它自己不显影，但会遮住背后的东西并把 alpha 写成 0。
     比走合成器的深度通道省事得多——Blender 5 的合成器把
@@ -407,14 +375,7 @@ def depth_clip(scene, dist):
     plane = bpy.context.object
     plane.location = cam.matrix_world.translation + fwd * dist
     plane.rotation_euler = cam.rotation_euler
-    mat = bpy.data.materials.new("Holdout")
-    mat.use_nodes = True
-    nt = mat.node_tree
-    nt.nodes.clear()
-    hold = nt.nodes.new("ShaderNodeHoldout")
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    nt.links.new(hold.outputs[0], out.inputs["Surface"])
-    plane.data.materials.append(mat)
+    _holdout(plane)
     return plane
 
 
