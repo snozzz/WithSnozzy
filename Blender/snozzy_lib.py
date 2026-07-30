@@ -290,8 +290,15 @@ def room_lights(preset="bright"):
         obj.rotation_euler = v.to_track_quat('Z', 'Y').to_euler()
 
 
-# 手臂那条链上的所有骨骼。手要单独渲一层，靠它挑顶点。
-ARM_BONES = ["UpperArm", "LowerArm", "Hand"] + [
+# 要画在桌面之上的那一段手臂：**小臂和手，不含大臂**。
+#
+# 大臂和那两只蓬蓬袖必须排除掉，否则就穿模了：肘部实测在深度 2.54、
+# 画面 y≈531–556，也就是**在桌沿后面**；而手腕在 2.39，在桌沿前面。
+# 把大臂一起画到桌面上，袖子就会糊在桌板上，看着像手臂插进了桌子。
+#
+# 换句话说这一层的分界不是"画面上哪一行"，而是"身上哪一段"——
+# 肘往前的小臂搭在桌面上，肘往后的都在桌子后面。这条正好和解剖对上。
+ARM_BONES = ["LowerArm", "Hand"] + [
     f"{finger}{i}" for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
     for i in (1, 2, 3)
 ]
@@ -326,6 +333,89 @@ def isolate_arms(meshes, sides=("L", "R"), cutoff=0.5):
         vg.add(keep, 1.0, 'REPLACE')
         m = o.modifiers.new("ArmMask", 'MASK')
         m.vertex_group = "_ARMS"
+
+
+def desk_occluder(scene, top_v, height, depth=2.5, width=6.0):
+    """按 2D 桌面的上沿，在 3D 里摆一块**水平**挡板，替 2D 的桌子挡住东西。
+
+    手要画在桌面之上，但只有真的搭在桌面上那一段才该画。她那两只蓬蓬袖挂在
+    肘上、垂到画面 y≈660，而肘在桌沿**后面**——袖子被 2D 的桌板挡着才对，
+    一起画上去就是穿模（看着像小臂插进了桌子）。
+
+    挡板必须是**水平**的，不能是正对镜头的那种：桌面是个平面，
+    它在画面上越往下、深度越近，所以"该切在多深"是随行变化的。
+    用一块固定深度的挡板切，上边切多了、下边切少了，两头都不对。
+
+    位置是**从画面反推**的：桌面只存在于 2D 重绘图里，3D 场景里什么都没有。
+    高度取手腕高度（手搭在桌面上），上沿则由「相机穿过画面第 `top_v` 行的
+    射线打到这个高度」定出来——和 `place_hip`、`screen_point` 一个路数。
+
+    挡板用 Holdout 材质：自己不显影，但遮住背后的东西并把 alpha 写成 0。
+    比走合成器省事得多——Blender 5 把 `scene.node_tree`、
+    `CompositorNodeMapRange`、`OutputFile.base_path` 全改了名字。
+    """
+    cam = scene.camera
+    o = cam.matrix_world.translation
+    f, sw = cam.data.lens, cam.data.sensor_width
+    rx, ry = scene.render.resolution_x, scene.render.resolution_y
+    d = Vector((0.0, (0.5 - top_v) * sw * ry / rx, -f)).normalized()
+    d = cam.matrix_world.to_3x3() @ d
+    back = o + d * ((height - o.z) / d.z)     # 桌面上沿在 3D 里的位置
+
+    mesh = bpy.data.meshes.new("Desk")
+    # 从上沿往镜头方向铺开（她面朝 −Y，所以镜头那边是 y 更小的一侧）
+    mesh.from_pydata([(-width, back.y, height), (width, back.y, height),
+                      (width, back.y - depth, height), (-width, back.y - depth, height)],
+                     [], [(0, 1, 2, 3)])
+    mesh.update()
+    plane = bpy.data.objects.new("Desk", mesh)
+    scene.collection.objects.link(plane)
+    _holdout(plane)
+    return plane
+
+
+def _holdout(obj):
+    mat = bpy.data.materials.new("Holdout")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    hold = nt.nodes.new("ShaderNodeHoldout")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(hold.outputs[0], out.inputs["Surface"])
+    obj.data.materials.append(mat)
+
+
+def depth_clip(scene, dist):
+    """在距相机 `dist` 米处竖一块正对镜头的挡板，把更远的东西抹掉。
+
+    **为什么需要它**：手要画在桌面之上，但只有真的在桌沿**前面**那一段才该画。
+    她那两只蓬蓬袖挂在肘上、实测深度 2.5，手腕是 2.39——袖子在桌沿后面，
+    一起画到桌面上就是穿模（看着像小臂插进了桌子）。
+
+    这条分界既不是"画面上哪一行"（袖子和手指落在同样的行上），
+    也不是"身上哪一段"（袖子和手腕同属小臂那根骨头，按骨骼挑分不开），
+    只能按**深度**切。
+
+    挡板用 Holdout 材质：它自己不显影，但会遮住背后的东西并把 alpha 写成 0。
+    比走合成器的深度通道省事得多——Blender 5 的合成器把
+    `scene.node_tree`、`CompositorNodeMapRange`、`OutputFile.base_path`
+    全改了名字，而这块挡板是纯几何，跨版本稳定。
+    """
+    cam = scene.camera
+    fwd = cam.matrix_world.to_3x3() @ Vector((0, 0, -1))
+    bpy.ops.mesh.primitive_plane_add(size=20)
+    plane = bpy.context.object
+    plane.location = cam.matrix_world.translation + fwd * dist
+    plane.rotation_euler = cam.rotation_euler
+    mat = bpy.data.materials.new("Holdout")
+    mat.use_nodes = True
+    nt = mat.node_tree
+    nt.nodes.clear()
+    hold = nt.nodes.new("ShaderNodeHoldout")
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    nt.links.new(hold.outputs[0], out.inputs["Surface"])
+    plane.data.materials.append(mat)
+    return plane
 
 
 def add_outline(meshes, thickness=0.0035, skip=("Hair",)):

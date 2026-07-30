@@ -270,6 +270,28 @@ def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def roll(arm, name, radians, prefer=None):
+    """绕骨骼自身的指向轴拧一下（小臂的旋前/旋后就是这个）。
+
+    `aim` 只管"指向哪"，绕那根轴转多少是它算出来的副产品——
+    相机在她左前方，于是右手正好侧对镜头，看着像一根手指而不是一只手。
+    这一下就是把手背转向镜头。
+    """
+    from mathutils import Quaternion
+    pb = arm.pose.bones.get(name)
+    if pb is None:
+        return
+    axis = _limb_dir(pb, prefer)
+    if axis.length < 1e-6:
+        return
+    m = pb.matrix.copy()
+    loc = m.translation.copy()
+    m = Quaternion(axis.normalized(), radians).to_matrix().to_4x4() @ m
+    m.translation = loc
+    pb.matrix = m
+    bpy.context.view_layer.update()
+
+
 def screen_point(scene, u, v, dist):
     """画面坐标 `(u, v)` 上、距相机 `dist` 米处的那个世界点。
 
@@ -339,6 +361,8 @@ KEYS_DIST = 2.40
 # 往下压太多手指就竖着挂到键盘前沿外面，压太少又像悬空。
 # 拉了一条梯度逐个看，(−0.95, −0.30) 这一档手正好摊在键上。
 HAND_DIR = (0.08, -0.95, -0.30)
+# 手背绕小臂轴拧多少（弧度），左右相反。见 `roll`。
+HAND_ROLL = 0.85
 # 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
 TYPING_LEAN = 0.18
 
@@ -363,6 +387,9 @@ def type_hands(arm, scene, press=0.0, side_first="L"):
         # 手背朝上、指尖朝前下方，压在键上
         aim(arm, f"J_Bip_{side}_Hand",
             (sx * HAND_DIR[0], HAND_DIR[1], HAND_DIR[2]), prefer="Middle")
+        # 再把手背拧向镜头。相机在她左前方，不拧的话右手侧对镜头，
+        # 看着像一根手指戳下去而不是一只手。两只手拧的方向相反。
+        roll(arm, f"J_Bip_{side}_Hand", sx * HAND_ROLL, prefer="Middle")
         curl(arm, side, 0.42 + down * 0.30)
 
 
