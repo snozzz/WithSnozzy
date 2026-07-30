@@ -175,13 +175,29 @@ final class Chatter {
     private var expiry: Date?
     private var lastSpoke = Date.distantPast
     private var ticker: Timer?
+    /// 这句话是什么时候开口的。嘴部动画拿它算说完没有。
+    private var spokeAt: Date?
 
     /// 主动搭话的最短间隔（秒）。
     private let idleGap: TimeInterval = 95
     /// 每次心跳开口的概率。
     private let idleChance = 0.22
     /// 一句话停留多久。
-    private let dwell: TimeInterval = 6.5
+    private static let dwell: TimeInterval = 6.5
+
+    /// 此刻嘴该不该在动。
+    ///
+    /// **气泡还在不等于还在说。** 气泡要停 6.5 秒，而一句话两秒就说完了；
+    /// 拿 `current != nil` 当判据的话，她说完之后嘴还要再动四秒半。
+    var isSpeaking: Bool {
+        guard let current, let spokeAt else { return false }
+        return Date().timeIntervalSince(spokeAt) < Self.speechTime(current)
+    }
+
+    /// 按字数估的说话时长。中文放松语速大约每秒四五个字。
+    private static func speechTime(_ line: String) -> TimeInterval {
+        min(dwell, max(1.0, Double(line.count) * 0.22))
+    }
 
     init() {
         // 12 秒一次心跳。这个频率足够让搭话显得随机，又不会有明显的节拍感。
@@ -199,8 +215,9 @@ final class Chatter {
     /// 事件触发的台词。这类总是立刻说，会打断当前那句。
     func say(_ context: DialogueContext) {
         current = Dialogue.line(for: context, avoiding: current)
-        expiry = Date().addingTimeInterval(dwell)
+        expiry = Date().addingTimeInterval(Self.dwell)
         lastSpoke = Date()
+        spokeAt = Date()
     }
 
     /// 主动搭话。只有距离上次说话足够久、且掷骰子通过时才开口。
@@ -216,6 +233,7 @@ final class Chatter {
         if let e = expiry, Date() >= e {
             current = nil
             expiry = nil
+            spokeAt = nil
             return
         }
         idleChatter()
@@ -225,5 +243,6 @@ final class Chatter {
     func hush() {
         current = nil
         expiry = nil
+        spokeAt = nil
     }
 }

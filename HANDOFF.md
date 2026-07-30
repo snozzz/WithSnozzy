@@ -108,8 +108,16 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 python3 Scripts/blocking.py                    # 生成 Art/blocking/{layout.png,mask_desk.png,layout.json}
 cp Art/blocking/layout.png Art/blocking_for_repaint.png
 # → 用户上传给 Gemini 重绘，要一张有人的（看效果）和一张没人的（入库）
-python3 Scripts/cut_scene.py Art/scene_empty.png --out Assets
+# 先擦掉右下角的 Gemini 水印（那个四角星），再切层
+python3 Scripts/dewatermark.py Art/scene_empty.png --box 2220 1395 2350 1512 \
+        --out Art/scene_empty_clean.png
+python3 Scripts/cut_scene.py Art/scene_empty_clean.png --out Assets
 ```
+
+**重绘出来的图右下角有 Gemini 的水印，必须擦。** 这个漏了很久才被发现——
+`Art/scene_empty.png` 保持原样不动（它是重绘的原始产物），
+擦完写到 `scene_empty_clean.png` 再切层。
+`--box` 是水印的矩形，换一张图要重新量（拿网格图对一下就行）。
 
 重绘对构图的保持度是**实测过的**：窗洞误差 3–9 像素，桌沿/回折臂/桌腿全部对上。
 所以「我定构图、它上色」这条路是可靠的。
@@ -252,6 +260,21 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 那一百秒里。于是九成以上的时间她脸上只有眨眼和眼球漂移。
 所以 `FaceRig` 做的是**节拍**：每 5.5 秒掷一次骰子挑个短表情演一下再收回，
 权重跟着状态走。`rest` 的权重给得最高——一直在演比不演更假，要留白。
+
+**24. 重绘图右下角有 Gemini 水印，交付前要擦。** 一个四角星，在地板上，
+一直没人注意到。擦法是**横向克隆**：地板的木条缝是水平的，横着取样缝线
+自动对得上；竖着挪或者模糊填都会把缝线糊掉。
+但光克隆会看见一个**发冷的方块**——地板有一层斜向的冷暖渐变，
+取样处和目标处色调不一样。所以还要在水印四周取一圈干净地板，
+对「目标 − 取样」做逐通道的平面最小二乘再补回去（`Scripts/dewatermark.py`）。
+拟合只能用那一**圈**，把中间算进去等于照着水印配色。
+
+**25. 「气泡还在」不等于「还在说话」。** 气泡要停 6.5 秒，而一句话两秒就说完了。
+拿 `chatter.current != nil` 驱动嘴部动画，她说完之后嘴还要再动四秒半。
+`Chatter.isSpeaking` 按字数估时长（中文放松语速每秒四五个字）。
+另外嘴的开合频率**不等于语速**：一个字不是一次完整开合，
+第一版给了 6 Hz，看着像在抖；3 Hz 才对。而且纯正弦是等幅的，像机械开合，
+要再叠慢包络把幅度压得忽大忽小（实测峰值起伏 3.8 倍）。
 
 ---
 
