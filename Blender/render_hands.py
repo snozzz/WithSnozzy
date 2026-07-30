@@ -20,9 +20,10 @@ import snozzy_lib as S, pose as P
 VRM, OUT = sys.argv[-2], sys.argv[-1]
 os.makedirs(OUT, exist_ok=True)
 
-# 切在离相机多远。手腕实测 2.39、肘 2.56，桌沿在两者之间。
-# 这个数是拉梯度看出来的：太大袖子留在桌上（穿模），太小连手腕一起切掉。
-CUT_DEPTH = float(os.environ.get("CUT_DEPTH", 2.44))
+# 切在离相机多远——桌沿的深度。近于它的画在桌面上，远于它的被桌子挡住。
+# 手腕实测 2.25、肘 2.40，桌沿在两者之间。
+# 拉梯度看出来的：2.38 起袖子开始留在桌上（穿模），2.32 干净。
+CUT_DEPTH = float(os.environ.get("CUT_DEPTH", 2.32))
 
 from bpy_extras.object_utils import world_to_camera_view
 
