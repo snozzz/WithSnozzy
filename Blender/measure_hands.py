@@ -29,6 +29,16 @@ from mathutils import Vector
 TIPS = ("Index3", "Middle3", "Ring3", "Little3")
 VRM = sys.argv[-1] if sys.argv[-1].endswith(".vrm") else "Snozzy.vrm"
 
+# 画上去的那台显示器，右缘在画布上的 x。
+#
+# 这条线是**硬边界**：显示器立在桌子前沿偏左，比键盘更靠近镜头，本该挡住
+# 键盘；可键盘和手是画在桌面层**之上**的，压过去就是键盘穿进显示器里
+# （第 40 条）。所以键盘和手的左缘必须全部待在这条线右边。
+#
+# 重新量的办法（换了重绘图就要重量）：对 `Assets/desk.png` 逐行求横向梯度，
+# 在 x∈[440,660] 里找最靠右的强边缘，y=600 处 569、y=690 处 580，取最大值。
+MONITOR_EDGE_X = 580
+
 
 def measure(press=0.0, side_first="L"):
     meshes = S.load(VRM)
@@ -91,6 +101,21 @@ def measure(press=0.0, side_first="L"):
                     far, cuff = t, r
         print(f"  {side} 袖子最宽半径 {wide * 1000:.0f}mm，"
               f"袖口在小臂 {far:.0%} 处、半径 {cuff * 1000:.0f}mm")
+
+    # 键盘和手有没有压到显示器上。这一条是我改出来过的 bug：
+    # 键盘往她右手边挪能救右腕，挪过头就撞进显示器里了。
+    from bpy_extras.object_utils import world_to_camera_view
+    res_x = scene.render.resolution_x
+    kbd_x = min(world_to_camera_view(scene, scene.camera,
+                                     kbd.matrix_world @ Vector(c)).x
+                for c in kbd.bound_box) * res_x
+    hand_x = min(world_to_camera_view(scene, scene.camera,
+                 arm.matrix_world @ arm.pose.bones[f"J_Bip_R_{b}"].tail).x
+                 for b in ("Hand", "Thumb3", "Index3", "Middle3",
+                           "Ring3", "Little3")) * res_x
+    ok = "✓" if kbd_x >= MONITOR_EDGE_X else "✗ 键盘压在显示器上了"
+    print(f"  键盘左缘 x={kbd_x:.0f}，右手最左 x={hand_x:.0f}，"
+          f"显示器右缘 x={MONITOR_EDGE_X}  {ok}")
 
 
 if __name__ == "__main__":
