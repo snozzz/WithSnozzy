@@ -228,10 +228,11 @@ def ground(arm, floor=0.0):
 
 
 def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
-           legs="together", scene=None, press=0.0, side_first="L"):
+           legs="together"):
     """伏案坐姿。`sit=True` 时连同下半身一起摆（3D 场景需要）。
 
-    `hands="keys"` 是手伸到键盘上打字，需要传 `scene`（要拿相机反投影）。
+    手只摆成"搭在桌上"。放到键盘上是 `settle` 的事——那一步得先落位
+    （`place_hip`）再摆手，顺序不能颠倒（第 27 条），塞进这里就错了。
     """
     if sit:
         sit_down(arm, seat_h, legs)
@@ -260,10 +261,7 @@ def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
     aim(arm, "J_Bip_L_LowerArm", (-0.30, -0.82, -0.50))
     aim(arm, "J_Bip_R_LowerArm", ( 0.30, -0.82, -0.50))
 
-    if hands == "keys" and scene is not None:
-        type_hands(arm, scene, press=press, side_first=side_first,
-               on_keyboard=on_keyboard)
-    elif hands == "desk":
+    if hands == "desk":
         aim(arm, "J_Bip_L_Hand", (-0.24, -0.90, -0.36), prefer="Middle")
         aim(arm, "J_Bip_R_Hand", ( 0.24, -0.90, -0.36), prefer="Middle")
         curl(arm, "L", 0.30); curl(arm, "R", 0.30)
@@ -365,19 +363,35 @@ KEYS = {
 # 小臂就真的搭到桌面上了，接得上。需要伸 0.392 米，比臂长 0.43 富余。
 KEYS_DIST = 2.30
 # 手背的朝向。她面朝 −Y，打字时手指也指向 −Y（她的正前方）。
-# 往下压太多手指就竖着挂到键盘前沿外面，压太少又像悬空。
-# 拉了一条梯度逐个看，(−0.95, −0.30) 这一档手正好摊在键上。
-HAND_DIR = (0.08, -0.95, -0.30)
+# 往下压太多手指就竖着扎进键盘，压太少又像悬空。
+HAND_DIR = (0.08, -0.96, -0.24)
 # 手背绕小臂轴拧多少（弧度），左右相反。见 `roll`。
 HAND_ROLL = 0.85
 # 手腕比键帽高多少（米）。手掌是从手腕往前下方伸出去的，
 # 抬太高手就悬在键盘上方，太低手腕会陷进键帽里。
-WRIST_LIFT = 0.030
+#
+# **0.030 是错的**：配 −0.30 的俯角，指尖落到键面**以下 23 毫米**——
+# 键帽才 8 毫米高，等于整只手扎进键盘里，从前沿那一排漏出来，
+# 看着就是"手指头超出键盘"。抬到 0.048、俯角收到 −0.24，
+# 指尖回到键面上下几毫米，掌根离键面 33 毫米，正好是真人打字的高度。
+WRIST_LIFT = 0.048
 # 键盘模式下手指弯多少。比"手放桌上"要弯不少——打字的手是拱起来的，
 # 手指伸直会又长又平，指尖直接戳到键盘外沿去。
-# 和 `keyboard.home_row` 的 `back` 一起决定手落不落得进键盘：
-# 拉过 2×2 的梯度，back=0.058 + curl=1.0 时两只手完全在键面上、没有外挂。
+# 和 `keyboard.home_row` 的 `back`、`WRIST_LIFT` 一起决定手落不落得进键盘。
+# 判据用 `measure_hands.py` 量，别拿眼睛看。
 KEY_CURL = 1.0
+# 按下去那一帧：手腕沉多少米、手指多弯多少。
+# 两个加起来就是指尖的行程，**行程要落在键面附近**——抬起的那一帧指尖
+# 刚好点在键上，按下的那一帧压进去几毫米，才是"敲键盘"。
+# 原来是 0.010 + 0.30，指尖一路沉到键帽底下两厘米，等于手插进键盘里。
+PRESS_DROP = 0.004
+PRESS_CURL = 0.13
+# 肘往哪边拐（键盘坐标系，第一个分量左右镜像）。
+# 手肘是弯的，所以**肘的位置就决定了小臂的朝向**——手掌的朝向是键盘定死的，
+# 两者差多少就是腕扭多少。臂长和落点定下之后，肘只能在一个圆上跑，
+# 这三个数就是在那个圆上挑一个点。是这一组里最省的一个杠杆：
+# 不动键盘、不动手，光挪肘就能把腕角削掉十几度。
+ELBOW_POLE = (0.6, 0.6, -1.4)
 # 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
 TYPING_LEAN = 0.30
 
@@ -404,14 +418,14 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
                 basis = kbd.rotation_euler.to_matrix()
             # 落点问键盘要，不用画面坐标猜。键盘一转一挪，手跟着走。
             target = Vector(K.home_row(side)) + Vector((0, 0, WRIST_LIFT
-                                                        - down * 0.010))
+                                                        - down * PRESS_DROP))
         else:
             u, v = KEYS[side]
             # 按下去就是手腕沉一点。手指弯曲那点变化在这个尺寸下看不出来，
             # 真正读得出来的是整只手的上下位移。
             target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
         # 肘往身体外侧、略靠下拐，和真人打字一样
-        pole = target + basis @ Vector((sx * 0.6, 0.25, -0.5))
+        pole = target + basis @ Vector((sx * ELBOW_POLE[0], *ELBOW_POLE[1:]))
         reach(arm, side, target, pole)
         # 手背朝上、指尖朝前下方，压在键上
         aim(arm, f"J_Bip_{side}_Hand",
@@ -420,7 +434,8 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
         # 再把手背拧向镜头。相机在她左前方，不拧的话右手侧对镜头，
         # 看着像一根手指戳下去而不是一只手。两只手拧的方向相反。
         roll(arm, f"J_Bip_{side}_Hand", sx * HAND_ROLL, prefer="Middle")
-        curl(arm, side, (KEY_CURL if on_keyboard else 0.42) + down * 0.30)
+        curl(arm, side,
+             (KEY_CURL + down * PRESS_CURL) if on_keyboard else (0.42 + down * 0.30))
 
 
 # 打字循环的帧。0 号是"手放在键上不动"，也是不打字时用的那一张。
@@ -451,14 +466,21 @@ def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L",
                on_keyboard=on_keyboard)
 
 
+# 每根手指各弯多少，无名指和小指要多弯一点。
+# 四根手指长短不一，同一个弯曲量下短的那两根的指尖会**停在高处**——
+# 实测小指指尖比食指高 14 毫米，画面上十来个像素，看着像翘着小拇指。
+# 手掌本来就是拱的，多弯一点才落到同一个键面上。
+FINGER_CURL = {"Index": 1.00, "Middle": 1.00, "Ring": 1.12, "Little": 1.24}
+
+
 def curl(arm, side, amount):
     """手指自然弯曲。amount 0 = 摊平，1 = 握拳。"""
-    for f in ("Index", "Middle", "Ring", "Little"):
+    for f, k in FINGER_CURL.items():
         for i, seg in enumerate((1, 2, 3)):
             pb = arm.pose.bones.get(f"J_Bip_{side}_{f}{seg}")
             if pb is None:
                 continue
             pb.rotation_mode = 'XYZ'
             # 指节沿自身 Z 轴弯曲，越靠指尖弯得越多
-            pb.rotation_euler[0] = -amount * (0.6 + 0.25 * i)
+            pb.rotation_euler[0] = -amount * k * (0.6 + 0.25 * i)
     bpy.context.view_layer.update()

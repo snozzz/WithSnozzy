@@ -34,7 +34,70 @@ def load(path):
     for o in list(bpy.data.objects):
         if o.type == 'MESH' and not o.material_slots:
             bpy.data.objects.remove(o, do_unlink=True)
-    return [o for o in bpy.data.objects if o.type == 'MESH']
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    # 改袖子放在这里，是为了**所有渲染脚本拿到的是同一件衣服**。
+    # 各脚本自己调的话，漏掉一个就会出现"角色图的袖子和手那一层的袖子不一样"，
+    # 和 HIP_Y 写三份是同一类错（第 7 条）。
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm is not None:
+        slim_sleeves(meshes, arm)
+    return meshes
+
+
+# 袖口收多少。VRoid 这件是广袖：静置时袖口张到半径 0.117 米（直径 23 厘米），
+# 而小臂本身只有 0.029，袖子还在小臂 70% 处就断了。手一伸到键盘上，
+# 画面上就是两个大喇叭，小臂像是从喇叭里临时接出来的。
+#
+# 只压**超出贴身半径的那部分**，贴身半径以内一律不动——直接按比例缩半径的话，
+# 袖子会缩到比胳膊还细，穿模。
+SLEEVE_HUG = 0.036      # 贴身半径（米），比皮肤的 0.029 略松
+SLEEVE_KEEP = 0.34      # 超出贴身半径的那部分留多少
+SLEEVE_REACH = 0.22     # 袖口再往手腕方向拉多长，占小臂长的比例
+
+
+def slim_sleeves(meshes, arm, hug=SLEEVE_HUG, keep=SLEEVE_KEEP,
+                 reach=SLEEVE_REACH):
+    """把广袖收成顺着小臂的窄袖，并往手腕方向拉长一截。
+
+    **改的是静置网格，不是姿势。** 蒙皮每次都从原始顶点算起，所以这一刀
+    在导入之后切一次就行，摆姿势、换姿势都跟着走；反过来，摆完姿势再改
+    就得每帧改一次，还会和形态键打架。
+
+    袖子上没有弹簧骨（这件衣服只有裙子有 `J_Sec_`），所以没法像裙摆那样
+    "摆"过去，只能动几何。
+
+    沿小臂的参数 t：0 是肘、1 是腕。t≤0 的那一段（大臂上的袖子）完全不动，
+    收缩量从肘往袖口平滑加大，接缝处自然连上。
+    """
+    for side in ("L", "R"):
+        el = arm.matrix_world @ arm.data.bones[f"J_Bip_{side}_LowerArm"].head_local
+        wr = arm.matrix_world @ arm.data.bones[f"J_Bip_{side}_Hand"].head_local
+        axis = (wr - el).normalized()
+        span = (wr - el).length
+        names = {f"J_Bip_{side}_{b}" for b in ("UpperArm", "LowerArm", "Hand")}
+        for o in meshes:
+            idx = {g.index for g in o.vertex_groups if g.name in names}
+            if not idx:
+                continue
+            mw, inv = o.matrix_world, o.matrix_world.inverted()
+            for v in o.data.vertices:
+                if sum(g.weight for g in v.groups if g.group in idx) <= 0.5:
+                    continue
+                p = mw @ v.co
+                along = (p - el).dot(axis)
+                t = along / span
+                if t <= 0.0:
+                    continue                    # 肘以上不动，接缝才连得上
+                radial = (p - el) - axis * along
+                if radial.length <= hug:
+                    continue                    # 贴身以内是皮肤和内衬，别碰
+                # 平滑步进，肘处 0、t=0.55 处 1，再往前保持
+                s = min(t / 0.55, 1.0)
+                s = s * s * (3 - 2 * s)
+                r = hug + (radial.length - hug) * (1 - s * (1 - keep))
+                v.co = inv @ (el + axis * (along + s * reach * span)
+                              + radial.normalized() * r)
+            o.data.update()
 
 
 def unlit_materials():
