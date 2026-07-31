@@ -261,7 +261,8 @@ def seated(arm, lean=0.07, head_down=0.12, hands="desk", sit=False, seat_h=0.50,
     aim(arm, "J_Bip_R_LowerArm", ( 0.30, -0.82, -0.50))
 
     if hands == "keys" and scene is not None:
-        type_hands(arm, scene, press=press, side_first=side_first)
+        type_hands(arm, scene, press=press, side_first=side_first,
+               on_keyboard=on_keyboard)
     elif hands == "desk":
         aim(arm, "J_Bip_L_Hand", (-0.24, -0.90, -0.36), prefer="Middle")
         aim(arm, "J_Bip_R_Hand", ( 0.24, -0.90, -0.36), prefer="Middle")
@@ -373,7 +374,7 @@ HAND_ROLL = 0.85
 TYPING_LEAN = 0.30
 
 
-def type_hands(arm, scene, press=0.0, side_first="L"):
+def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
     """手伸到键盘上打字。
 
     `press` 0…1 是"按下去"的程度，`side_first` 是这一帧哪只手在按。
@@ -381,11 +382,18 @@ def type_hands(arm, scene, press=0.0, side_first="L"):
     手在画面上只有四十来像素宽，手指自己弯那点位移基本看不见。
     """
     for side in ("L", "R"):
-        u, v = KEYS[side]
         down = press if side == side_first else press * 0.25
-        # 按下去就是手腕沉一点。手指弯曲那点变化在这个尺寸下看不出来，
-        # 真正读得出来的是整只手的上下位移。
-        target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
+        if on_keyboard:
+            # 键盘在 3D 里，手直接按到键帽上——不用再靠画面坐标猜位置。
+            # 键盘一转、一挪，手跟着走，不用另外对齐。
+            import keyboard as K
+            target = K.home_row(side)
+            target = Vector(target) + Vector((0, 0, 0.028 - down * 0.010))
+        else:
+            u, v = KEYS[side]
+            # 按下去就是手腕沉一点。手指弯曲那点变化在这个尺寸下看不出来，
+            # 真正读得出来的是整只手的上下位移。
+            target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
         # 肘往身体外侧、略靠下拐，和真人打字一样
         sx = 1 if side == "L" else -1
         pole = target + Vector((sx * 0.6, 0.25, -0.5))
@@ -404,7 +412,8 @@ def type_hands(arm, scene, press=0.0, side_first="L"):
 TYPING_FRAMES = [(0.0, "L"), (1.0, "L"), (0.0, "R"), (1.0, "R")]
 
 
-def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L"):
+def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L",
+           on_keyboard=True):
     """摆好整个人：坐姿 → 落位 → 手放到键盘上。
 
     **这三步的顺序不能颠倒。** 手是按画面坐标放的（见 `screen_point`），
@@ -415,7 +424,15 @@ def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L"):
     seated(arm, sit=True, legs=HUB if legs is None else legs,
            lean=TYPING_LEAN if lean is None else lean)
     S.place_hip(scene, arm)
-    type_hands(arm, scene, press=press, side_first=side_first)
+    if on_keyboard and "Keyboard" not in bpy.data.objects:
+        # 手的落点是问键盘要的，所以键盘得先在场景里。
+        # **默认不渲染它**——只有 `render_hands.py` 那一层才画键盘，
+        # 角色图里再画一遍就重了。但姿势必须共用同一块键盘，
+        # 否则角色图里的小臂和手那一层对不上。
+        import keyboard as K
+        K.build().hide_render = True
+    type_hands(arm, scene, press=press, side_first=side_first,
+               on_keyboard=on_keyboard)
 
 
 def curl(arm, side, amount):

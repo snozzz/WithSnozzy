@@ -21,11 +21,17 @@ from PIL import Image
 PAD = 6
 
 
-def desk_top(desk_path, x0, x1, opaque=250):
-    """桌面层在 `x0…x1` 这一段里，从哪一行起完全不透明。"""
+def desk_top(desk_path, x0, x1, threshold=8):
+    """桌面层在 `x0…x1` 这一段里，从哪一行**开始有**桌子。
+
+    取"开始有"而不是"完全不透明"：桌沿那条边是一道由虚到实的窄带
+    （实测 y=590 起有值、602 起满值）。按"满值"起画的话，那条带子会
+    压在她的小臂上，画面上是一条横线横穿两条胳膊——而小臂在 3D 里是
+    高于桌面的，本来就该盖住桌沿。
+    """
     a = np.asarray(Image.open(desk_path).convert("RGBA"))[:, :, 3]
     for y in range(a.shape[0]):
-        if a[y, x0:x1].min() >= opaque:
+        if a[y, x0:x1].max() >= threshold:
             return y
     return None
 
