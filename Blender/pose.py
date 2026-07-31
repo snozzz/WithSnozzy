@@ -370,6 +370,14 @@ KEYS_DIST = 2.30
 HAND_DIR = (0.08, -0.95, -0.30)
 # 手背绕小臂轴拧多少（弧度），左右相反。见 `roll`。
 HAND_ROLL = 0.85
+# 手腕比键帽高多少（米）。手掌是从手腕往前下方伸出去的，
+# 抬太高手就悬在键盘上方，太低手腕会陷进键帽里。
+WRIST_LIFT = 0.030
+# 键盘模式下手指弯多少。比"手放桌上"要弯不少——打字的手是拱起来的，
+# 手指伸直会又长又平，指尖直接戳到键盘外沿去。
+# 和 `keyboard.home_row` 的 `back` 一起决定手落不落得进键盘：
+# 拉过 2×2 的梯度，back=0.058 + curl=1.0 时两只手完全在键面上、没有外挂。
+KEY_CURL = 1.0
 # 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
 TYPING_LEAN = 0.30
 
@@ -381,30 +389,38 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
     **两只手交替按**比一起上下更像打字，而且在这个尺寸下动静更明显——
     手在画面上只有四十来像素宽，手指自己弯那点位移基本看不见。
     """
+    from mathutils import Matrix
     for side in ("L", "R"):
         down = press if side == side_first else press * 0.25
+        sx = 1 if side == "L" else -1
+        # 手的朝向。默认按世界方向给，键盘模式下要**转到键盘的坐标系里**——
+        # 键盘是斜放的（`keyboard.YAW`），照世界方向摆手，手就相对键盘拧了
+        # 十几度：手指斜着跨过键排、指尖挂到键盘外沿去。
+        basis = Matrix.Identity(3)
         if on_keyboard:
-            # 键盘在 3D 里，手直接按到键帽上——不用再靠画面坐标猜位置。
-            # 键盘一转、一挪，手跟着走，不用另外对齐。
             import keyboard as K
-            target = K.home_row(side)
-            target = Vector(target) + Vector((0, 0, 0.028 - down * 0.010))
+            kbd = bpy.data.objects.get("Keyboard")
+            if kbd is not None:
+                basis = kbd.rotation_euler.to_matrix()
+            # 落点问键盘要，不用画面坐标猜。键盘一转一挪，手跟着走。
+            target = Vector(K.home_row(side)) + Vector((0, 0, WRIST_LIFT
+                                                        - down * 0.010))
         else:
             u, v = KEYS[side]
             # 按下去就是手腕沉一点。手指弯曲那点变化在这个尺寸下看不出来，
             # 真正读得出来的是整只手的上下位移。
             target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
         # 肘往身体外侧、略靠下拐，和真人打字一样
-        sx = 1 if side == "L" else -1
-        pole = target + Vector((sx * 0.6, 0.25, -0.5))
+        pole = target + basis @ Vector((sx * 0.6, 0.25, -0.5))
         reach(arm, side, target, pole)
         # 手背朝上、指尖朝前下方，压在键上
         aim(arm, f"J_Bip_{side}_Hand",
-            (sx * HAND_DIR[0], HAND_DIR[1], HAND_DIR[2]), prefer="Middle")
+            basis @ Vector((sx * HAND_DIR[0], HAND_DIR[1], HAND_DIR[2])),
+            prefer="Middle")
         # 再把手背拧向镜头。相机在她左前方，不拧的话右手侧对镜头，
         # 看着像一根手指戳下去而不是一只手。两只手拧的方向相反。
         roll(arm, f"J_Bip_{side}_Hand", sx * HAND_ROLL, prefer="Middle")
-        curl(arm, side, 0.42 + down * 0.30)
+        curl(arm, side, (KEY_CURL if on_keyboard else 0.42) + down * 0.30)
 
 
 # 打字循环的帧。0 号是"手放在键上不动"，也是不打字时用的那一张。
