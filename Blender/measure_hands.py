@@ -15,6 +15,10 @@
 - **指尖高**：指尖相对键帽顶面的毫米数。0 上下几毫米＝点在键上；
   负得多＝手扎进键盘里，会从前沿那排漏出来（看着像"手指超出键盘"）；
   正得多＝手悬空。按下的那一帧应该比抬起的低几毫米，不是几厘米。
+- **小臂投影**：小臂在画面上有多长（像素）。相机在她左前方，小臂一朝向
+  她的正前方就正对镜头，整条胳膊缩成一个短墩子——画面上是两截圆滚滚的
+  袖子后面冒出两只手，没有胳膊，也就是"胳膊看着怪"。满长度约 123 像素，
+  低于 30 就该去挪肘了（第 41 条）。
 - **出界**：指尖跑到键区之外多少毫米。应当恒为 0。
 - **伸出**：手腕离肩多远，占臂长（0.43 米）的比例。超过 95% 就危险了，
   IK 会夹到伸直、落点悄悄偏掉（第 27 条）。
@@ -56,6 +60,13 @@ def measure(press=0.0, side_first="L"):
     top = K.BASE_H + K.KEY_H
     keys_d = K.DEPTH * 0.82
 
+    from bpy_extras.object_utils import world_to_camera_view as w2c
+    res_x, res_y = scene.render.resolution_x, scene.render.resolution_y
+
+    def canvas(p):
+        v = w2c(scene, scene.camera, p)
+        return (v.x * res_x, (1 - v.y) * res_y)
+
     print(f"键区 ±{K.WIDTH / 2 * 1000:.0f} × ±{keys_d / 2 * 1000:.0f} mm，"
           f"press={press}")
     for side in ("L", "R"):
@@ -68,12 +79,13 @@ def measure(press=0.0, side_first="L"):
                         @ arm.pose.bones[f"J_Bip_{side}_{t}"].tail) - kbd.location)
                 for t in TIPS]
         off = max(max(abs(t.x) - K.WIDTH / 2, abs(t.y) - keys_d / 2, 0) for t in tips)
+        e2, w2 = canvas(el), canvas(wr)
         print(f"  {side} 腕角 {math.degrees(math.acos(max(-1, min(1, fore.dot(palm))))):.1f}°"
               f"  伸出 {(wr - sh).length / 0.430:.0%}"
+              f"  小臂投影 {math.hypot(w2[0] - e2[0], w2[1] - e2[1]):.0f}px"
               f"  出界 {off * 1000:.1f}mm"
               f"  掌根高 {((inv @ (head('Middle1') - kbd.location)).z - top) * 1000:+.0f}mm"
-              f"  指尖高 {[round((t.z - top) * 1000) for t in tips]}mm"
-              f"  指尖前后 {[round(t.y * 1000) for t in tips]}mm")
+              f"  指尖高 {[round((t.z - top) * 1000) for t in tips]}mm")
 
     # 袖子按**材质**挑，不按半径：拇指鼓出来的半径和袖子一个量级，
     # 按半径挑会把拇指算成袖口，数字看着还挺像回事。
@@ -104,15 +116,11 @@ def measure(press=0.0, side_first="L"):
 
     # 键盘和手有没有压到显示器上。这一条是我改出来过的 bug：
     # 键盘往她右手边挪能救右腕，挪过头就撞进显示器里了。
-    from bpy_extras.object_utils import world_to_camera_view
-    res_x = scene.render.resolution_x
-    kbd_x = min(world_to_camera_view(scene, scene.camera,
-                                     kbd.matrix_world @ Vector(c)).x
-                for c in kbd.bound_box) * res_x
-    hand_x = min(world_to_camera_view(scene, scene.camera,
-                 arm.matrix_world @ arm.pose.bones[f"J_Bip_R_{b}"].tail).x
+    kbd_x = min(canvas(kbd.matrix_world @ Vector(c))[0] for c in kbd.bound_box)
+    hand_x = min(canvas(arm.matrix_world
+                        @ arm.pose.bones[f"J_Bip_R_{b}"].tail)[0]
                  for b in ("Hand", "Thumb3", "Index3", "Middle3",
-                           "Ring3", "Little3")) * res_x
+                           "Ring3", "Little3"))
     ok = "✓" if kbd_x >= MONITOR_EDGE_X else "✗ 键盘压在显示器上了"
     print(f"  键盘左缘 x={kbd_x:.0f}，右手最左 x={hand_x:.0f}，"
           f"显示器右缘 x={MONITOR_EDGE_X}  {ok}")

@@ -365,8 +365,14 @@ KEYS_DIST = 2.30
 # 手背的朝向。她面朝 −Y，打字时手指也指向 −Y（她的正前方）。
 # 往下压太多手指就竖着扎进键盘，压太少又像悬空。
 HAND_DIR = (0.08, -0.96, -0.24)
-# 手背绕小臂轴拧多少（弧度），左右相反。见 `roll`。
-HAND_ROLL = 0.85
+# 手背绕小臂轴拧多少（弧度），左右相反（见 `roll` 和第 30 条）。
+#
+# 这一拧**不改变腕角、也不改变小臂的投影长度**（它绕的就是手掌自己的轴），
+# 所以它是一个**白送的杠杆**，专门用来把四根指尖调平：肘一动手掌的平面
+# 就跟着倾，指尖会一头高一头低。左右手的肘现在是分开摆的（`ELBOW_POLE`），
+# 倾的方向正好相反，所以这里也得左右分开写。
+# 实测：只调这个数，两只手的指尖高度差都能从 20 毫米压到 5 毫米。
+HAND_ROLL = {"L": 0.45, "R": 1.60}
 # 手腕比键帽高多少（米）。手掌是从手腕往前下方伸出去的，
 # 抬太高手就悬在键盘上方，太低手腕会陷进键帽里。
 #
@@ -391,7 +397,14 @@ PRESS_CURL = 0.13
 # 两者差多少就是腕扭多少。臂长和落点定下之后，肘只能在一个圆上跑，
 # 这三个数就是在那个圆上挑一个点。是这一组里最省的一个杠杆：
 # 不动键盘、不动手，光挪肘就能把腕角削掉十几度。
-ELBOW_POLE = (0.0, 0.6, -1.4)
+#
+# **左右必须分开写**（第 41 条）。键盘在她左边，两条胳膊的活儿本来就不一样：
+# 左手往外往前够，肘要**外张**；右手横过身体中线去够，肘要**收进来**。
+# 照镜像摆的话，总有一只手的肘是拧着的，而且小臂会正对镜头——
+# 相机在她左前方，小臂一指向她的正前方就整个缩成一个短墩子
+# （实测投影只剩 22 像素，满长度是 123），画面上就是两截圆滚滚的袖子
+# 后面冒出两只手，没有胳膊。分开摆之后投影回到 55 / 63 像素。
+ELBOW_POLE = {"L": (0.6, 0.6, -0.6), "R": (-0.4, 0.6, -0.6)}
 # 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
 TYPING_LEAN = 0.30
 
@@ -425,7 +438,8 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
             # 真正读得出来的是整只手的上下位移。
             target = screen_point(scene, u, v + down * 0.006, KEYS_DIST)
         # 肘往身体外侧、略靠下拐，和真人打字一样
-        pole = target + basis @ Vector((sx * ELBOW_POLE[0], *ELBOW_POLE[1:]))
+        ep = ELBOW_POLE[side] if isinstance(ELBOW_POLE, dict) else ELBOW_POLE
+        pole = target + basis @ Vector((sx * ep[0], *ep[1:]))
         reach(arm, side, target, pole)
         # 手背朝上、指尖朝前下方，压在键上
         aim(arm, f"J_Bip_{side}_Hand",
@@ -433,7 +447,8 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
             prefer="Middle")
         # 再把手背拧向镜头。相机在她左前方，不拧的话右手侧对镜头，
         # 看着像一根手指戳下去而不是一只手。两只手拧的方向相反。
-        roll(arm, f"J_Bip_{side}_Hand", sx * HAND_ROLL, prefer="Middle")
+        hr = HAND_ROLL[side] if isinstance(HAND_ROLL, dict) else HAND_ROLL
+        roll(arm, f"J_Bip_{side}_Hand", sx * hr, prefer="Middle")
         curl(arm, side,
              (KEY_CURL + down * PRESS_CURL) if on_keyboard else (0.42 + down * 0.30))
 
