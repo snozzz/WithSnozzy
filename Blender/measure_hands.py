@@ -88,9 +88,19 @@ def measure(press=0.0, side_first="L"):
         abduct = math.degrees(math.acos(max(-1, min(1,
                  (el - sh).normalized().dot(Vector((0, 0, -1)))))))
         drop = (sh.z - el.z) * 100
-        verdict = "" if (abduct <= 36 and drop >= 15) else "  ✗ 人做不出这个姿势"
+        # 肘在肩外侧还是缩进身体里。缩进去就是"内屈"，看着像肘顶在胸口，
+        # 光看腕角是发现不了的（第 43 条）。
+        sgn = 1 if side == "L" else -1
+        lat = (el.x - sh.x) * sgn * 100
+        axis = (wr - sh).normalized()
+        bow = ((el - sh) - axis * (el - sh).dot(axis)).x * sgn * 100
+        verdict = ("" if (abduct <= 36 and drop >= 15 and bow >= -0.5)
+                   else "  ✗ 人做不出这个姿势")
         print(f"  {side} 大臂偏离垂直 {abduct:.0f}°（真人 15–30°）"
-              f"  肘比肩低 {drop:.0f}cm（真人 25–30）{verdict}")
+              f"  肘比肩低 {drop:.0f}cm（真人 25–30）"
+              f"  肘在肩{'外' if lat >= 0 else '内'}侧 {abs(lat):.1f}cm"
+              f"  相对肩→腕连线{'外鼓' if bow >= 0 else '内缩'} {abs(bow):.1f}cm"
+              f"{verdict}")
         print(f"  {side} 腕角 {math.degrees(math.acos(max(-1, min(1, fore.dot(palm))))):.1f}°"
               f"  伸出 {(wr - sh).length / 0.430:.0%}"
               f"  小臂投影 {math.hypot(w2[0] - e2[0], w2[1] - e2[1]):.0f}px"
