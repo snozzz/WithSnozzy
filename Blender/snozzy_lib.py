@@ -41,6 +41,13 @@ def load(path):
     arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
     if arm is not None:
         slim_sleeves(meshes, arm)
+        # 广袖里面还衬一层内袖（`sleeve.py`），也在这里接上——同样是为了
+        # 所有渲染脚本拿到的是同一件衣服。它进 `meshes`，`isolate_arms`
+        # 之类按网格遍历的地方才带得上它。
+        #
+        # **顺序不能反**：内袖是照着收完之后的广袖内壁量出来的。
+        import sleeve
+        meshes += sleeve.build_both(arm, meshes)
     return meshes
 
 

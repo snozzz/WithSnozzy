@@ -108,43 +108,104 @@ def measure(press=0.0, side_first="L"):
               f"  掌根高 {((inv @ (head('Middle1') - kbd.location)).z - top) * 1000:+.0f}mm"
               f"  指尖高 {[round((t.z - top) * 1000) for t in tips]}mm")
 
-    # 袖子按**材质**挑，不按半径：拇指鼓出来的半径和袖子一个量级，
-    # 按半径挑会把拇指算成袖口，数字看着还挺像回事。
-    cloth = {}
+    # 袖子盖住手腕了没有、胳膊有没有从袖子里透出来。
+    #
+    # 这一段量的是摆完姿势的网格。小臂那截袖子是 `sleeve.py` 另建的锥筒
+    # （广袖压不成窄袖，见那个文件的开头），锥筒和小臂皮肤都刚性挂在
+    # 小臂骨上，但**手是在腕关节处折下去的**——所以拿静置网格量必错：
+    # 量到的是摊平的手掌连拇指，比袖口还粗，判据一路报绿，画面照旧穿模。
+    #
+    # 判据两条，都是毫米，都要在 3D 里量（第 34 条）：
+    #
+    # - **袖口越过手腕**：正数才对。负的就是袖口没盖到腕关节，
+    #   那一截光手腕正对着镜头，就是用户说的"看着像穿模"。
+    # - **透出袖子**：皮肤跑到袖筒外面多少。应当恒为 0。
+    #   袖子收得越紧越好看，但收过头胳膊就从布里钻出来了，这条卡住那一端。
+    dg = bpy.context.evaluated_depsgraph_get()
+    skin, tube, cloth = {"L": [], "R": []}, {}, {"L": [], "R": []}
     for o in meshes:
-        hit = {i for i, m in enumerate(o.data.materials or []) if "Tops" in (m.name or "")}
-        if not hit:
-            continue
-        vs = {vi for p in o.data.polygons if p.material_index in hit for vi in p.vertices}
-        cloth[o] = vs
-    for side in ("L", "R"):
-        el = arm.matrix_world @ arm.data.bones[f"J_Bip_{side}_LowerArm"].head_local
-        wr = arm.matrix_world @ arm.data.bones[f"J_Bip_{side}_Hand"].head_local
-        axis, span = (wr - el).normalized(), (wr - el).length
-        wide, far, cuff = 0.0, 0.0, 0.0
-        for o, vs in cloth.items():
-            for vi in vs:
-                p = o.matrix_world @ o.data.vertices[vi].co
-                t = (p - el).dot(axis) / span
-                r = ((p - el) - axis * (t * span)).length
-                if not (0 < t < 1.6) or r > 0.3:
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        if o.name.startswith("Sleeve_"):
+            tube[o.name[-1]] = [ev.matrix_world @ v.co for v in me.vertices]
+        else:
+            wide = {i for i, m in enumerate(me.materials or [])
+                    if "Tops" in (m.name or "")}
+            sleeves = {vi for p in me.polygons if p.material_index in wide
+                       for vi in p.vertices}
+            bare = {i for i, m in enumerate(me.materials or [])
+                    if "_SKIN" in (m.name or "")}
+            want = {vi for p in me.polygons if p.material_index in bare
+                    for vi in p.vertices}
+            # **只取小臂那一段皮肤。** 手是要从袖口伸出来的，把它算进来的话
+            # 这条永远报十几毫米——量到的是手，不是漏出来的胳膊。
+            # 蒙皮权重天然就是按骨骼分的，拿它挑最省事。
+            # **两条胳膊在同一个网格里，必须按骨骼分开。** 只靠"离这条小臂轴
+            # 够近"是分不开的：另一侧的袖子投影过来也在半径之内，
+            # 于是右手那一行报"广袖袖口在小臂 157% 处"——量到的是左袖子。
+            for side in ("L", "R"):
+                g = o.vertex_groups.get(f"J_Bip_{side}_LowerArm")
+                g2 = o.vertex_groups.get(f"J_Bip_{side}_UpperArm")
+                if g is None:
                     continue
-                wide = max(wide, r)
-                if t > far:
-                    far, cuff = t, r
-        print(f"  {side} 袖子最宽半径 {wide * 1000:.0f}mm，"
-              f"袖口在小臂 {far:.0%} 处、半径 {cuff * 1000:.0f}mm")
+                mine = {g.index} | ({g2.index} if g2 else set())
+                for vi in want:
+                    if any(gr.group == g.index and gr.weight > 0.5
+                           for gr in o.data.vertices[vi].groups):
+                        skin[side].append(ev.matrix_world @ me.vertices[vi].co)
+                for vi in sleeves:
+                    if sum(gr.weight for gr in o.data.vertices[vi].groups
+                           if gr.group in mine) > 0.5:
+                        cloth[side].append(ev.matrix_world @ me.vertices[vi].co)
+        ev.to_mesh_clear()
 
-    # 键盘和手有没有压到显示器上。这一条是我改出来过的 bug：
-    # 键盘往她右手边挪能救右腕，挪过头就撞进显示器里了。
-    kbd_x = min(canvas(kbd.matrix_world @ Vector(c))[0] for c in kbd.bound_box)
-    hand_x = min(canvas(arm.matrix_world
-                        @ arm.pose.bones[f"J_Bip_R_{b}"].tail)[0]
-                 for b in ("Hand", "Thumb3", "Index3", "Middle3",
-                           "Ring3", "Little3"))
-    ok = "✓" if kbd_x >= MONITOR_EDGE_X else "✗ 键盘压在显示器上了"
-    print(f"  键盘左缘 x={kbd_x:.0f}，右手最左 x={hand_x:.0f}，"
-          f"显示器右缘 x={MONITOR_EDGE_X}  {ok}")
+    BINS = 24
+    for side in ("L", "R"):
+        def head(n):
+            return arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_{n}"].head
+        el, wr = head("LowerArm"), head("Hand")
+        axis, span = (wr - el).normalized(), (wr - el).length
+        ref = axis.cross(Vector((0, 0, 1)))
+        ref = ref.normalized() if ref.length > 1e-6 else Vector((1, 0, 0))
+        ref2 = axis.cross(ref)
+
+        def polar(p):
+            a = (p - el).dot(axis) / span
+            rad = (p - el) - axis * (a * span)
+            return a, rad.length, math.atan2(rad.dot(ref2), rad.dot(ref))
+
+        def cells_of(pts, lo=-9.0):
+            out, top = {}, lo
+            for p in pts:
+                a, r, th = polar(p)
+                if r > 0.14:
+                    continue        # 另一条胳膊
+                top = max(top, a)
+                k = (round(a * 40), int((th + math.pi) / (2 * math.pi) * BINS) % BINS)
+                out[k] = max(out.get(k, 0.0), r)
+            return out, top
+
+        inner, far = cells_of(tube.get(side, []))
+        _, hem = cells_of(cloth[side])
+        if not inner:
+            continue
+
+        # 只查**广袖袖口以外**那一小段。里面那一段整个藏在广袖里，
+        # 露一点胳膊画面上根本看不见；而广袖的网格又稀（四百来个顶点），
+        # 拿它去填这么细的格子，会为一处其实盖得好好的地方报错。
+        out, where = 0.0, 0.0
+        for p in skin[side]:
+            a, r, th = polar(p)
+            if not (hem < a < far) or r > 0.14:
+                continue
+            k = (round(a * 40), int((th + math.pi) / (2 * math.pi) * BINS) % BINS)
+            if k in inner and r - inner[k] > out:
+                out, where = r - inner[k], a
+        over = (far - 1.0) * span * 1000
+        print(f"  {side} 广袖袖口在小臂 {hem:.0%} 处，内袖到 {far:.0%} 处，"
+              f"越过手腕 {over:+.0f}mm{'' if over > 4 else '  ✗ 没盖住手腕'}"
+              f"  袖口外露肉 {max(out, 0) * 1000:.1f}mm"
+              f"{'' if out < 0.002 else '  ✗ 胳膊钻出来了'}")
 
 
 if __name__ == "__main__":
