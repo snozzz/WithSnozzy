@@ -54,6 +54,13 @@ MAIN_NEAR = (232, 1372)
 # 可以从 574 一路长到 368。
 ARM_FAR_Y = 556                              # 短桌的远边（退到头，离地平线 8px）
 ARM_X = (60, 360)                            # 短桌在远边上的左右端
+# 左翼的前沿比主台面**退后**一截（参考图量出来约 35px），接口做圆角。
+# 齐平的话整条前沿是一根直线，L 形就读不出来了。
+WING_NEAR_Y = 688                            # 左翼前沿
+WING_STEP_X = 400                            # 前沿在这一列上台阶
+WING_R = 46                                  # 台阶的圆角半径
+# 左翼下面的三抽屉柜。参考图里它是左下角最重的一块，没有它左下角是空的
+DRAWER = (24, 700, 252, 1004)                # x0, y0, x1, y1
 # 台面左端。**MAIN_FAR/MAIN_NEAR 只定道具坐标系**（`desk_point` 在它俩之间
 # 插值），动它等于把键盘、杯子、平板全挪一遍，所以左端另开两个常数。
 # 左端要跟臂的左端对齐，不然臂会悬在主台面外面、看着是块浮空的板。
@@ -124,19 +131,34 @@ def desk_surface():
     臂朝里退，所以它整段都在主台面远边**之上**，读起来是"她左手边那段
     台子更深一点"——工位的回折台就是这个样子。
     """
-    return [(ARM_X[0], ARM_FAR_Y), (ARM_X[1], ARM_FAR_Y),
-            (ARM_X[1], MAIN_FAR_Y), (MAIN_FAR[1], MAIN_FAR_Y),
-            (MAIN_NEAR[1], MAIN_NEAR_Y), (EXT_NEAR_X, MAIN_NEAR_Y),
-            (EXT_FAR_X, MAIN_FAR_Y)]
+    import math
+    # 前沿上那个台阶做成圆角：左翼前沿 688 → 主台面前沿 722，
+    # 在 WING_STEP_X 附近走四分之一圆。直角的话看着像两张桌子拼错了。
+    arc = [(WING_STEP_X - WING_R + WING_R * math.sin(t * math.pi / 2),
+            WING_NEAR_Y + WING_R * (1 - math.cos(t * math.pi / 2)))
+           for t in [i / 8 for i in range(9)]]
+    return ([(ARM_X[0], ARM_FAR_Y), (ARM_X[1], ARM_FAR_Y),
+             (ARM_X[1], MAIN_FAR_Y), (MAIN_FAR[1], MAIN_FAR_Y),
+             (MAIN_NEAR[1], MAIN_NEAR_Y), (WING_STEP_X, MAIN_NEAR_Y)]
+            + arc[::-1]
+            + [(EXT_NEAR_X, WING_NEAR_Y), (EXT_FAR_X, MAIN_FAR_Y)])
 
 
 def draw_desk(d, top, lip, leg):
     d.polygon(desk_surface(), fill=top)
-    # 桌沿厚度只画主台面那条近边。臂和主台面是同高的两段台子拼在一起，
-    # 中间那道只是拼缝，不是沿
-    d.polygon([(EXT_NEAR_X, MAIN_NEAR_Y), (MAIN_NEAR[1], MAIN_NEAR_Y),
+    # 桌沿厚度分两段：主台面那条在 722，左翼那条退在 688、也薄一点
+    # （它离镜头更远）。臂和主台面是同高的两段台子，中间只是拼缝、不是沿
+    d.polygon([(WING_STEP_X, MAIN_NEAR_Y), (MAIN_NEAR[1], MAIN_NEAR_Y),
                (MAIN_NEAR[1], MAIN_NEAR_Y + DESK_LIP),
-               (EXT_NEAR_X, MAIN_NEAR_Y + DESK_LIP)], fill=lip)
+               (WING_STEP_X, MAIN_NEAR_Y + DESK_LIP)], fill=lip)
+    d.polygon([(EXT_NEAR_X, WING_NEAR_Y), (WING_STEP_X - WING_R, WING_NEAR_Y),
+               (WING_STEP_X - WING_R, WING_NEAR_Y + DESK_LIP * 3 // 4),
+               (EXT_NEAR_X, WING_NEAR_Y + DESK_LIP * 3 // 4)], fill=lip)
+    # 左翼下面的三抽屉柜
+    d.rectangle(DRAWER, fill=leg)
+    for i in range(3):
+        y = DRAWER[1] + 40 + i * 88
+        d.rectangle([DRAWER[0] + 34, y, DRAWER[2] - 34, y + 12], fill=lip)
     # 前腿。桌下必须留空——能看见她的腿是这版构图的全部意义。
     for x in LEG_X:
         d.rectangle([x - LEG_W // 2, MAIN_NEAR_Y + DESK_LIP, x + LEG_W // 2, H], fill=leg)
