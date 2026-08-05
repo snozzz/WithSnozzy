@@ -187,6 +187,38 @@ python3 Scripts/dewatermark.py Art/scene_empty.png --box 2220 1395 2350 1512 \
 python3 Scripts/cut_scene.py Art/scene_empty_clean.png --out Assets
 ```
 
+### 加细节：codex 的 image_gen（不用再手动上传了）
+
+用户的 GPT Plus 带 codex，codex 有内置的 `image_gen`，**能做图生图**，
+所以"往房间里加东西"这件事现在可以自己跑：
+
+```bash
+codex exec --cd 工作目录 --dangerously-bypass-approvals-and-sandbox "$(cat 任务.md)"
+```
+
+几条实测出来的：
+
+- **喂 1536×1024，别喂原始的 2528×1696。** 大图那次跑了四十分钟一张图都没出，
+  卡死在那儿。管线本来也会把重绘图缩到遮罩尺寸（1536×1024），大图没意义
+- 生成的图落在 `~/.codex/generated_images/<会话>/<调用>.png`，
+  codex 自己不会放到工作目录，要在提示里让它拷过去（或者自己去捡）
+- 提示里要**逐条列出不许动的东西**（品红窗洞、桌子、显示器、椅子、桌上物件、
+  机位），它会照做，还会自己把保护区从原图贴回去。实测窗洞漂 1 像素、
+  桌沿中位差 0 像素、显示器右缘一点没动
+- **回来的品红不是纯的**（整张图只剩 1 个精确的 #FF00FF 像素）。
+  `cut_scene.window_rect` 的容差够宽、还是找得到，但**照原坐标重新盖一块纯品红**
+  更保险，一行 numpy 的事
+
+改完必须量，判据见 `Scripts/scene_drift.py`：
+
+```bash
+python3 Scripts/scene_drift.py 旧图 新图     # 窗洞 / 桌沿 / 显示器右缘
+python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
+```
+
+`Art/scene_rich_raw.png` 是 codex 直出，`Art/scene_rich.png` 是补过品红的，
+切层用后者。
+
 **重绘出来的图右下角有 Gemini 的水印，必须擦。** 这个漏了很久才被发现——
 `Art/scene_empty.png` 保持原样不动（它是重绘的原始产物），
 擦完写到 `scene_empty_clean.png` 再切层。
@@ -654,6 +686,12 @@ y=267 的头顶，腿根本影响不到那里。判据要改成**按阈值二值
 - **袖子盖没盖住手腕**：同上那个脚本，最后两行。正数的"越过手腕"才算盖住；
   "袖口外露肉"要恒为 0。两条都只能在**摆完姿势**的网格上量，
   只取小臂那段皮肤，而且只查广袖袖口以外那一小段（第 45 条）
+- **重绘/加细节之后构图漂没漂**：`Scripts/scene_drift.py`。三个数各自对应一件事——
+  窗洞（程序化天空对不对得上）、逐列桌沿（键盘和手会不会穿进桌面）、
+  显示器右缘（`measure_hands.MONITOR_EDGE_X` 那条硬边界还成不成立）。
+  模型嘴上说"保持构图"是不算数的。**注意桌沿那个数的 95 分位会被新加的墙饰
+  骗高**——它在桌板上沿附近找最强的纵向梯度，墙上新贴的海报边缘也是强梯度。
+  中位数才是该看的那个
 - **分层合成有没有露馅**：按 app 的真实层序（房间 → 上半身+腿 → 桌子 → 键盘+手）
   把整张图拼出来，**看整张，别只放大看一小块**。而且要反过来问
   "有没有不该出现的东西"——手穿桌子那五轮，每一轮我都在确认"手在不在键盘上"，
@@ -765,6 +803,11 @@ open dist/WithSnozzy.app
 # 场景重出（改完 blocking.py 之后）
 python3 Scripts/blocking.py && cp Art/blocking/layout.png Art/blocking_for_repaint.png
 
+# 给房间加细节（codex 图生图）→ 量漂移 → 切层
+codex exec --cd 工作目录 --dangerously-bypass-approvals-and-sandbox "$(cat 任务.md)"
+python3 Scripts/scene_drift.py Art/scene_empty_clean.png Art/scene_rich.png
+python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
+
 # 角色重出（改完 pose.py 的 LEG_POSES 之后）。约 2 分钟
 B=/Applications/Blender.app/Contents/MacOS/Blender
 $B --background --factory-startup --python Blender/render_poses.py  -- Snozzy.vrm /tmp/poses
@@ -791,6 +834,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip /tmp/hands.png
 
 用户的机器：16GB M 系列 Mac，走 ClashX 代理（`127.0.0.1:7890`）。
 **本地跑不动扩散模型**（float32+768 会被 OOM 杀掉），生图一律走网页手动或 API。
-`GEMINI_API_KEY` 在 `~/.zshrc` 里，但那个 key 的图像模型免费额度是零，
-`Scripts/repaint.py --fit` 这条路（用户手动在网页生成、我负责对齐和抠图）
-不消耗额度。
+`GEMINI_API_KEY` 在 `~/.zshrc` 里，但那个 key 的图像模型免费额度是零。
+**现在生图走 codex**（用户的 GPT Plus，`codex login status` 显示已登录），
+见第二节"加细节"那一小节。`Scripts/repaint.py --fit` 那条老路还在，
+用户手动在网页生成、我负责对齐和抠图，不消耗额度。

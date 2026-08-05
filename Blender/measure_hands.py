@@ -207,6 +207,18 @@ def measure(press=0.0, side_first="L"):
               f"  袖口外露肉 {max(out, 0) * 1000:.1f}mm"
               f"{'' if out < 0.002 else '  ✗ 胳膊钻出来了'}")
 
+    # 键盘和手有没有压到画上去的显示器上。这是条**硬边界**（第 40 条）：
+    # 键盘和手画在桌面层之上，撞上去就是穿模，加挡板也救不了——
+    # 往左挪键盘的时候她的右手也会一起进显示器的轮廓。
+    kbd_x = min(canvas(kbd.matrix_world @ Vector(c))[0] for c in kbd.bound_box)
+    hand_x = min(canvas(arm.matrix_world
+                        @ arm.pose.bones[f"J_Bip_R_{b}"].tail)[0]
+                 for b in ("Hand", "Thumb3", "Index3", "Middle3",
+                           "Ring3", "Little3"))
+    ok = "✓" if kbd_x >= MONITOR_EDGE_X else "✗ 键盘压在显示器上了"
+    print(f"  键盘左缘 x={kbd_x:.0f}，右手最左 x={hand_x:.0f}，"
+          f"显示器右缘 x={MONITOR_EDGE_X}  {ok}")
+
 
 if __name__ == "__main__":
     measure(press=0.0)
