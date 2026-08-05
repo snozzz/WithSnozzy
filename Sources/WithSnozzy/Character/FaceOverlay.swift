@@ -40,32 +40,39 @@ struct FaceOverlay: View {
     let height: CGFloat
 
     var body: some View {
-        let scale = width / CGFloat(assets.face.canvas.first ?? 1536)
+        // x / y 的比例**必须分开算**，而且要和 `RenderedSnozzy.sprite()` 一致。
+        //
+        // 素材和窗口都是 3:2，两者本来相等——但窗口是能拉的，一旦不是 3:2，
+        // 底图按 (sx, sy) 各自拉伸满幅，贴片却按同一个比例摆，纵向就错开了。
+        // 表现是**眼睛上方浮着两块方片**，越拉越远（用户拉窗口时发现的）。
+        // 这类"两处各算一遍同一件事"的错在这个项目里犯过好几次了（第 7 条）。
+        let sx = width / CGFloat(assets.face.canvas.first ?? 1536)
+        let sy = height / CGFloat(assets.face.canvas.last ?? 1024)
         let blink = clamp(pose.blink * face.blinkScale, 0, 1)
         return ZStack(alignment: .topLeading) {
             // ── 1. 视线（最底层）──
             let lw = face.lookWeight
-            patch("look_left", opacity: max(0, -face.lookX) * lw, scale: scale)
-            patch("look_right", opacity: max(0, face.lookX) * lw, scale: scale)
-            patch("look_down", opacity: max(0, -face.lookY) * 0.9 * lw, scale: scale)
-            patch("look_up", opacity: max(0, face.lookY) * 0.9 * lw, scale: scale)
+            patch("look_left", opacity: max(0, -face.lookX) * lw, sx: sx, sy: sy)
+            patch("look_right", opacity: max(0, face.lookX) * lw, sx: sx, sy: sy)
+            patch("look_down", opacity: max(0, -face.lookY) * 0.9 * lw, sx: sx, sy: sy)
+            patch("look_up", opacity: max(0, face.lookY) * 0.9 * lw, sx: sx, sy: sy)
 
             // ── 2. 眼型（压在视线上）──
-            patch("eye_soft", opacity: face.eyeSoft, scale: scale)
-            patch("eye_sad", opacity: face.eyeSad, scale: scale)
-            patch("eye_wide", opacity: face.eyeWide, scale: scale)
-            patch("eye_smile", opacity: face.eyeSmile, scale: scale)
+            patch("eye_soft", opacity: face.eyeSoft, sx: sx, sy: sy)
+            patch("eye_sad", opacity: face.eyeSad, sx: sx, sy: sy)
+            patch("eye_wide", opacity: face.eyeWide, sx: sx, sy: sy)
+            patch("eye_smile", opacity: face.eyeSmile, sx: sx, sy: sy)
 
             // ── 3. 眨眼（最上层，眼皮在最前面）──
             // 半闭和全闭两级，靠 blink 的连续值在两者之间过渡——
             // 只有全闭一级的话，快速眨眼会变成"闪一下"。
-            patch("blink_half", opacity: ramp(blink, 0.10, 0.55), scale: scale)
-            patch("blink_shut", opacity: ramp(blink, 0.45, 0.85), scale: scale)
+            patch("blink_half", opacity: ramp(blink, 0.10, 0.55), sx: sx, sy: sy)
+            patch("blink_shut", opacity: ramp(blink, 0.45, 0.85), sx: sx, sy: sy)
 
             // ── 嘴（独立通道，和眼那一块不相交）──
-            patch("smile", opacity: face.mouthSmile, scale: scale)
-            patch("mouth_o", opacity: face.mouthO, scale: scale)
-            patch("mouth_open", opacity: face.mouthOpen, scale: scale)
+            patch("smile", opacity: face.mouthSmile, sx: sx, sy: sy)
+            patch("mouth_o", opacity: face.mouthO, sx: sx, sy: sy)
+            patch("mouth_open", opacity: face.mouthOpen, sx: sx, sy: sy)
         }
         .frame(width: width, height: height, alignment: .topLeading)
         .colorMultiply(PaintedRoom.ambient(palette).color)
@@ -78,14 +85,15 @@ struct FaceOverlay: View {
     }
 
     @ViewBuilder
-    private func patch(_ name: String, opacity: Double, scale: CGFloat) -> some View {
+    private func patch(_ name: String, opacity: Double,
+                       sx: CGFloat, sy: CGFloat) -> some View {
         if opacity > 0.004, let image = assets.facePatches[name],
            let rect = assets.face.patches[name] {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)
-                .frame(width: CGFloat(rect.w) * scale, height: CGFloat(rect.h) * scale)
-                .offset(x: CGFloat(rect.x) * scale, y: CGFloat(rect.y) * scale)
+                .frame(width: CGFloat(rect.w) * sx, height: CGFloat(rect.h) * sy)
+                .offset(x: CGFloat(rect.x) * sx, y: CGFloat(rect.y) * sy)
                 .opacity(opacity)
         }
     }

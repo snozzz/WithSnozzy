@@ -55,6 +55,28 @@ enum Snapshot {
         arg("--handstrip")
     }
 
+    /// 面部贴片在**非 3:2 窗口**下贴得准不准。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --facefit
+    /// ```
+    ///
+    /// 素材和窗口都是 3:2，所以横竖两个缩放比平时正好相等——**一旦窗口被拉成
+    /// 别的比例，两处各算一遍就会分家**。底图（`RenderedSnozzy.sprite`）是
+    /// 横竖分开算的，贴片曾经只按宽度算一个比例，于是拉窗口时眼睛上方浮出
+    /// 两块方片。这条判据就是量它：把窗口拉成几种比例，各渲一次睁眼和一次闭眼，
+    /// 取差异像素的包围盒，和贴片清单里的矩形按 (sx, sy) 换算过去的位置对。
+    ///
+    /// 差几个像素是重采样的边缘，几十个像素就是又分家了。
+    static var faceFit: Bool {
+        CommandLine.arguments.contains("--facefit")
+    }
+
+    /// `--facefit out.png` 时顺手把拉扁那一档的脸截出来，肉眼再对一遍。
+    static var faceFitPath: String? {
+        arg("--facefit")
+    }
+
     private static func arg(_ name: String) -> String? {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: name), i + 1 < args.count else { return nil }
@@ -237,6 +259,112 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+
+    /// 见 `faceFit`。三种比例：3:2（素材原比例）、更扁、更方。
+    static func runFaceFit() {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hasRenderedCharacter,
+              let rect = assets.face.patches["blink_shut"] else {
+            print("面部素材没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        // 第一个尺寸是素材原比例 3:2，用它当**基准**。
+        //
+        // 判据不能直接看"贴片落点和清单矩形差几像素"：贴片的 bbox 四周本来就
+        // 留了两三像素的透明余量（第 22 条），睁眼闭眼在那一圈上没有差别，
+        // 于是包围盒天生就比矩形小一圈，3:2 下也有 4 像素的"偏差"。
+        // 真正要问的是**这个偏差会不会随窗口比例变**——会变才是分家了。
+        var errs: [Double] = []
+        for size in [CGSize(width: 900, height: 600),
+                     CGSize(width: 900, height: 470),
+                     CGSize(width: 640, height: 600)] {
+            // 只让眨眼这一块动：呼吸/摇摆/点头全部归零，否则整张图都在变，
+            // 包围盒量到的就不是贴片了。
+            guard let open = shot(assets, size: size, blink: 0),
+                  let shut = shot(assets, size: size, blink: 1) else {
+                print("渲染失败"); exit(1)
+            }
+            guard let box = changedBox(open, shut) else {
+                print("\(Int(size.width))×\(Int(size.height))  没找到变化的像素"
+                      + "  ✗ 贴片根本没画上"); exit(1)
+            }
+            let sx = size.width / CGFloat(assets.face.canvas.first ?? 1536)
+            let sy = size.height / CGFloat(assets.face.canvas.last ?? 1024)
+            let want = CGRect(x: CGFloat(rect.x) * sx, y: CGFloat(rect.y) * sy,
+                              width: CGFloat(rect.w) * sx, height: CGFloat(rect.h) * sy)
+            let err = max(max(abs(box.minX - want.minX), abs(box.minY - want.minY)),
+                          max(abs(box.maxX - want.maxX), abs(box.maxY - want.maxY)))
+            errs.append(err)
+            // 拉得最扁的那一档，把脸那一块存下来，数字之外再给一张图看
+            if abs(size.width / size.height - 1.91) < 0.05, let path = faceFitPath {
+                let pad: CGFloat = 40
+                let crop = NSRect(x: max(0, want.minX - pad), y: max(0, want.minY - pad),
+                                  width: want.width + pad * 2,
+                                  height: want.height + pad * 3)
+                if let cg = shut.cgImage?.cropping(to: crop) {
+                    let rep = NSBitmapImageRep(cgImage: cg)
+                    if let png = rep.representation(using: .png, properties: [:]) {
+                        try? png.write(to: URL(fileURLWithPath: path))
+                        print("已写入 " + path)
+                    }
+                }
+            }
+            print(String(format: "%.0f×%.0f（%.2f:1）  贴片落在 (%.0f,%.0f)-(%.0f,%.0f)，"
+                         + "按 sx/sy 应在 (%.0f,%.0f)-(%.0f,%.0f)  偏差 %.1fpx",
+                         size.width, size.height, size.width / size.height,
+                         box.minX, box.minY, box.maxX, box.maxY,
+                         want.minX, want.minY, want.maxX, want.maxY, err))
+        }
+        let base = errs[0]
+        let drift = errs.dropFirst().map { abs($0 - base) }.max() ?? 0
+        print(String(format: "3:2 基准偏差 %.1fpx（贴片自带的透明余量），"
+                     + "换比例后最多再差 %.1fpx  %@", base, drift,
+                     drift <= 2 ? "✓ 贴片跟着窗口比例走"
+                                : "✗ 拉窗口贴片会漂，检查 FaceOverlay 的 sx/sy"))
+        exit(drift <= 2 ? 0 : 1)
+    }
+
+    /// 按给定尺寸渲一张角色图。`blink` 之外的动作全部归零。
+    private static func shot(_ assets: SceneAssets, size: CGSize,
+                             blink: Double) -> NSBitmapImageRep? {
+        var pose = Pose()
+        pose.blink = blink
+        let view = RenderedSnozzy(assets: assets, palette: .day, pose: pose,
+                                  face: FaceExpression(), headphones: false, t: 0)
+            .frame(width: size.width, height: size.height)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        guard let image = renderer.nsImage, let tiff = image.tiffRepresentation
+        else { return nil }
+        return NSBitmapImageRep(data: tiff)
+    }
+
+    /// 两张图里不一样的那些像素的包围盒。
+    private static func changedBox(_ a: NSBitmapImageRep,
+                                   _ b: NSBitmapImageRep) -> CGRect? {
+        let w = min(a.pixelsWide, b.pixelsWide), h = min(a.pixelsHigh, b.pixelsHigh)
+        var lo = CGPoint(x: CGFloat.greatestFiniteMagnitude,
+                         y: CGFloat.greatestFiniteMagnitude)
+        var hi = CGPoint(x: -1, y: -1)
+        for y in 0..<h {
+            for x in 0..<w {
+                guard let p = a.colorAt(x: x, y: y), let q = b.colorAt(x: x, y: y)
+                else { continue }
+                let d = abs(p.redComponent - q.redComponent)
+                    + abs(p.greenComponent - q.greenComponent)
+                    + abs(p.blueComponent - q.blueComponent)
+                    + abs(p.alphaComponent - q.alphaComponent)
+                // 阈值不能太低：抖动 alpha 的噪点会把包围盒撑到整张图（第 15 条）
+                if d > 0.12 {
+                    lo.x = min(lo.x, CGFloat(x)); lo.y = min(lo.y, CGFloat(y))
+                    hi.x = max(hi.x, CGFloat(x)); hi.y = max(hi.y, CGFloat(y))
+                }
+            }
+        }
+        guard hi.x >= 0 else { return nil }
+        return CGRect(x: lo.x, y: lo.y, width: hi.x - lo.x + 1, height: hi.y - lo.y + 1)
     }
 
     static func run(path: String) {

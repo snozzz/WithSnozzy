@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runFaceStrip(path: path)
             return
         }
+        if Snapshot.faceFit {
+            Snapshot.runFaceFit()
+        }
         if let path = Snapshot.handStripPath {
             Snapshot.runHandStrip(path: path)
             return
