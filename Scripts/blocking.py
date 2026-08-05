@@ -22,21 +22,31 @@ W, H = 1536, 1024
 
 # 构图参数。改构图只动这里。
 #
-# 桌子是 L 形，她坐在**内转角**：主台面横在她身前，回折臂从左端朝镜头伸过来。
-# 回折臂是这版构图的关键——它一进画面就带来纵深，否则窗户/人/货架一字排开，
-# 整个房间会像一堵贴了东西的平墙。
+# 桌子沿后墙横着走，从左墙角一直到右边。**原来有一条朝镜头伸过来的回折臂**
+# （L 形，她坐在内转角），用户明确要求把那条臂折到后墙上去——
+# 于是台面往左续到墙角，成一条直台，画面里没有东西朝观众伸出来。
+#
+# 代价要知道：回折臂原本是这版构图唯一的纵深来源，去掉之后窗户/人/货架
+# 容易一字排开、像一堵贴了东西的平墙。纵深现在只剩桌沿厚度、左墙转角
+# 和地毯，重绘时这几样都别省。
+#
 # 桌子整体抬高约 9%：桌沿到画面底边的空间从 33% 提到 41%。
 # 之前腿一放直脚就出画，那不是姿势调不好，是桌下根本塞不下她从胯到脚的长度。
 HORIZON = 548
-MAIN_FAR_Y, MAIN_NEAR_Y = 598, 722          # 主台面的远近边
+MAIN_FAR_Y, MAIN_NEAR_Y = 598, 722          # 台面的远近边
+# 这两个只定**道具坐标系**（`desk_point` 的 u 就在它们之间插值），
+# 动它等于把键盘、杯子、平板全挪一遍。要改台面左端请动 EXT_*。
 MAIN_FAR = (296, 1216)
 MAIN_NEAR = (232, 1372)
-RETURN_BOTTOM = (64, 402)                    # 回折臂在画面底边的左右端
-RETURN_SPLIT = 486                           # 主台面近边上，回折臂从这里岔出去
+# 台面左端续到墙角（远边 / 近边的 x）。近边给到画布外：重绘把左端面的透视
+# 画得比灰模陡（实测那条边从 (170,600) 斜到 (12,704)），遮罩要**宁可多包一点**
+# 也别短——短了那一小块桌子只进房间层、不进桌面层。多包的部分是墙和地板，
+# 那儿又没有她，画在桌面层里看不出来。
+EXT_FAR_X, EXT_NEAR_X = 150, -40
 DESK_LIP = 32
-LEG_X = (1300,)                              # 只画右前腿；左侧被回折臂占了
+LEG_X = (176, 1300)                          # 左右前腿。左侧不再被回折臂占着
 LEG_W = 22
-WINDOW = (268, 96, 632, 452)                 # 窗洞。避开她（x≈583 起）也避开回折臂
+WINDOW = (268, 96, 632, 452)                 # 窗洞。避开她（x≈583 起）
 SHELF = (1044, 96, 1462, 334)
 
 # 灰模的明度也跟着新方向调亮一档：重绘会照着灰模的明暗关系走，
@@ -59,12 +69,16 @@ MAIN_PROPS = [
     ("tablet",   0.87, 0.50, 96, 72),
     ("plant",    0.95, 0.32, 76, 104),
 ]
-# 回折臂上的显示器。**侧对着她**，所以镜头看到的是机背——
-# 画成正面矩形就成了"电脑对着观众"，很怪；屏幕内容本来也就看不见，
-# 因此这里不留品红，画面里唯一的品红只有窗户。
+# 台面左段上的显示器。回折臂没了之后它们站到直台上，屏幕朝房间这一侧，
+# 支架在面板背后（脚朝墙，不朝镜头）。
+#
+# **右缘必须留在 x≈520 以内**：`measure_hands.MONITOR_EDGE_X` 是拿它量的，
+# 键盘和手的左缘不能越过它（第 40 条）。往左让得越多，键盘的余量越大。
+# 屏幕内容不留品红——画面里唯一的品红是窗户，`cut_scene.window_rect`
+# 认的是最大那块。
 SCREENS = [
-    dict(foot=(268, 916), w=150, h=196, lean=54),
-    dict(foot=(186, 1016), w=162, h=214, lean=60),
+    dict(foot=(206, 700), w=142, h=182, lean=18),
+    dict(foot=(352, 676), w=124, h=160, lean=14),
 ]
 
 
@@ -77,18 +91,16 @@ def desk_point(u, v):
 
 
 def desk_surface():
-    """L 形台面的多边形。顺时针：主台面远边 → 右端 → 近边 → 岔出回折臂 → 回到左端。"""
-    return [(MAIN_FAR[0], MAIN_FAR_Y), (MAIN_FAR[1], MAIN_FAR_Y),
-            (MAIN_NEAR[1], MAIN_NEAR_Y), (RETURN_SPLIT, MAIN_NEAR_Y),
-            (RETURN_BOTTOM[1], H), (RETURN_BOTTOM[0], H),
-            (MAIN_NEAR[0], MAIN_NEAR_Y)]
+    """台面的梯形。顺时针：远边（左端续到墙角）→ 右端 → 近边 → 回到左端。"""
+    return [(EXT_FAR_X, MAIN_FAR_Y), (MAIN_FAR[1], MAIN_FAR_Y),
+            (MAIN_NEAR[1], MAIN_NEAR_Y), (EXT_NEAR_X, MAIN_NEAR_Y)]
 
 
 def draw_desk(d, top, lip, leg):
     d.polygon(desk_surface(), fill=top)
-    # 桌沿厚度只画主台面那一段——回折臂是朝镜头伸的，看不到它的沿
-    d.polygon([(RETURN_SPLIT, MAIN_NEAR_Y), (MAIN_NEAR[1], MAIN_NEAR_Y),
-               (MAIN_NEAR[1], MAIN_NEAR_Y + DESK_LIP), (RETURN_SPLIT, MAIN_NEAR_Y + DESK_LIP)],
+    # 桌沿厚度现在整条近边都要画——回折臂没了，左段的沿也对着镜头
+    d.polygon([(EXT_NEAR_X, MAIN_NEAR_Y), (MAIN_NEAR[1], MAIN_NEAR_Y),
+               (MAIN_NEAR[1], MAIN_NEAR_Y + DESK_LIP), (EXT_NEAR_X, MAIN_NEAR_Y + DESK_LIP)],
               fill=lip)
     # 前腿。桌下必须留空——能看见她的腿是这版构图的全部意义。
     for x in LEG_X:
@@ -102,13 +114,13 @@ def draw_props(d, solid=None):
     for s in SCREENS:
         x, y = s["foot"]
         w, h, lean = s["w"], s["h"], s["lean"]
-        # 底边贴在回折臂上（沿着台面往右后方斜），面板竖起来并向右让开一点：
-        # 读起来就是一台立着的显示器，屏幕朝她、机背朝我们
-        quad = [(x, y), (x + w, y - w * 0.30),
-                (x + w + lean, y - w * 0.30 - h), (x + lean, y - h)]
+        # 底边贴在直台上，只带一点透视斜度；面板基本竖直、稍稍后仰。
+        # 读起来是一台正对房间立着的显示器，支架藏在面板后面
+        quad = [(x, y), (x + w, y - w * 0.08),
+                (x + w + lean, y - w * 0.08 - h), (x + lean, y - h)]
         d.polygon(quad, fill=solid or C_METAL)
         if solid is None:
-            d.line([quad[3], quad[2]], fill=C_NEON_B, width=5)   # 机背上沿透出的辉光
+            d.line([quad[3], quad[2]], fill=C_NEON_B, width=5)   # 屏幕上边框的辉光
 
 
 def build(character_path, out_dir):
