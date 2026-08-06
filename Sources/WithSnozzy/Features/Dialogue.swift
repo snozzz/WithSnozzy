@@ -17,6 +17,9 @@ enum DialogueContext {
     case longSession
     case musicChanged
     case ambienceOn
+    /// 抓到你在看她（近景切换）。**待办还没做完**的那一版在
+    /// `Dialogue.nag(about:)`，这里这一版是清单空着时用的。
+    case caughtWatching
 }
 
 /// 台词库。
@@ -137,6 +140,16 @@ enum Dialogue {
             "这样是不是更放松一点。",
             "背景音开着吧。",
         ],
+        // 待办清单是空的时候用这些。有待办的话走 `nag(about:)`，
+        // 那一版会把事情的名字念出来，杀伤力大得多。
+        .caughtWatching: [
+            "……看什么呢。",
+            "我脸上有东西？",
+            "嗯？找我有事？",
+            "看够了没有。",
+            "……你今天挺闲的嘛。",
+            "再看就要收费了。",
+        ],
     ]
 
     /// 取一句。避免和上一句重复。
@@ -148,6 +161,44 @@ enum Dialogue {
             candidates.remove(at: i)
         }
         return candidates.randomElement() ?? lines[0]
+    }
+
+    /// 抓到你在看她、而待办上还挂着事——把那件事的名字念出来。
+    ///
+    /// 念出**具体哪一件**是这句话的全部杀伤力所在。"还有事没做完呢"是废话，
+    /// "「重写导出模块」还挂着呢"才扎人——她真的看了你的清单。
+    ///
+    /// 待办的标题是用户自己写的，长度完全不可控，而气泡最多两行。
+    /// 所以超长的要截断：句子模板本身就有十来个字，标题再长就把气泡撑爆，
+    /// 或者被 `lineLimit(2)` 无声地吃掉后半句。
+    static func nag(about task: String, avoiding previous: String?) -> String {
+        let title = trim(task)
+        let lines = [
+            "「\(title)」还挂在上面呢。",
+            "光看我可做不完「\(title)」。",
+            "……「\(title)」怎么办？",
+            "我在这儿又跑不掉，「\(title)」先做吧。",
+            "你确定现在该看的是我，不是「\(title)」？",
+            "「\(title)」——提醒你一下。",
+        ]
+        var candidates = lines
+        if let previous, let i = candidates.firstIndex(of: previous),
+           candidates.count > 1 {
+            candidates.remove(at: i)
+        }
+        return candidates.randomElement() ?? lines[0]
+    }
+
+    /// 待办标题在气泡里最多留多长。
+    ///
+    /// 12 个字是量出来的：气泡最宽 210 点、正文 12 号圆体，一行大约装
+    /// 15 个汉字，模板本身要占七八个字，标题给到 12 个字正好落在第二行内。
+    private static let titleLimit = 12
+
+    private static func trim(_ s: String) -> String {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard t.count > titleLimit else { return t }
+        return t.prefix(titleLimit - 1) + "…"
     }
 
     /// 按当前时刻挑一句问候。
@@ -195,8 +246,14 @@ final class Chatter {
     }
 
     /// 按字数估的说话时长。中文放松语速大约每秒四五个字。
+    ///
+    /// **不要拿 `dwell` 去封顶。** 原来写的是 `min(dwell, …)`，因为那时候
+    /// 所有台词都出自台词库、没有一句长到 6.5 秒。对话系统接进来之后
+    /// 回复能有三四十个字，封顶的结果是嘴动到一半停下、气泡还挂着——
+    /// 正好是第 25 条那个 bug 反过来。句子多长就动多久，
+    /// 气泡的停留时长（`speak`）本来就是按同一个字数算的，不会脱节。
     private static func speechTime(_ line: String) -> TimeInterval {
-        min(dwell, max(1.0, Double(line.count) * 0.22))
+        max(1.0, Double(line.count) * 0.22)
     }
 
     init() {
@@ -214,8 +271,21 @@ final class Chatter {
 
     /// 事件触发的台词。这类总是立刻说，会打断当前那句。
     func say(_ context: DialogueContext) {
-        current = Dialogue.line(for: context, avoiding: current)
-        expiry = Date().addingTimeInterval(Self.dwell)
+        speak(Dialogue.line(for: context, avoiding: current))
+    }
+
+    /// 直接说一句现成的话。念待办、以及对话系统的回复走这条。
+    ///
+    /// `dwell` 可以放长：台词库里的句子都短，6.5 秒绰绰有余，
+    /// 但对话系统回来的句子可能有三四十个字，按老时长还没读完就收了。
+    /// 长度和停留时长的换算和 `speechTime` 一致（每秒四五个字），
+    /// 再留一段读完之后的余裕。
+    func speak(_ line: String, dwell: TimeInterval? = nil) {
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        current = trimmed
+        expiry = Date().addingTimeInterval(
+            dwell ?? max(Self.dwell, Double(trimmed.count) * 0.22 + 2.5))
         lastSpoke = Date()
         spokeAt = Date()
     }

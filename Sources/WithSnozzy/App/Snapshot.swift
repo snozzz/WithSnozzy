@@ -55,6 +55,25 @@ enum Snapshot {
         arg("--handstrip")
     }
 
+    /// 近景切换的取景和换姿势。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup out.png
+    /// ```
+    ///
+    /// 这一条要**按真实层序整张画**（房间 → 她 → 桌子 → 手），而且要
+    /// 一档一档地把镜头推过去。近景里能出问题的三件事都只有整张才看得见：
+    ///
+    /// - **取景**：推到 1.55 倍之后，头顶切没切掉、托腮的手在不在画面里
+    /// - **换姿势**：托腮那张上半身和腿在缝线处接没接上、桌上有没有多出一只手
+    /// - **气泡**：镜头推上去之后气泡会被一起推出去，还在不在窗口内
+    ///
+    /// 光看单层图这三件事一件都发现不了——第 29 条那句"看整张，
+    /// 别只放大看一小块"说的就是这个。
+    static var closeUpPath: String? {
+        arg("--closeup")
+    }
+
     /// 面部贴片在**非 3:2 窗口**下贴得准不准。
     ///
     /// ```
@@ -261,6 +280,125 @@ enum Snapshot {
         }
     }
 
+    static func runCloseUp(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hasRenderedCharacter else {
+            print("角色素材没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        if !assets.legs.hasChin {
+            print("⚠️ 没有托腮那张上半身（legs.json 里 chinSeam=\(assets.legs.chinSeam)），"
+                  + "只推镜头不换姿势。先跑 Blender/render_closeup.py")
+        }
+        if assets.hands.chin == nil {
+            print("⚠️ 没有托腮那一帧手，近景时两只手都会留在键盘上")
+        }
+
+        let renderer = ImageRenderer(content: CloseUpStrip(assets: assets))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            print("快照渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+            // 取景是算得出来的，不用靠眼睛量：推到头之后画面对应画布上哪一块。
+            let z = SceneCamera.zoom
+            let cw = assets.legs.canvasW / z, ch = assets.legs.canvasH / z
+            let ax = assets.legs.canvasW * SceneCamera.anchor.x
+            let ay = assets.legs.canvasH * SceneCamera.anchor.y
+            let x0 = ax - cw * SceneCamera.anchor.x, y0 = ay - ch * SceneCamera.anchor.y
+            print(String(format: "推到 %.2f 倍时，画面显示画布上的 x %.0f…%.0f  y %.0f…%.0f",
+                         z, x0, x0 + cw, y0, y0 + ch))
+            // 三件必须在画面里的东西。数值判据，别靠看
+            let items: [(String, Int, Int)] = [
+                ("发顶", 818, 300), ("下巴", 810, 428), ("托腮的手", 846, 450),
+                ("桌沿", 818, 611),
+            ]
+            var missed: [String] = []
+            for (name, x, y) in items {
+                let inside = Double(x) >= x0 && Double(x) <= x0 + cw
+                    && Double(y) >= y0 && Double(y) <= y0 + ch
+                if !inside { missed.append(name) }
+                print("  \(name) 画布(\(x),\(y))  " + (inside ? "✓ 在画面里" : "✗ 被切掉了"))
+            }
+            print(missed.isEmpty ? "CLOSEUP 取景全部在画面里"
+                                 : "CLOSEUP ✗ 切掉了：\(missed.joined(separator: "、"))")
+            probeTiming(framingOK: missed.isEmpty)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
+    /// 走一遍近景的时间轴，逐段核对镜头和姿势的开关。
+    ///
+    /// 图能验取景和层序，验不了**顺序**：镜头和托腮是两条不同的曲线
+    /// （一个连续、一个硬切），而这个功能好不好看八成取决于两者的先后——
+    /// 姿势要在镜头**起步时**换（被运镜盖住），手要在镜头退完**之前**放下。
+    /// 这两条写反了画面上都还是"能用"的，只是难看，靠看截图发现不了。
+    private static func probeTiming(framingOK: Bool) {
+        let closeUp = CloseUp()
+        var log: [(String, Bool, Bool)] = []          // 时刻、pushed、chinRest
+        var arrived = false
+        closeUp.onArrived = { arrived = true }
+
+        // 采样点挑在每一段的中间，避开边界——边界上采到哪一边全看调度。
+        // 停留时长是 5…10 秒随机的，所以"退回中"那个点不能按秒数算，
+        // 得盯着 `pushed` 翻转再采。
+        let done = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            closeUp.begin()
+            try? await Task.sleep(for: .seconds(CloseUp.pushIn * 0.5))
+            log.append(("推进中", closeUp.pushed, closeUp.chinRest))
+
+            try? await Task.sleep(for: .seconds(CloseUp.pushIn * 0.5 + 1.0))
+            log.append(("停住", closeUp.pushed, closeUp.chinRest))
+
+            while closeUp.pushed { try? await Task.sleep(for: .milliseconds(40)) }
+            log.append(("退回中", closeUp.pushed, closeUp.chinRest))
+
+            try? await Task.sleep(for: .seconds(CloseUp.pullOut + 0.3))
+            log.append(("演完", closeUp.pushed, closeUp.chinRest))
+            done.signal()
+        }
+        // 这是个命令行子命令，没有 UI 事件循环在跑，得自己把 runloop 转起来，
+        // 否则上面那个 Task 永远排不到主线程。
+        while done.wait(timeout: .now()) == .timedOut {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+
+        print("时间轴（推进 \(CloseUp.pushIn)s / 停 \(CloseUp.holdRange) / "
+              + "退回 \(CloseUp.pullOut)s）：")
+        for (name, pushed, chin) in log {
+            print("  \(name)：镜头\(pushed ? "推着" : "在原位")、"
+                  + "姿势\(chin ? "托腮" : "常态")")
+        }
+        // 该成立的四条
+        var ok = framingOK
+        func check(_ label: String, _ pass: Bool) {
+            ok = ok && pass
+            print("  " + (pass ? "✓ " : "✗ ") + label)
+        }
+        check("推进的同时就换成托腮（换图被运镜盖住）",
+              log.first?.1 == true && log.first?.2 == true)
+        check("停住那段镜头推着、姿势是托腮",
+              log.count > 1 && log[1].1 && log[1].2)
+        check("手在镜头退完之前放下",
+              log.count > 2 && !log[2].1 && log[2].2)
+        check("演完之后镜头和姿势都回原位",
+              log.count > 3 && !log[3].1 && !log[3].2)
+        check("推到位之后才开口念待办", arrived)
+        print("CLOSEUP " + (ok ? "全部通过" : "有不合格项"))
+        exit(ok ? 0 : 1)
+    }
+
     /// 见 `faceFit`。三种比例：3:2（素材原比例）、更扁、更方。
     static func runFaceFit() {
         let assets = SceneAssets()
@@ -393,6 +531,81 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+}
+
+/// 近景切换逐档平铺：镜头从常态推到最近，中间换成托腮。
+///
+/// 每一格都是**整个窗口**（按真实层序画满），不是裁一小块——近景要检查的
+/// 恰恰是取景，裁过就看不出头顶切没切掉了。
+private struct CloseUpStrip: View {
+    let assets: SceneAssets
+
+    /// 每格画多宽。窗口是 3:2，按这个宽度反推高度。
+    private static let cellW: CGFloat = 460
+    /// 采几档。首尾必须是 0 和 1：那两档一个是常态、一个是推到头，
+    /// 中间几档只是看缓动过程里有没有露馅。
+    private static let steps = 4
+
+    var body: some View {
+        let cw = Self.cellW, ch = cw / 1.5
+        VStack(spacing: 3) {
+            ForEach(0..<2, id: \.self) { row in
+                HStack(spacing: 3) {
+                    ForEach(0..<2, id: \.self) { col in
+                        let i = row * 2 + col
+                        cell(CGFloat(i) / CGFloat(Self.steps - 1), w: cw, h: ch)
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(white: 0.12))
+    }
+
+    /// 一档。`push` 0 是常态、1 是推到最近。
+    ///
+    /// 层序和缩放变换要和 `RootView.SceneStack` 完全一致，否则这条判据
+    /// 量的就是另一个东西了。**变换那一半是共用的**（`SceneCamera`，
+    /// 第 46 条），层序这一半只能照抄——改了那边的层序，这里也要跟着改。
+    private func cell(_ push: CGFloat, w: CGFloat, h: CGFloat) -> some View {
+        let zoom = 1 + (SceneCamera.zoom - 1) * push
+        let chin = push > 0.01
+        let t = 3.0
+        var pose = SnozzyRig.pose(time: t, kick: 0, playing: false)
+        pose.blink = 0
+        let face = FaceRig.expression(t: t, playing: false, mood: 0.62, drowsy: 0,
+                                      working: false, speaking: false)
+        // 头和气泡的锚点抄自 `SceneStack`（figureScale 0.78、headY 0.382）
+        let figure = h * 0.78
+        let bubble = SceneCamera.penned(
+            SceneCamera.point(w / 2 + figure * 0.20, h * 0.382 - figure * 0.22,
+                              in: CGSize(width: w, height: h), zoom: zoom),
+            in: CGSize(width: w, height: h))
+        return ZStack {
+            ZStack(alignment: .topLeading) {
+                PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: t)
+                    .blur(radius: push * SceneCamera.backdropBlur)
+                RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
+                               headphones: false, chin: chin, t: t)
+                PaintedRoomForeground(assets: assets, palette: .day)
+                TypingHands(assets: assets, palette: .day,
+                            frame: TypingRig.frame(at: t, working: false,
+                                                   frames: assets.hands.frames,
+                                                   chin: chin ? assets.hands.chin : nil))
+            }
+            .frame(width: w, height: h)
+            .scaleEffect(zoom, anchor: SceneCamera.unitAnchor)
+
+            // 气泡：推到头之后它会被一起推出去，得确认还在窗口里
+            if chin {
+                SpeechBubble(text: "「重写导出模块」还挂在上面呢。", palette: .day)
+                    .fixedSize()
+                    .position(bubble)
+            }
+        }
+        .frame(width: w, height: h)
+        .clipped()
     }
 }
 

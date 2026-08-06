@@ -43,17 +43,27 @@ def main():
     ap.add_argument("--desk", default="Assets/desk.png")
     a = ap.parse_args()
 
-    paths = sorted(glob.glob(os.path.join(a.src, "hand_*.png")))
+    # 打字循环那几帧按编号排，托腮那一帧单独拿。
+    # **不能一把 `hand_*.png` 通配下来**：`hand_chin.png` 排序落在
+    # `hand_03.png` 后面纯属字母序的巧合，改个名字就串了，
+    # 而且它不属于循环——`TypingRig` 取模的时候会把它当成第五帧播出来。
+    paths = sorted(glob.glob(os.path.join(a.src, "hand_[0-9]*.png")))
     if not paths:
-        raise SystemExit(f"{a.src} 里没有 hand_*.png")
+        raise SystemExit(f"{a.src} 里没有 hand_<编号>.png")
+    chin_path = os.path.join(a.src, "hand_chin.png")
+    has_chin = os.path.exists(chin_path)
 
     imgs = [Image.open(p).convert("RGBA") for p in paths]
     canvas = imgs[0].size
     masks = [np.asarray(im)[:, :, 3] > 4 for im in imgs]
+    # 托腮那帧要和循环帧**共用同一个裁切矩形**（运行时按同一个 rect 贴回去），
+    # 所以它必须参与矩形的求并集，但不参与"逐帧变化量"那条判据。
+    chin_img = Image.open(chin_path).convert("RGBA") if has_chin else None
+    rect_masks = masks + ([np.asarray(chin_img)[:, :, 3] > 4] if has_chin else [])
 
     # 所有帧的手臂横向范围，用来问桌子"这一段从哪行开始挡"
     cols = np.zeros(canvas[0], bool)
-    for m in masks:
+    for m in rect_masks:
         cols |= m.any(axis=0)
     xs = np.where(cols)[0]
     top = desk_top(a.desk, int(xs.min()), int(xs.max()) + 1)
@@ -62,7 +72,7 @@ def main():
 
     # 起始行以下的手臂像素并集
     x0, x1, y1 = 10**9, -1, -1
-    for m in masks:
+    for m in rect_masks:
         ys, xx = np.where(m[top:])
         if len(xx) == 0:
             continue
@@ -83,16 +93,27 @@ def main():
         im.crop(box).save(dst)
         total += os.path.getsize(dst)
 
+    # 托腮那一帧排在循环之后。运行时按下标取图，所以它就是第 len(imgs) 帧，
+    # 但 `frames` 只报循环的长度——`TypingRig` 拿它取模，把托腮算进去
+    # 就会在打字的时候播出一只抬起来的手。
+    meta = {"canvas": list(canvas), "rect": rect, "frames": len(imgs)}
+    if has_chin:
+        dst = os.path.join(a.out, f"snozzy_hand_{len(imgs):02d}.png")
+        chin_img.crop(box).save(dst)
+        total += os.path.getsize(dst)
+        meta["chin"] = len(imgs)
+
     # 逐帧变化量：全是零就说明按键那几帧根本没动，白渲
     changes = [int((masks[i] ^ masks[(i + 1) % len(masks)])[top:].sum())
                for i in range(len(masks))]
 
-    json.dump({"canvas": list(canvas), "rect": rect, "frames": len(imgs)},
-              open(os.path.join(a.out, "hands.json"), "w"), indent=2)
+    json.dump(meta, open(os.path.join(a.out, "hands.json"), "w"), indent=2)
     print(f"桌板上沿 y={top}（手从这一行起画在桌子上面）")
     print(f"手那一块 {rect['w']}×{rect['h']} @ ({rect['x']},{rect['y']})")
     print(f"逐帧剪影变化 {changes}（有 0 就是那两帧一样，动画白做）")
-    print(f"HAND 共 {len(imgs)} 帧，{total / 1024:.0f} KB")
+    print(f"HAND 打字循环 {len(imgs)} 帧"
+          + ("＋托腮 1 帧" if has_chin else "，没有托腮那一帧")
+          + f"，{total / 1024:.0f} KB")
 
 
 if __name__ == "__main__":

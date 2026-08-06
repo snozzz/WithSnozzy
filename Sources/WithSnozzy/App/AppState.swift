@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 侧边可展开的面板。`nil` 表示全部收起，此时只剩房间和 Snozzy。
 enum Panel: String, CaseIterable, Identifiable {
-    case mixer, focus, tasks, library, settings
+    case mixer, focus, tasks, chat, library, settings
     var id: String { rawValue }
 
     var symbol: String {
@@ -11,6 +11,7 @@ enum Panel: String, CaseIterable, Identifiable {
         case .mixer: "slider.horizontal.3"
         case .focus: "timer"
         case .tasks: "checklist"
+        case .chat: "bubble.left.and.bubble.right"
         case .library: "music.note.list"
         case .settings: "gearshape"
         }
@@ -21,6 +22,7 @@ enum Panel: String, CaseIterable, Identifiable {
         case .mixer: "环境音"
         case .focus: "专注"
         case .tasks: "待办"
+        case .chat: "说话"
         case .library: "音乐库"
         case .settings: "设置"
         }
@@ -70,6 +72,12 @@ final class AppState {
 
     /// 她说的话。
     let chatter = Chatter()
+
+    /// 近景切换。你把窗口切回前台，她会托着腮凑近看你一眼。
+    let closeUp = CloseUp()
+
+    /// 和她对话。走本机已登录的命令行（Claude 订阅 / GPT Plus），不用 API key。
+    let chat = SnozzyChat()
 
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
@@ -128,6 +136,60 @@ final class AppState {
         return 0
     }
 
+    /// 说给对话系统听的"此刻的情况"。
+    ///
+    /// 这几句是她能聊起你在干什么的**全部依据**——不给的话，她只是个
+    /// 泛泛的聊天角色，说不出"你那个导出模块还没动"这种话，
+    /// 而那正是"陪着你"和"聊天机器人"的区别。
+    ///
+    /// 只给**画面里本来就看得见**的东西：时间、在放什么、番茄钟、待办。
+    /// 别把她看不见的（文件路径、剪贴板、别的 app）也塞进去——一是没必要，
+    /// 二是这些内容会被送到命令行那一头去。
+    private var situation: String {
+        var lines: [String] = []
+        let h = Int(sceneHour), m = Int((sceneHour - Double(h)) * 60)
+        lines.append(String(format: "现在 %02d:%02d。", h, m))
+
+        if isPlaying {
+            lines.append("在放：\(trackTitle)。她戴着耳机陪你听。")
+        } else {
+            lines.append("没在放音乐。")
+        }
+
+        switch focus.phase {
+        case .work: lines.append("番茄钟：专注中。")
+        case .shortBreak, .longBreak: lines.append("番茄钟：休息中。")
+        case .idle: break
+        }
+        if focus.todayMinutes > 0 {
+            lines.append("他今天已经专注了 \(focus.todayMinutes) 分钟。")
+        }
+
+        let pending = tasks.pending
+        if pending.isEmpty {
+            lines.append(tasks.items.isEmpty ? "待办是空的。" : "待办全做完了。")
+        } else {
+            let names = pending.prefix(5).map { "「\($0.title)」" }.joined(separator: "、")
+            lines.append("待办还剩 \(pending.count) 件：\(names)"
+                         + (pending.count > 5 ? " 等" : "") + "。")
+        }
+        if drowsy > 0.5 { lines.append("很晚了，她有点困。") }
+        return lines.joined(separator: "\n")
+    }
+
+    /// 凑近之后念叨一句。待办上还挂着事就把那件事的名字说出来。
+    ///
+    /// 挑**最早记下**的那一件，不是随机挑：待办是往列表头插的，
+    /// 所以最后一条最老。压在底下最久的那件事本来就是最该被念的，
+    /// 而且每次都挑同一件也更像"她一直记着这事"。
+    private func complainAboutWatching() {
+        guard let oldest = tasks.pending.last else {
+            chatter.say(.caughtWatching)
+            return
+        }
+        chatter.speak(Dialogue.nag(about: oldest.title, avoiding: chatter.current))
+    }
+
     /// 摸头。桌宠类应用里最重要的一个交互——
     /// 点她一下会有回应，这件事本身就让"陪伴"成立。
     func pet() {
@@ -149,11 +211,27 @@ final class AppState {
         settingsSaver?.schedule()
     }
 
+    /// 逐字段赋值而不是用逐成员构造器。
+    ///
+    /// `AppSettings` 手写了 `init(from:)`（为了加字段不清老用户的档），
+    /// 逐成员构造器就没了。逐字段赋值反而更好：以后加设置只要在这里补一行，
+    /// 漏了也只是那一项不存盘，不会像改构造器参数那样一处漏改就编译不过、
+    /// 或者顺序写反把两个值对调（这个结构体里连着三个 Double 和两个枚举）。
     private var currentSettings: AppSettings {
-        AppSettings(volume: volume, source: source, timeMode: timeMode, weather: weather,
-                    windowMode: windowMode, ambienceLevels: ambienceLevels,
-                    lowPower: lowPower, panel: panel?.rawValue, radioMood: radioMood,
-                    characterStyle: characterStyle, live2dModelPath: live2d.modelDirectory)
+        var s = AppSettings()
+        s.volume = volume
+        s.source = source
+        s.timeMode = timeMode
+        s.weather = weather
+        s.windowMode = windowMode
+        s.ambienceLevels = ambienceLevels
+        s.lowPower = lowPower
+        s.panel = panel?.rawValue
+        s.radioMood = radioMood
+        s.characterStyle = characterStyle
+        s.live2dModelPath = live2d.modelDirectory
+        s.chatBackend = chat.backend
+        return s
     }
 
     private func restore() {
@@ -164,6 +242,7 @@ final class AppState {
         defer { isRestoring = false }
 
         volume = saved.volume
+        chat.backend = saved.chatBackend
         live2d.modelDirectory = saved.live2dModelPath
         characterStyle = saved.characterStyle
         if characterStyle == .live2d { live2d.loadIfNeeded() }
@@ -389,6 +468,9 @@ final class AppState {
     var windowMode: WindowMode = .normal {
         didSet {
             guard windowMode != oldValue else { return }
+            // 迷你/桌宠模式里没有那个画面，正演着的近景要收掉——
+            // 不收的话切回完整模式时它还挂在那儿，镜头凭空是推进的
+            if windowMode != .normal { closeUp.cancel() }
             onWindowModeChange?(windowMode)
             scheduleSave()
         }
@@ -498,6 +580,24 @@ final class AppState {
         tasks.onAdded = { [weak self] in self?.chatter.say(.taskAdded) }
         tasks.onCompleted = { [weak self] in self?.chatter.say(.taskCompleted) }
         tasks.onAllDone = { [weak self] in self?.chatter.say(.allTasksDone) }
+
+        // 近景：什么时候可以凑近，以及凑近之后说什么。
+        //
+        // 两个回调都注入进去而不是让 `CloseUp` 自己去读 `AppState`：
+        // 它只管一条时间轴，窗口形态、面板、待办这些都不该是它的事。
+        closeUp.canStart = { [weak self] in
+            guard let self else { return false }
+            // 桌宠/迷你模式里根本没有那个画面；面板开着说明你正在用它，
+            // 这时候把镜头推上去只会挡住你在看的东西。
+            return self.windowMode == .normal && self.panel == nil && self.isVisible
+        }
+        closeUp.onArrived = { [weak self] in self?.complainAboutWatching() }
+
+        // 对话：她回话之后气泡也说一遍，不然只有面板里看得到，
+        // 而这个 app 大部分时间面板是收起来的。
+        chat.onReply = { [weak self] line in self?.chatter.speak(line) }
+        chat.onChanged = { [weak self] in self?.scheduleSave() }
+        chat.context = { [weak self] in self?.situation ?? "" }
 
         // 启动时按时段打个招呼，稍等一下再说，免得和窗口出现撞在一起。
         Task { [weak self] in

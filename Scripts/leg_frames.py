@@ -29,6 +29,8 @@ from PIL import Image
 
 SEAM = 600
 PAD = 10
+# 近景（托腮）那张上半身要切得比常态深一截，见 `chin_seam()`。
+CHIN_SEAM_FALLBACK = 612
 
 
 def alpha_bbox(paths, seam):
@@ -75,11 +77,42 @@ def seam_residual(paths, seam, threshold=150):
     return _erode(hit).sum() / hit.size
 
 
+def chin_seam(chin_path, ref_path, desk_path, seam):
+    """近景（托腮）那张上半身该切到哪一行。
+
+    常态那张切在 `seam`（600）——腿部姿势的差异从那行起，再往下就不能共用了。
+    托腮这张不行：抬起来那条胳膊的袖子一路伸到 y≈644，切在 600 会把它齐齐
+    削掉一截。
+
+    桌面层能帮忙挡，但**不是从 600 就挡得住**：实测那一带 alpha 从 601 才
+    开始有值、611 才满值，中间十行是桌沿那道由虚到实的窄带（第 26 条同一处）。
+    所以要一直切到桌子**完全不透明**的那一行。
+
+    这一行是量出来的，不写死：换一张重绘图桌沿的高度就变了。
+    """
+    if not (os.path.exists(chin_path) and os.path.exists(desk_path)):
+        return CHIN_SEAM_FALLBACK
+    a = np.asarray(Image.open(chin_path).convert("RGBA"), np.int16)
+    b = np.asarray(Image.open(ref_path).convert("RGBA"), np.int16)
+    d = _erode(np.abs(a - b).sum(axis=2) > 150)
+    ys, xs = np.where(d)
+    if len(xs) == 0:
+        return CHIN_SEAM_FALLBACK
+    desk = np.asarray(Image.open(desk_path).convert("RGBA"))[:, :, 3]
+    band = desk[:, int(xs.min()):int(xs.max()) + 1]
+    opaque = np.where((band >= 254).all(axis=1))[0]
+    row = int(opaque.min()) if len(opaque) else CHIN_SEAM_FALLBACK
+    # 胳膊没伸到桌子底下时也不必切那么深，但绝不能浅过常态那条缝
+    return max(seam, min(row, int(ys.max()) + 1))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src", help="render_poses.py / render_layers.py 的输出目录")
     ap.add_argument("--out", default="Assets")
     ap.add_argument("--seam", type=int, default=SEAM)
+    ap.add_argument("--desk", default="Assets/desk.png",
+                    help="桌面层，用来算近景那张上半身该切多深")
     a = ap.parse_args()
     seam = a.seam
 
@@ -135,6 +168,27 @@ def main():
     else:
         print("  没有 snozzy_headphones.png，跳过耳机上半身")
 
+    # 近景（托腮）那两张上半身。切得比常态深一截，理由见 `chin_seam`。
+    #
+    # 切得深就和腿图**重叠**了（腿图从 600 起画），所以运行时的层序是
+    # 「先画腿、再盖上半身」——重叠的那十几行落在桌子完全不透明的那一段里，
+    # 盖住的是谁根本看不见。`RenderedSnozzy` 那边一律按这个顺序画，
+    # 常态那张不重叠，顺序对它没有影响。
+    chin_src = os.path.join(a.src, "torso_chin.png")
+    chin_row = 0
+    if os.path.exists(chin_src):
+        chin_row = chin_seam(chin_src, os.path.join(a.src, f"snozzy_{hub}.png"),
+                             a.desk, seam)
+        chin_body = (0, 0, canvas[0], chin_row)
+        cut(chin_src, "snozzy_body_chin.png", chin_body)
+        hp_chin = os.path.join(a.src, "torso_chin_headphones.png")
+        if os.path.exists(hp_chin):
+            cut(hp_chin, "snozzy_body_chin_headphones.png", chin_body)
+        print(f"近景上半身切到第 {chin_row} 行（常态 {seam}），"
+              f"和腿图重叠 {chin_row - seam} 行，那几行由桌子挡着")
+    else:
+        print("  没有 torso_chin.png，跳过近景上半身（先跑 render_closeup.py）")
+
     # 保底：一张完整的整幅图。腿图或 legs.json 缺了的时候还能画出个人来
     cut(os.path.join(a.src, f"snozzy_{hub}.png"), "snozzy_idle.png",
         (0, 0, canvas[0], canvas[1]))
@@ -146,7 +200,7 @@ def main():
         cut(p, f"snozzy_move_{name}.png", box)
 
     manifest = {"canvas": list(canvas), "seam": seam, "rect": rect,
-                "poses": poses, "steps": n_steps}
+                "poses": poses, "steps": n_steps, "chinSeam": chin_row}
     with open(os.path.join(a.out, "legs.json"), "w") as f:
         json.dump(manifest, f, indent=2)
 

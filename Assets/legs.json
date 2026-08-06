@@ -17,5 +17,6 @@
     "crossR",
     "tucked"
   ],
-  "steps": 8
+  "steps": 8,
+  "chinSeam": 611
 }

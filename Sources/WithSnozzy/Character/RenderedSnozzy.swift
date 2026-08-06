@@ -21,6 +21,8 @@ struct RenderedSnozzy: View, Equatable {
     let face: FaceExpression
     /// 戴不戴耳机。听歌时她陪你一起听。
     let headphones: Bool
+    /// 托不托腮。近景切换时为 true，换成另一张上半身。
+    var chin = false
     /// 当前时间。腿部姿势由它推导。
     let t: Double
 
@@ -28,7 +30,7 @@ struct RenderedSnozzy: View, Equatable {
     /// 所以直接满幅绘制。构图在 `Scripts/blocking.py` 里定，不在这里调。
 
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
-        a.headphones == b.headphones && a.palette == b.palette
+        a.headphones == b.headphones && a.palette == b.palette && a.chin == b.chin
             && abs(a.pose.breath - b.pose.breath) < 0.01
             && abs(a.pose.bodySway - b.pose.bodySway) < 0.01
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
@@ -65,18 +67,39 @@ struct RenderedSnozzy: View, Equatable {
     }
 
     /// 上半身 + 当前那一张腿。素材不全时退回整幅的保底图。
+    ///
+    /// **先画腿再盖上半身**，别反过来。常态那两块本来不重叠（上半身 0…600、
+    /// 腿 600…1024），谁先谁后都一样；但近景那张上半身要切到第 611 行
+    /// （托腮的袖子伸得更低，见 `LegManifest.chinSeam`），和腿重叠十来行，
+    /// 反过来画就会让腿把袖子削掉。重叠的那几行落在桌子完全不透明的一段里，
+    /// 盖住的是谁根本看不见。
     @ViewBuilder
     private func character(w: CGFloat, h: CGFloat) -> some View {
-        // 没有戴耳机的上半身时用常态的那张——否则播放时整个人会消失
-        let torso = (headphones ? assets.snozzyBodyPhones : nil) ?? assets.snozzyBody
-        if let torso, let legs = legImage {
+        if let (torso, rect) = torsoLayer, let legs = legImage {
             ZStack(alignment: .topLeading) {
-                sprite(torso, in: assets.legs.bodyRect, w: w, h: h)
                 sprite(legs, in: assets.legs.rect, w: w, h: h)
+                sprite(torso, in: rect, w: w, h: h)
             }
         } else if let idle = assets.snozzyIdle {
             sprite(idle, in: fullCanvas, w: w, h: h)
         }
+    }
+
+    /// 该画哪一张上半身，以及它贴在哪。
+    ///
+    /// 四种组合（托腮×耳机）逐级回退，缺哪一张都不会让人消失：
+    /// 托腮戴耳机 → 托腮 → 常态戴耳机 → 常态。少了托腮那两张就只推镜头
+    /// 不换姿势，功能仍然可用——和素材缺失时回落到程序化房间同一个原则。
+    private var torsoLayer: (NSImage, LegManifest.Rect)? {
+        if chin, assets.legs.hasChin {
+            if let img = (headphones ? assets.snozzyBodyChinPhones : nil)
+                ?? assets.snozzyBodyChin {
+                return (img, assets.legs.chinRect)
+            }
+        }
+        guard let img = (headphones ? assets.snozzyBodyPhones : nil)
+            ?? assets.snozzyBody else { return nil }
+        return (img, assets.legs.bodyRect)
     }
 
     /// 此刻该画的那一张腿。

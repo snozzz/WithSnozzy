@@ -93,6 +93,20 @@ private struct SceneStack: View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
             let figure = h * Self.figureScale
+            // 近景。`pushed` 是二值的，缓动由 `withAnimation` 在
+            // `CloseUp.begin()` 里裹上——下面这几个量（缩放、模糊、位置）
+            // 全是 SwiftUI 自带可动画的属性，跟着同一条曲线走。
+            let push: CGFloat = state.closeUp.pushed ? 1 : 0
+            let zoom = 1 + (SceneCamera.zoom - 1) * push
+
+            // 气泡和摸头热区**不跟着缩放走**，但位置要跟着走（见 `zoomed`）。
+            let headPoint = SceneCamera.point(w / 2, h * Self.headY,
+                                              in: geo.size, zoom: zoom)
+            let bubblePoint = SceneCamera.penned(
+                SceneCamera.point(w / 2 + figure * 0.20,
+                                  h * Self.headY - figure * 0.22,
+                                  in: geo.size, zoom: zoom),
+                in: geo.size)
 
             ZStack {
                 // 1. 背景。晴天时时间线暂停，这一层完全静止。
@@ -108,6 +122,11 @@ private struct SceneStack: View {
                         RoomBackdrop(palette: palette, weather: weather, t: t)
                     }
                 }
+                // 近景时房间虚一点。一半是景深（镜头凑到她脸上，背景本来就该虚），
+                // 一半是**遮丑**：房间是 1536 宽的平面图，推到 1.55 倍已经在
+                // 放大 2 倍多了，边缘会发毛。虚化之后那点软反而成了效果。
+                // 只虚背景，她和桌子照旧清楚——虚的是"远处"，不是"整张画面"。
+                .blur(radius: push * SceneCamera.backdropBlur)
 
                 // 2+4. Snozzy 和热气共用**同一个**时间线。
                 //
@@ -136,6 +155,7 @@ private struct SceneStack: View {
                                                working: state.focus.phase == .work,
                                                speaking: state.chatter.isSpeaking),
                                            headphones: state.isPlaying,
+                                           chin: state.closeUp.chinRest,
                                            t: t)
                                 .equatable()
                         } else {
@@ -167,7 +187,12 @@ private struct SceneStack: View {
                                         frame: TypingRig.frame(
                                             at: t,
                                             working: state.focus.phase == .work,
-                                            frames: state.sceneAssets.hands.frames))
+                                            frames: state.sceneAssets.hands.frames,
+                                            // 托腮时只剩一只手在键盘上。
+                                            // 上半身那张图和这一层必须同时换，
+                                            // 不然桌上会多出一只没有来路的手
+                                            chin: state.closeUp.chinRest
+                                                ? state.sceneAssets.hands.chin : nil))
                                 .equatable()
                         }
 
@@ -181,27 +206,35 @@ private struct SceneStack: View {
                         }
                     }
                 }
+                // 镜头推进。**只缩放画面这几层**，气泡和热区在下面单独放。
+                //
+                // 房间、她、桌子、手是同一台相机渲的、像素级对齐的四张平面图，
+                // 所以"推镜头"就是把这一摞整体放大——不需要重新渲染任何东西，
+                // 也不会有任何一层跟别的层错开。这正是当初把三层做成像素级
+                // 对齐的那个决定白送的好处。
+                .scaleEffect(zoom, anchor: SceneCamera.unitAnchor)
 
                 // 摸头的热区。
                 //
                 // 只覆盖头部附近，而不是整块角色画布——那块画布大部分是透明的，
                 // 全设成可点的话，点房间空白处也会被当成摸头。
+                // 镜头推进时热区要跟着头走，而且**半径也要跟着放大**，
+                // 否则近景里她的脸占了大半屏，可点的却还是原来那一小圈。
                 Circle()
                     .fill(.clear)
                     .contentShape(Circle())
-                    .frame(width: figure * 0.40, height: figure * 0.40)
-                    .position(x: w / 2, y: h * Self.headY)
+                    .frame(width: figure * 0.40 * zoom, height: figure * 0.40 * zoom)
+                    .position(headPoint)
                     .onTapGesture { state.pet() }
                     // 刻意不加 .help()：这个热区正好在她脸上，
                     // 悬停时系统提示会把整张脸盖住，比没有提示更糟。
                     // 点角色本来就是自然行为，她的回应就是最好的说明。
 
-                // 对话气泡，浮在她头部右上方。
+                // 对话气泡，浮在她头部右上方。跟着镜头挪位置，但**自己不放大**。
                 if let line = state.chatter.current {
                     SpeechBubble(text: line, palette: palette)
                         .fixedSize()
-                        .position(x: w / 2 + figure * 0.20,
-                                  y: h * Self.headY - figure * 0.22)
+                        .position(bubblePoint)
                         .transition(.scale(scale: 0.85, anchor: .bottomLeading)
                             .combined(with: .opacity))
                         .allowsHitTesting(false)
@@ -230,6 +263,8 @@ struct PanelHost: View {
                 FocusPanel(palette: palette)
             case .tasks:
                 TasksPanel(palette: palette)
+            case .chat:
+                ChatPanel(palette: palette)
             case .library:
                 LibraryPanel(palette: palette)
             case .settings:

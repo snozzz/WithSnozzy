@@ -57,9 +57,19 @@ struct LegManifest: Codable {
     var poses: [String] = []
     /// 每段过渡有几张中间帧。
     var steps: Int = 0
+    /// 近景（托腮）那张上半身切到哪一行。0 表示没有这套素材。
+    ///
+    /// 比 `seam` 深十几行：托腮抬起来的那条胳膊一直伸到 y≈644，切在 600
+    /// 会把袖子齐齐削掉；而桌面层要到 y=611 才完全不透明，中间那几行
+    /// 得由这张图自己补上。详见 `Scripts/leg_frames.py` 的 `chin_seam`。
+    var chinSeam: Int = 0
 
     /// 上半身那一块。整幅宽、缝线以上。
     var bodyRect: Rect { Rect(x: 0, y: 0, w: canvas.first ?? 1536, h: seam) }
+    /// 近景那张上半身的位置。**和腿那一块重叠十几行**，所以运行时必须
+    /// 「先画腿、再盖上半身」。
+    var chinRect: Rect { Rect(x: 0, y: 0, w: canvas.first ?? 1536, h: chinSeam) }
+    var hasChin: Bool { chinSeam > seam }
     var canvasW: CGFloat { CGFloat(canvas.first ?? 1536) }
     var canvasH: CGFloat { CGFloat(canvas.count > 1 ? canvas[1] : 1024) }
 }
@@ -72,7 +82,11 @@ struct LegManifest: Codable {
 struct HandManifest: Codable {
     var canvas: [Int] = [1536, 1024]
     var rect = LegManifest.Rect(x: 0, y: 0, w: 0, h: 0)
+    /// 打字循环有几帧。**不含托腮那一帧**——`TypingRig` 拿它取模，
+    /// 算进去的话打字打到一半会冒出一只抬起来的手。
     var frames: Int = 0
+    /// 托腮时留在键盘上的那只手是第几帧。近景专用，不参与循环。
+    var chin: Int?
 
     var isUsable: Bool { frames > 0 && rect.w > 0 && rect.h > 0 }
 }
@@ -96,6 +110,9 @@ final class SceneAssets {
     /// 上半身。缝线以上，所有姿势共用一张；戴耳机时换成戴着的那张。
     private(set) var snozzyBody: NSImage?
     private(set) var snozzyBodyPhones: NSImage?
+    /// 近景时托着腮的那张上半身，同样分戴不戴耳机。缺了就只推镜头不换姿势。
+    private(set) var snozzyBodyChin: NSImage?
+    private(set) var snozzyBodyChinPhones: NSImage?
     /// 每套姿势的静止腿图，下标即 `legs.poses` 的下标。
     private(set) var legStills: [NSImage] = []
     /// 过渡帧。`legMoves[姿势][第几帧]`，中枢那一支是空的。
@@ -143,6 +160,10 @@ final class SceneAssets {
             snozzyBody = NSImage(contentsOf: dir.appendingPathComponent("snozzy_body.png"))
             snozzyBodyPhones = NSImage(contentsOf:
                 dir.appendingPathComponent("snozzy_body_headphones.png"))
+            snozzyBodyChin = NSImage(contentsOf:
+                dir.appendingPathComponent("snozzy_body_chin.png"))
+            snozzyBodyChinPhones = NSImage(contentsOf:
+                dir.appendingPathComponent("snozzy_body_chin_headphones.png"))
             loadLegs(dir)
             loadHands(dir)
 
@@ -211,17 +232,27 @@ final class SceneAssets {
     }
 
     /// 打字的手。缺一帧就整套不要——播到缺的那一帧手会闪一下不见。
+    ///
+    /// 托腮那一帧例外：它是附加的，缺了只是近景时两只手都留在键盘上，
+    /// 打字循环照跑。所以它单独判，不拖累整套。
     private func loadHands(_ dir: URL) {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("hands.json")),
-              let m = try? JSONDecoder().decode(HandManifest.self, from: data),
+              var m = try? JSONDecoder().decode(HandManifest.self, from: data),
               m.isUsable else { return }
-        let frames = (0..<m.frames).compactMap { i in
+        func image(_ i: Int) -> NSImage? {
             NSImage(contentsOf: dir.appendingPathComponent(
                 String(format: "snozzy_hand_%02d.png", i)))
         }
+        let frames = (0..<m.frames).compactMap(image)
         guard frames.count == m.frames else { return }
-        hands = m
         handFrames = frames
+        if let i = m.chin, let chin = image(i) {
+            handFrames.append(chin)
+            m.chin = frames.count      // 追加在循环后面，下标以实际位置为准
+        } else {
+            m.chin = nil
+        }
+        hands = m
     }
 
     // MARK: - 布局计算

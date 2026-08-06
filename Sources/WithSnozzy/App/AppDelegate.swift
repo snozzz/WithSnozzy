@@ -39,6 +39,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runHandStrip(path: path)
             return
         }
+        if let path = Snapshot.closeUpPath {
+            Snapshot.runCloseUp(path: path)
+            return
+        }
+        if let message = SnozzyChat.requestedMessage {
+            // 这一条要等命令行那头回话（几秒到几十秒），所以不能像别的自检
+            // 那样同步跑完就 exit。开个 Task，回来了再退。
+            Task {
+                exit(await SnozzyChat.runSelfTest(message: message))
+            }
+            return
+        }
         if let path = IconMaker.requestedPath {
             IconMaker.run(dir: path)
             return
@@ -140,6 +152,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // state 是 SwiftUI 在 onAppear 里赋进来的，比
         // applicationDidFinishLaunching 晚，在那里启动时它还是 nil。
         state?.pointer.start()
+        // 近景切换监听"窗口回到前台"。同一个理由必须在这里启动：
+        // 它的 `canStart` 是 AppState 在 init 里注入的（第 12 条）。
+        state?.closeUp.start()
 
         state?.onWindowModeChange = { [weak self] mode in
             self?.styler.apply(mode)

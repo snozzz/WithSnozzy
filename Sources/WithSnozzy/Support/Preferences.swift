@@ -18,8 +18,42 @@ struct AppSettings: Codable {
     var radioMood: RadioMood = .chill
     var characterStyle: CharacterStyle = .rendered
     var live2dModelPath: String = "hiyori_en/hiyori_free"
+    /// 对话走哪个命令行。默认 claude——比 codex 快一倍。
+    var chatBackend: SnozzyChat.Backend = .claude
 
     static let storeName = "settings"
+
+    /// 逐字段用 `decodeIfPresent`，缺的用默认值补。
+    ///
+    /// **合成的 `init(from:)` 不会用属性上写的默认值**：少一个键就整份解码失败，
+    /// `Store.load` 拿到 nil，于是**用户所有的设置被一次性重置**。
+    /// 也就是说这个结构体每加一个字段，老用户就被清一次档。
+    /// 加 `chatBackend` 的时候真的踩到了（"settings.json 解码失败，已忽略"），
+    /// 音量、时段、窗口形态全回默认值。
+    ///
+    /// 手写一遍就永久地解决了这个问题：以后再加字段，老存档照读，
+    /// 新字段拿默认值。这十几行是这个文件里最值得的十几行。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AppSettings()
+        func get<T: Decodable>(_ key: CodingKeys, _ fallback: T) -> T {
+            (try? c.decodeIfPresent(T.self, forKey: key)) .flatMap { $0 } ?? fallback
+        }
+        volume = get(.volume, d.volume)
+        source = get(.source, d.source)
+        timeMode = get(.timeMode, d.timeMode)
+        weather = get(.weather, d.weather)
+        windowMode = get(.windowMode, d.windowMode)
+        ambienceLevels = get(.ambienceLevels, d.ambienceLevels)
+        lowPower = get(.lowPower, d.lowPower)
+        panel = get(.panel, d.panel)
+        radioMood = get(.radioMood, d.radioMood)
+        characterStyle = get(.characterStyle, d.characterStyle)
+        live2dModelPath = get(.live2dModelPath, d.live2dModelPath)
+        chatBackend = get(.chatBackend, d.chatBackend)
+    }
+
+    init() {}
 
     /// 解码后做一次清洗。
     ///

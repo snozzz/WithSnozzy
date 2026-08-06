@@ -63,7 +63,12 @@ enum TypingRig {
     static let workChance: UInt64 = 78
 
     /// 此刻画第几帧。0 号是"手搭在键上不动"。
-    static func frame(at t: Double, working: Bool, frames: Int) -> Int {
+    ///
+    /// 托腮的时候直接给那一帧（只剩一只手在键盘上），不掷骰子也不循环——
+    /// 另一只手在脸上，让它继续敲字就见鬼了。
+    static func frame(at t: Double, working: Bool, frames: Int,
+                      chin: Int? = nil) -> Int {
+        if let chin { return chin }
         guard frames > 1 else { return 0 }
         let slotIndex = Int64(floor(t / slot))
         guard hash(slotIndex) % 100 < (working ? workChance : idleChance) else { return 0 }

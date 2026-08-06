@@ -37,6 +37,25 @@ struct SettingsPanel: View {
                 }
             }
 
+            section("对话") {
+                row("接哪个订阅") {
+                    Picker("", selection: Binding(
+                        get: { state.chat.backend },
+                        set: { state.chat.backend = $0 })) {
+                        ForEach(SnozzyChat.Backend.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 138)
+                }
+                // 这一句必须写清楚：用户以为"能对话"就等于"要付 API 的钱"，
+                // 而这里走的是他本机已经登录的命令行，一分钱不多花。
+                Text("不用 API key，调用的是本机已登录的命令行"
+                     + "（`claude` / `codex`），按订阅走。每句要等几秒。")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.34))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             section("角色") {
                 row("渲染方式") {
                     Picker("", selection: Binding(
