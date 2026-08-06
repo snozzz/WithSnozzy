@@ -852,7 +852,29 @@ x=599），她坐在内转角，这才读得出来。
 （`Art/snozzy_cutout.png`，让他合进去，姿势就不会跑）。
 光说"给我张图"是不够的——他生成时没有这两样，出来的构图和角色必然对不上。
 
-**54. 引导图里的任何残留，重绘都会当成家具给你画出来。**
+**54. 用户交付的图里，会有东西画在窗户前面——品红别再"照坐标盖一块"。**
+用户报"窗户挡住第二个显示屏"。查下来是我自己盖坏的：交付图里第二块显示器
+画在窗户**前面**、压住窗洞左下角，而我照老规矩把**整个包围盒**刷成纯品红，
+把那个角抹平了；`cut_scene` 又按包围盒挖洞，于是天空从显示器里透出来。
+
+"照原坐标盖一块纯品红"这条是**我出灰模那个年代**的做法——那时窗洞前面
+保证没有东西。图由别人给，这个前提就没了。现在分两处挡住：
+
+- `Scripts/install_scene.py` 只把**本来就是品红的像素**提纯，形状一个都不动
+- `Scripts/cut_scene.py` 按**品红区域**挖洞、外扩 2 像素吃掉抗锯齿窄带，
+  不再按包围盒。挖完打印"占包围盒百分之几"，93.7% 就是被挡住的那 6.3%
+
+**而且"是不是品红"要按连通域判，不能全图按颜色判。** 我第一版拿放宽的颜色
+容差扫全图，把两块显示器**画面里**偏品红的像素（城市霓虹、播放器界面的粉紫）
+也刷成了纯品红，屏幕上落了一片品红斑。正解是从 `window_rect` 那块最大连通域
+往外长几步——长不进屏幕里去，中间隔着机身边框。
+
+顺带一条：**交付图的色调也要量了再收**。这次实测比上一版暗一大截
+（平均亮度 134 vs 179、饱和差 46 vs 32），直接入库观感发闷。
+`install_scene.py --gamma --sat` 做的是低频调整（抬中间调伽马 + 收一点饱和），
+**不动对比度和色相**——那些一动就和角色的卡通着色打架。收到 153.6/35.7。
+
+**55. 引导图里的任何残留，重绘都会当成家具给你画出来。**
 我上一版的引导图在 x 592–620 留了一小条没抹干净的旧显示器边（当时看见了，
 觉得"就一小条"没管）。codex 把它画成了一块**立在桌上的灰板**，
 右缘到 645——**压过键盘左缘 594**，键盘会穿进去。
@@ -1029,6 +1051,7 @@ python3 Scripts/scene_drift.py Art/scene_empty_clean.png Art/scene_rich.png
 python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
 
 # 换了用户交付的房间图之后，整套要走一遍（见第二节开头那条路）
+python3 Scripts/install_scene.py Art/scene_delivered.png --gamma 0.77 --sat 0.87
 python3 Scripts/desk_mask.py --out Art/blocking --check Art/scene_delivered.png
 python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
 $B --background --factory-startup --python Blender/fit_scene.py -- Snozzy.vrm

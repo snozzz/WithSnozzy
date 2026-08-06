@@ -85,14 +85,31 @@ def main():
     desk = np.dstack([rgb, feather(mask, a.feather)])
     Image.fromarray(desk).save(os.path.join(a.out, "desk.png"))
 
-    # 房间层：整幅画，把窗洞挖空
+    # 房间层：整幅画，把窗洞挖空。
+    #
+    # 按**品红区域**挖，不按包围盒。以前是按包围盒挖的（窗户是矩形，
+    # 而边缘被辉光染过的像素纯度不够、进不了连通域，照连通域挖会在窗角留豁口），
+    # 那是在**我出灰模**的年代——那时窗洞前面保证没有东西。
+    #
+    # 用户交付的房间图不一样：会有东西画在窗户**前面**（这一版是第二块显示器，
+    # 压住窗洞左下角）。按包围盒挖，那块显示器就被挖穿，天空从它里面透出来。
+    #
+    # 豁口那个老问题现在由两处一起挡住：`install_scene.py` 把所有品红像素
+    # 提纯成 #FF00FF（辉光染过的也算），这里再把区域**外扩两像素**吃掉
+    # 品红和墙之间那道抗锯齿的窄带。
     room_alpha = np.full((H, W), 255, np.uint8)
-    # 按**包围盒**挖洞，而不是按连通域本身。窗户本来就是矩形，
-    # 而边缘那一圈被霓虹辉光染过的像素纯度不够、进不了连通域，
-    # 照着连通域挖会在窗角留下豁口。
     if rect:
+        grown = hole.copy()
+        for _ in range(2):
+            g = grown.copy()
+            g[1:] |= grown[:-1]; g[:-1] |= grown[1:]
+            g[:, 1:] |= grown[:, :-1]; g[:, :-1] |= grown[:, 1:]
+            grown = g
+        room_alpha[grown] = 0
         x0, y0, x1, y1 = rect
-        room_alpha[y0:y1, x0:x1] = 0
+        covered = 100 * grown[y0:y1, x0:x1].mean()
+        print(f"    窗洞按区域挖：占包围盒 {covered:.1f}%"
+              f"{'' if covered > 99.5 else '（差的那部分是挡在窗前面的东西，正常）'}")
     else:
         room_alpha[hole] = 0
     room = np.dstack([rgb, feather(room_alpha, 1)])
