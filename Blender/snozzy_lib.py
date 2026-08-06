@@ -497,7 +497,7 @@ def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32
     cam.data.type = 'PERSP'
     cam.data.lens = lens
     a = math.radians(yaw_deg)
-    target = Vector((0.06, 0.0, look_z))
+    target = Vector((CAM_SHIFT, 0.0, look_z))
     cam.location = Vector((math.sin(a) * dist, -math.cos(a) * dist, height)) + Vector((target.x, 0, 0))
     direction = target - cam.location
     cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
@@ -506,7 +506,19 @@ def scene_camera(scene, yaw_deg=13, height=1.42, dist=2.55, look_z=0.86, lens=32
 
 # 胯部在画面上的纵向位置。**只此一份**——渲染脚本有好几个，
 # 各写各的数值必然走偏（面部贴片就因此错了一整轮）。
-HIP_Y = 0.615
+#
+# 跟着画上去的桌沿走：胯要落在**桌板后沿下方约 32 像素**，人才"坐进"桌子后面。
+# 换了成品图就要重算——这一版的后沿在第 608 行，所以 (608+32)/1024。
+HIP_Y = 0.625
+
+# 相机横向偏移（米）。**纯平移**，不改朝向：`target.x` 和 `cam.location.x`
+# 一起加，`direction` 里正好抵消。
+#
+# 拿它把整套（她 + 键盘 + 手）在画面上左右挪，**别去动角色的 location**——
+# 键盘是世界坐标里的，角色一动就和手错开了。
+# 往负走＝相机左移＝她在画面上右移。标定：这个机位下约 535 像素/米。
+# 这一版要把她从 x 中心 730 挪到椅子中心 825，差 95px → 0.06 − 95/535。
+CAM_SHIFT = -0.118
 
 
 def place_hip(scene, arm, y_fraction=None, bone="J_Bip_C_Hips", tries=8,

@@ -172,7 +172,44 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 而手臂在缝线以上、要连带换掉共用的上半身那张图，代价比这个功能本身大。
 改完用 `--handstrip` 验。
 
-### 场景：灰模 → 重绘 → 切层
+### 场景有两条路，先看清楚现在走的是哪一条
+
+1. **我定构图**：灰模 → 重绘 → 切层（`blocking.py` 出遮罩）。下面那一小节
+2. **用户交付成品图**：描遮罩 → **角色反过来去对图**。**现在走的是这一条**
+
+第 2 条是用户在反复几轮之后直接给了一张画好的房间图
+（`Art/scene_delivered.png`，1536×1024、窗户已经涂成品红、桌上没画键盘）。
+构图从此由那张图定，管线的方向整个反过来了：
+
+```
+用户给的房间图 ──Scripts/desk_mask.py（照图描桌子层遮罩）──> mask_desk.png
+                        │
+                Scripts/cut_scene.py ──> room.png + desk.png
+                        │
+        Blender/fit_scene.py（不渲染，几秒出数）
+                        │
+        调三个旋钮把角色对上去，再重渲角色
+```
+
+**三个旋钮，只有这三个**：
+
+- `snozzy_lib.HIP_Y`——她在画面上的高低。跟着画上去的桌子后沿走，
+  胯落在后沿下方约 32 像素
+- `snozzy_lib.CAM_SHIFT`——横向。**挪相机，别挪角色**：键盘是世界坐标里的
+  （`keyboard.CENTRE`），角色一动就和手错开了；挪相机是整套一起挪。
+  这个机位下约 535 像素/米
+- `keyboard.DESK_BACK_Y / DESK_FRONT_Y`——桌面在进深上的前后位置。
+  桌高 0.725 是真实尺寸、不动；把量出来的两条桌沿行投回 3D 解出来，
+  `fit_scene.py` 里有二分求解
+
+`fit_scene.py` 一次报全：她的画布占位对不对得上椅子、有没有压到画上去的大屏、
+桌面平面投回画布对不对得上量出来的行、键盘落在不在桌板上。
+**全绿了再去渲**——渲一轮三四分钟，靠渲图去试参数是最贵的做法。
+
+对完之后角色那一套要**全部重渲**（姿势、耳机层、面部贴片、键盘+手），
+因为它们共用同一台相机和同一个落位。命令见第七节。
+
+### 场景：灰模 → 重绘 → 切层（我定构图那条路）
 
 **不要用文字描述构图。** 试过两轮都没收敛（视角变成俯拍、没有她能坐的
 位置）——空间关系本来就不该用形容词表达。正确做法是先出灰模再让重绘上色：
@@ -799,7 +836,23 @@ x=599），她坐在内转角，这才读得出来。
 三张全报"越界"。要量的是**那个具体的量**（显示器右缘按第 48 条的量法），
 不是"哪里变了"。
 
-**53. 引导图里的任何残留，重绘都会当成家具给你画出来。**
+**53. 用户直接给图之后，管线方向要整个翻过来——别再拿他的图去改我的构图。**
+这一条是这轮里最贵的教训：我连着四五轮"照着他的参考图去调我们这版的构图"，
+每一轮都被"相机不能动、窗洞要留品红、键盘位置从桌沿反推"往回拽，
+每一轮都差一口气。**根子不是哪个参数调错了，是方向反了。**
+
+正解是让他直接给一张画好的房间图，构图以那张为准，**角色反过来去对图**
+（第二节开头）。真做起来反而快：新图的透视和老的几乎一样
+（桌面进深 127px vs 124px），相机根本不用重推，只要动三个旋钮——
+她往右 95px、往下 10px、桌面前后沿重解一次。`fit_scene.py` 报数几秒钟，
+调完再渲，一轮就过。
+
+配套要给他的东西也值得记：**一张合成好的当前画面**（`Art/for_regen.png`，
+让他拿去当输入图，机位就不会跑）＋**一张角色的透明抠像**
+（`Art/snozzy_cutout.png`，让他合进去，姿势就不会跑）。
+光说"给我张图"是不够的——他生成时没有这两样，出来的构图和角色必然对不上。
+
+**54. 引导图里的任何残留，重绘都会当成家具给你画出来。**
 我上一版的引导图在 x 592–620 留了一小条没抹干净的旧显示器边（当时看见了，
 觉得"就一小条"没管）。codex 把它画成了一块**立在桌上的灰板**，
 右缘到 645——**压过键盘左缘 594**，键盘会穿进去。
@@ -974,6 +1027,12 @@ python3 Scripts/blocking.py && cp Art/blocking/layout.png Art/blocking_for_repai
 codex exec --cd 工作目录 --dangerously-bypass-approvals-and-sandbox "$(cat 任务.md)"
 python3 Scripts/scene_drift.py Art/scene_empty_clean.png Art/scene_rich.png
 python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
+
+# 换了用户交付的房间图之后，整套要走一遍（见第二节开头那条路）
+python3 Scripts/desk_mask.py --out Art/blocking --check Art/scene_delivered.png
+python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
+$B --background --factory-startup --python Blender/fit_scene.py -- Snozzy.vrm
+#   ↑ 不渲染，几秒出数。全绿了再往下渲，否则就是三四分钟试一个参数
 
 # 角色重出（改完 pose.py 的 LEG_POSES 之后）。约 2 分钟
 B=/Applications/Blender.app/Contents/MacOS/Blender
