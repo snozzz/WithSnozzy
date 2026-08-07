@@ -85,6 +85,11 @@ final class AppState {
     /// 她把话说出来。本机合成，零延迟。
     let speaking = Speaking()
 
+    /// 给 ChatGPT 那条 MCP 通道用的：定期写一份状态快照、收 GPT 写回来的东西。
+    @ObservationIgnored private var bridge: Timer?
+    /// GPT 让记下的事。存盘，下次还在。
+    private(set) var memories: [String] = Store.load("memories", as: [String].self) ?? []
+
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
 
@@ -149,6 +154,60 @@ final class AppState {
     /// 直接问它。台词库那些不出声的句子仍然走估算。
     var sheIsTalking: Bool {
         speaking.isSpeaking || chatter.isSpeaking
+    }
+
+    // MARK: - 和 ChatGPT 之间的桥
+
+    /// 写一份状态快照给 MCP 服务器读。
+    ///
+    /// MCP 服务器是 ChatGPT **另外拉起来的进程**，读不到我们内存里的东西。
+    /// 待办和专注记录本来就落盘（它直接读那两个文件），
+    /// 这里补的是只存在内存里的部分：几点了、在放什么。
+    private func writeSnapshot() {
+        var snap = SnozzyState()
+        snap.at = Date()
+        snap.hour = sceneHour
+        snap.playing = isPlaying
+        snap.track = trackTitle
+        snap.focusPhase = String(describing: focus.phase)
+        snap.todayMinutes = focus.todayMinutes
+        snap.memories = memories
+        Store.save(snap, as: MCPServer.stateName)
+    }
+
+    /// 收 GPT 写回来的东西。
+    ///
+    /// **它不能直接改 `tasks.json`**：待办在我们内存里，下一次存盘会把它
+    /// 整份覆盖掉。所以它写进 `inbox.json`，我们在这里合并、然后清空。
+    /// 两个进程各写各的文件，谁也覆盖不了谁。
+    private func drainInbox() {
+        let url = Store.url(MCPServer.inboxName)
+        guard let data = try? Data(contentsOf: url),
+              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              !items.isEmpty else { return }
+
+        for item in items {
+            switch item["kind"] as? String {
+            case "addTodo":
+                if let t = item["title"] as? String { tasks.add(t) }
+            case "completeTodo":
+                if let t = item["title"] as? String,
+                   let hit = tasks.pending.first(where: { $0.title == t }) {
+                    tasks.toggle(hit)
+                }
+            case "remember":
+                if let n = item["note"] as? String, !memories.contains(n) {
+                    memories.append(n)
+                    if memories.count > 60 { memories.removeFirst(memories.count - 60) }
+                    Store.save(memories, as: "memories")
+                }
+            default:
+                break
+            }
+        }
+        // 收完就清空。**必须写空数组而不是删文件**——删了之后 MCP 那边
+        // 正好在追加的话会拿旧内容重建，刚处理过的又会回来一遍。
+        try? Data("[]".utf8).write(to: url, options: .atomic)
     }
 
     /// 说给对话系统听的"此刻的情况"。
@@ -607,6 +666,23 @@ final class AppState {
         //
         // 两个回调都注入进去而不是让 `CloseUp` 自己去读 `AppState`：
         // 它只管一条时间轴，窗口形态、面板、待办这些都不该是它的事。
+        // MCP 那条通道：每 20 秒写一份快照、顺手把 GPT 写回来的东西收进来。
+        //
+        // 为什么是定时器而不是"变了就写"：快照里有时间和"在放什么"，
+        // 时间本来就一直在变；而 20 秒的粒度对"她知不知道我在干嘛"完全够用。
+        // 收件箱同频检查，GPT 记的待办最多 20 秒后出现在清单里。
+        writeSnapshot()
+        bridge = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                // **先收件再写快照。** 反过来的话，这一轮刚收进来的东西
+                // （GPT 让记的待办、让记住的事）要等下一轮才出现在快照里，
+                // 于是它紧接着再查一次会发现自己刚记的东西不在——
+                // 看起来像是没记住。
+                self?.drainInbox()
+                self?.writeSnapshot()
+            }
+        }
+
         closeUp.canStart = { [weak self] in
             guard let self else { return false }
             // 桌宠/迷你模式里根本没有那个画面；面板开着说明你正在用它，

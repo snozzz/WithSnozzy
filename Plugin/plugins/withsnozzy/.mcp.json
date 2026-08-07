@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "withsnozzy": {
+      "command": "/Users/snoz/earn_sth/relax/dist/WithSnozzy.app/Contents/MacOS/WithSnozzy",
+      "args": [
+        "--mcp"
+      ],
+      "default_tools_approval_mode": "auto",
+      "tools": {
+        "add_todo": {
+          "approval_mode": "prompt"
+        },
+        "complete_todo": {
+          "approval_mode": "prompt"
+        },
+        "remember": {
+          "approval_mode": "auto"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "withsnozzy-local",
+  "interface": { "displayName": "WithSnozzy" },
+  "plugins": [
+    {
+      "name": "withsnozzy",
+      "source": { "source": "local", "path": "./plugins/withsnozzy" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "withsnozzy",
+  "version": "0.1.0",
+  "description": "Snozzy 知道的事：待办、番茄钟、在放什么音乐。",
+  "author": { "name": "snozzz" },
+  "license": "Proprietary",
+  "keywords": ["todo", "focus", "music", "companion"],
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Snozzy",
+    "shortDescription": "让 Snozzy 知道你在干什么",
+    "longDescription": "读取 WithSnozzy 里的待办、番茄钟阶段、正在播放的音乐和时间，并可以帮你记待办、划掉待办、记住你提过的事。全部在本机，不联网。",
+    "developerName": "snozzz",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "composerIcon": "./assets/snozzy.svg",
+    "logo": "./assets/snozzy.svg",
+    "logoDark": "./assets/snozzy.svg",
+    "defaultPrompt": ["我现在该干嘛？", "我待办上还剩什么？"],
+    "brandColor": "#F2A0C4"
+  }
+}

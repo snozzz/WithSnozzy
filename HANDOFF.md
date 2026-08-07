@@ -1308,6 +1308,68 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
 - 判据 `--voice`：识别器/权限/输入设备逐条报，给个 WAV 还能验识别质量。
   **必须用 `open` 启动**，见第 61 条
 
+### 2.6 接 ChatGPT 语音（MCP 插件）
+
+用户想让 **ChatGPT 的语音 live** 来当 Snozzy 的嘴，WithSnozzy 只负责"记忆"——
+把待办、在放什么这些递过去。查完 ChatGPT.app 之后，**能走的只有 MCP 这一条**：
+
+不能走的（都实测过）：
+
+- AppleScript 字典是 Chromium 模板、**没实现**。`get version` 能返回，
+  `count windows` 直接 AppleEvent 超时（-1712），所以 `execute javascript`
+  用不了，读不了会话内容
+- URL scheme 只注册了 `codex://`，唤不起聊天或语音
+- 全局快捷键只有 ⌥Space（启动器）、⌘⌥1、⌘,（设置），**没有语音的**
+- 语音会话本身没有任何外部输入口——**"把状态塞进去"这条路不存在**
+
+能走的：ChatGPT.app **捆了一套跑在本机的 MCP 插件**
+（`Contents/Resources/plugins/openai-bundled/`，Reminders、Messages 那些），
+而 `codex plugin marketplace add` **接受本地路径**。所以我们做成同样的形状：
+
+```
+Plugin/
+  .agents/plugins/marketplace.json     ← marketplace 清单（格式抄 openai-bundled 那份）
+  plugins/withsnozzy/
+    .codex-plugin/plugin.json          ← 插件清单
+    .mcp.json                          ← 指向 WithSnozzy --mcp
+./Scripts/install_plugin.sh            ← 填路径 + 注册 + 安装，可重复跑
+```
+
+**方向反过来了，而且这样更对**：不是我们把状态推给它，是**它需要的时候
+来问**。状态是会变的，推过去的那一刻就过期了；来问拿到的永远是此刻的。
+
+实现：`Features/MCPServer.swift`（stdio 上的 JSON-RPC 2.0）+ `MCPTools.swift`。
+四个工具：`get_state`、`add_todo`、`complete_todo`、`remember`。
+
+几条要知道的：
+
+- **MCP 服务器是 ChatGPT 另外拉起来的进程**，读不到界面内存里的东西。
+  待办和专注记录本来就落盘（直接读那两个文件），界面每 20 秒补写一份
+  `state.json` 快照把"在放什么"这类补上。**app 没开着也能回答**，
+  但会在开头说明"这是几分钟前的"，不假装实时
+- **写回去不能直接改 `tasks.json`**：待办在界面内存里，它下次存盘会整份覆盖。
+  所以走 `inbox.json` 单向队列，界面收完清空。两个进程各写各的文件
+- **收件要排在写快照之前**。反过来的话 GPT 刚记的东西要等下一轮才进快照，
+  它紧接着再查会发现自己刚记的不在，看着像没记住
+- `.mcp.json` 里的路径**必须绝对**：那个进程的工作目录和 PATH 和终端不一样，
+  写错的表现是插件装得上、一调用就静默失败。`install_plugin.sh` 负责填
+- stdout 是协议通道，**一个字都不能乱写**。日志一律走 stderr
+
+实测（`codex exec` 调了一次，用的是 Codex 额度）：
+
+```
+mcp: withsnozzy/get_state started
+mcp: withsnozzy/get_state (completed)
+→ 都下午两点二十了，先把「计算研究所导师 search」做掉，别再优雅地绕着它散步了。
+```
+
+工具通了、状态读到了、人设也带上了（人设在 `initialize` 的 `instructions`
+**和** `get_state` 的返回里各放一份——前者各家客户端处理不一样，
+后者是工具结果，一定会进上下文）。
+
+**没验证的一条**：ChatGPT 的**语音模式**能不能调插件工具。OpenAI 没有公开
+说明，而我没法驱动那个界面。普通聊天肯定能用。这条要用户自己试。
+
 ### 3. 钢琴（用户明确说是"后话"，但很在意）
 
 用户想学钢琴，希望 Snozzy 练琴时顺便教他。
