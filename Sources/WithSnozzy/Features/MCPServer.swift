@@ -86,9 +86,12 @@ enum MCPServer {
                 // 跟着对方报的版本走，对不上时给我们支持的那个
                 "protocolVersion": (msg["params"] as? [String: Any])?["protocolVersion"]
                     as? String ?? "2025-06-18",
-                "capabilities": ["tools": [:] as [String: Any]],
+                // `listChanged` 要显式给。Reminders 那个报的是
+                // `{"tools":{"listChanged":false}}`，我们原来给的是 `{}`。
+                "capabilities": ["tools": ["listChanged": false]],
                 "serverInfo": ["name": "withsnozzy", "version": "0.1.0"],
-                "instructions": Persona.forChatGPT,
+                // **不发 `instructions`**：Reminders 不发，而我们发了。
+                // 人设本来就在 `get_state` 的返回里带着，那一份才保证送达。
             ])
         case "tools/list":
             record("tools/list → 报出 \(Tool.all.count) 个工具")

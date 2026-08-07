@@ -43,17 +43,44 @@ struct Tool {
     /// JSON Schema 的 properties 部分。
     let properties: [String: Any]
     let required: [String]
+    /// 只读还是会改东西。ChatGPT 拿它决定要不要弹审批框。
+    let readOnly: Bool
     let run: ([String: Any]) -> (String, Bool)
 
+    /// 报给客户端的工具描述。
+    ///
+    /// **形状是照着 ChatGPT 自己能用的那个插件抄的**，不是照 MCP 规范写的。
+    /// 规范允许的东西不等于这个客户端接受的东西——第一版按规范写，
+    /// 握手正常、`tools/list` 也正常报了 4 个工具，但 ChatGPT 就是不把它们
+    /// 放进模型的上下文，而且不给任何理由。
+    ///
+    /// 拿 `codex-macos reminders mcp`（OpenAI 自己的、确定能用的那个）
+    /// dump 出来逐字段对，差这几处：
+    ///
+    /// - 我们多了个 `title`（MCP 2025-06-18 才加的字段）
+    /// - 我们少了 `annotations`
+    /// - `inputSchema` 少了 `additionalProperties: false`
+    /// - **参数为空时它不给 `required`，我们给了个空数组**
+    ///
+    /// 所以这里一律照它的来。`title` 挪到 `annotations` 里当人看的名字。
     var schema: [String: Any] {
-        [
+        var input: [String: Any] = [
+            "type": "object",
+            "properties": properties,
+            "additionalProperties": false,
+        ]
+        // 空的时候**不要给** `required`，跟 Reminders 一致
+        if !required.isEmpty { input["required"] = required }
+        return [
             "name": name,
-            "title": title,
             "description": description,
-            "inputSchema": [
-                "type": "object",
-                "properties": properties,
-                "required": required,
+            "inputSchema": input,
+            "annotations": [
+                "title": title,
+                "readOnlyHint": readOnly,
+                "destructiveHint": false,
+                "idempotentHint": readOnly,
+                "openWorldHint": false,
             ],
         ]
     }
@@ -69,7 +96,7 @@ struct Tool {
             读取 Snozzy 此刻能看到的一切：几点了、在放什么音乐、番茄钟到哪一步、\
             待办还剩哪些、今天专注了多久。聊到他在干什么、该干什么、累不累的时候先调这个。
             """,
-        properties: [:], required: [],
+        properties: [:], required: [], readOnly: true,
         run: { _ in (SnozzyState.read().described, false) })
 
     // MARK: - 写
@@ -83,7 +110,7 @@ struct Tool {
         title: "记一条待办",
         description: "他嘴上说要做某件事的时候，帮他记进待办清单。别自作主张地记。",
         properties: ["title": ["type": "string", "description": "这件事叫什么，短一点"]],
-        required: ["title"],
+        required: ["title"], readOnly: false,
         run: { args in
             guard let title = (args["title"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
@@ -98,7 +125,7 @@ struct Tool {
         title: "划掉一条待办",
         description: "他说某件事做完了的时候用。名字对不上就会告诉你对不上，不会乱划。",
         properties: ["title": ["type": "string", "description": "哪一件，写清单上的名字"]],
-        required: ["title"],
+        required: ["title"], readOnly: false,
         run: { args in
             guard let title = (args["title"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
@@ -124,7 +151,7 @@ struct Tool {
             这些会存在本机，下次 Snozzy 还知道。**别把整段对话往里塞**，一次一条。
             """,
         properties: ["note": ["type": "string", "description": "一句话，说清楚要记什么"]],
-        required: ["note"],
+        required: ["note"], readOnly: false,
         run: { args in
             guard let note = (args["note"] as? String)?
                 .trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
