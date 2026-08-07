@@ -92,10 +92,13 @@ enum MCPServer {
             let name = params["name"] as? String ?? ""
             let args = params["arguments"] as? [String: Any] ?? [:]
             guard let tool = Tool.all.first(where: { $0.name == name }) else {
+                record("调用了不存在的工具 \(name)")
                 reply(id, text: "没有这个工具：\(name)", isError: true)
                 return
             }
             let (text, failed) = tool.run(args)
+            record("\(name)\(args.isEmpty ? "" : " \(args)") → "
+                   + (failed ? "失败：" : "") + text.prefix(60))
             reply(id, text: text, isError: failed)
         case "ping":
             reply(id, [:])
@@ -131,5 +134,26 @@ enum MCPServer {
 
     static func log(_ text: String) {
         FileHandle.standardError.write(Data(("[withsnozzy-mcp] " + text + "\n").utf8))
+    }
+
+    /// 每次工具调用都记一笔，追加到 `~/…/WithSnozzy/mcp.log`。
+    ///
+    /// **这是"ChatGPT 到底有没有真的来查"唯一可靠的答案。** 光看她回答判断不了：
+    /// 模型完全可能凭上下文猜一个像模像样的答案，而且猜对的时候和真查过
+    /// 长得一模一样。有了这个文件，验证就从"感觉她好像知道"变成
+    /// "那一分钟有没有这一行"。
+    ///
+    /// 记的是**谁在什么时候调了什么**，不记完整返回内容——那里面有待办标题，
+    /// 没必要在日志里再存一份。
+    static func record(_ text: String) {
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let line = "\(stamp)  \(text)\n"
+        let url = Store.directory.appendingPathComponent("mcp.log")
+        if let h = try? FileHandle(forWritingTo: url) {
+            h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close()
+        } else {
+            try? Data(line.utf8).write(to: url)
+        }
+        log(text)
     }
 }
