@@ -141,9 +141,17 @@ def main():
                 pending = None
 
             if fh:
+                # **必须用 `readline()`，不能 `for line in fh`。**
+                # 迭代文件对象会开一个预读缓冲，Python 因此禁掉 `tell()`
+                # （OSError: telling position disabled by next() call），
+                # 而我们要靠 `tell()` 记住读到哪儿了。
                 fh.seek(pos)
-                for line in fh:
-                    if not line.endswith("\n"):     # 半行，等下一轮
+                while True:
+                    line = fh.readline()
+                    if not line:
+                        break
+                    if not line.endswith("\n"):
+                        # 半行——文件正在被写。**不推进 pos**，下一轮重读整行
                         break
                     pos = fh.tell()
                     try:
