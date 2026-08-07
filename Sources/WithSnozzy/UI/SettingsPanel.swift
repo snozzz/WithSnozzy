@@ -47,21 +47,17 @@ struct SettingsPanel: View {
                     .labelsHidden()
                     .frame(width: 138)
                 }
-                // 这两句必须写清楚。第一句是因为用户以为"能对话"就等于
-                // "要付 API 的钱"；第二句是因为 ChatGPT Plus 的额度分两个池子，
-                // 而选 Codex 花掉的是改代码那一份，选错了不会有任何提示。
-                Text("不用 API key，调用的是本机已登录的命令行，按订阅走，"
-                     + "每句要等几秒。")
+                // 这一句是因为用户以为"能对话"就等于"要付 API 的钱"。
+                Text("不用 API key，调用的是本机已登录的命令行，按订阅走。"
+                     + "麦克风按钮在底部控制条上，识别在本机完成。")
                     .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(.white.opacity(0.34))
                     .fixedSize(horizontal: false, vertical: true)
-                Text(state.chat.backend == .codex
-                     ? "⚠️ 这条走的是 Codex 额度（改代码那份），不是 ChatGPT 网页端那份。"
-                     : "ChatGPT 网页端那份额度没有 API，接不进来；Claude Pro 这条"
-                       + "和 OpenAI 无关，不消耗任何 ChatGPT 额度。")
+                // 只陈述花的是哪份额度，不报警——用户是知情选的。
+                // ChatGPT 网页端那份没有 API，接不进来，所以选单里没有它。
+                Text(quotaNote)
                     .font(.system(size: 10, design: .rounded))
-                    .foregroundStyle(state.chat.backend == .codex
-                                     ? .orange.opacity(0.8) : .white.opacity(0.28))
+                    .foregroundStyle(.white.opacity(0.28))
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -184,6 +180,23 @@ struct SettingsPanel: View {
     }
 
     private var live2dReady: Bool { state.live2d.status.isReady }
+
+    /// 每条后端花的是哪份额度。
+    ///
+    /// 这一句必须有：ChatGPT Plus 的额度**分成两个池子**（网页/App 聊天那份，
+    /// 和 Codex 写代码那份），而选单上看不出来选中的是哪个。
+    private var quotaNote: String {
+        switch state.chat.backend {
+        case .codex:
+            "花的是 Codex 那份额度（和网页版 ChatGPT 的额度是分开的两个池子）。"
+            + "每句要等十来秒。"
+        case .claude:
+            "走 Claude Pro 订阅，和 OpenAI 无关，不消耗任何 ChatGPT / Codex 额度。"
+            + "每句四到六秒。"
+        case .off:
+            "ChatGPT 网页端那份额度没有 API 也没有命令行，接不进来，所以选单里没有它。"
+        }
+    }
 
     private var modelFolderName: String {
         let p = state.live2d.modelDirectory

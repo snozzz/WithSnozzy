@@ -26,6 +26,14 @@
 	<true/>
 	<key>NSSupportsAutomaticTermination</key>
 	<false/>
+	<!-- 不要系统那套窗口状态恢复。窗口位置我们自己用 setFrameAutosaveName 记，
+	     而这套东西有个很坑的副作用：**app 崩过一次之后，此后每次启动都会先弹
+	     一个模态框问"要不要重新打开窗口"**，而模态框是在
+	     applicationDidFinishLaunching 之前跑的——于是所有命令行自检
+	     （--closeup / --chat / --voice）全部卡死在那儿，一个字都不输出，
+	     看着像是自己写的代码挂了。查这个花了半轮。 -->
+	<key>NSQuitAlwaysKeepsWindows</key>
+	<false/>
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>NSHumanReadableCopyright</key>
@@ -34,5 +42,12 @@
 	     拒掉请求，而且不弹授权框，表现为静默失败。 -->
 	<key>NSAppleEventsUsageDescription</key>
 	<string>用来读取和控制「音乐」App 正在播放的曲目。</string>
+	<!-- 用麦克风跟 Snozzy 说话。这两项**缺一不可**，而且缺了不会报错：
+	     系统直接拒掉，表现为"点了麦克风按钮没反应"。
+	     识别走本地（zh-CN 支持 on-device），声音不出这台机器。 -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用来听你说话，好让 Snozzy 回应你。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>把你说的话转成文字交给 Snozzy。识别在本机完成。</string>
 </dict>
 </plist>

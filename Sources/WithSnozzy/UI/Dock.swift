@@ -87,6 +87,20 @@ struct Dock: View {
                 state.closeUp.begin()
             }
 
+            // ── 说话 ─────────────────────────────────
+            // **放在控制条上而不是只放对话面板里**：语音的意义就是不动手，
+            // 还要先点开一个面板才能说话就没意义了。
+            IconButton(symbol: state.voice.isListening ? "mic.fill" : "mic",
+                       size: 14, isOn: state.voice.isListening,
+                       tint: palette.accent,
+                       help: state.chat.backend == .off
+                             ? "对话关着，先到设置里选一个订阅"
+                             : state.voice.isListening ? "在听……说完自动发"
+                                                       : "按一下，对着麦克风说") {
+                state.voice.toggle()
+            }
+            .disabled(state.chat.backend == .off || state.chat.isThinking)
+
             divider
 
             // ── 面板开关 ──────────────────────────────

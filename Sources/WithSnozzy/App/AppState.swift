@@ -76,8 +76,11 @@ final class AppState {
     /// 近景切换。你把窗口切回前台，她会托着腮凑近看你一眼。
     let closeUp = CloseUp()
 
-    /// 和她对话。走本机已登录的命令行（Claude 订阅 / GPT Plus），不用 API key。
+    /// 和她对话。走本机已登录的命令行（Claude Pro / Codex），不用 API key。
     let chat = SnozzyChat()
+
+    /// 用麦克风跟她说话。识别走本机，声音不出这台机器。
+    let voice = VoiceInput()
 
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
@@ -598,6 +601,10 @@ final class AppState {
         chat.onReply = { [weak self] line in self?.chatter.speak(line) }
         chat.onChanged = { [weak self] in self?.scheduleSave() }
         chat.context = { [weak self] in self?.situation ?? "" }
+
+        // 说完一句就直接发出去，不用再点一次"发送"。
+        // 语音的全部意义就是不动手，中间插一步确认等于白做。
+        voice.onFinal = { [weak self] line in self?.chat.send(line) }
 
         // 启动时按时段打个招呼，稍等一下再说，免得和窗口出现撞在一起。
         Task { [weak self] in

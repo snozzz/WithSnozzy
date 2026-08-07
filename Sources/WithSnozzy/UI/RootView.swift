@@ -35,6 +35,13 @@ struct RootView: View {
             VStack(spacing: 0) {
                 TopBar(palette: pal)
                 Spacer(minLength: 0)
+                // 说话时的提示浮在控制条正上方。**跟着控制条一起显隐**——
+                // 它是"我按了麦克风之后发生了什么"的唯一反馈，
+                // 而按钮就在下面那条上。
+                VoiceHUD(palette: pal)
+                    .padding(.bottom, 10)
+                    .opacity(dockVisible ? 1 : 0)
+                    .allowsHitTesting(false)
                 Dock(palette: pal)
                     .padding(.bottom, 18)
                     // 面板开着的时候必须一直可见——面板是从控制条点开的，
