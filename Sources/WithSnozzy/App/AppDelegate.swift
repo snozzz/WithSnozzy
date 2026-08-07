@@ -50,6 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { exit(await VoiceInput.runSelfTest()) }
             return
         }
+        if let line = Speaking.requestedLine {
+            Task { exit(await Speaking.runSelfTest(line: line)) }
+            return
+        }
         if let message = SnozzyChat.requestedMessage {
             // 这一条要等命令行那头回话（几秒到几十秒），所以不能像别的自检
             // 那样同步跑完就 exit。开个 Task，回来了再退。

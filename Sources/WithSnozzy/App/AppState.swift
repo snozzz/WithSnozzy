@@ -306,6 +306,7 @@ final class AppState {
         s.live2dModelPath = live2d.modelDirectory
         s.chatBackend = chat.backend
         s.speakAloud = speaking.enabled
+        s.voiceEngine = speaking.engine
         return s
     }
 
@@ -319,6 +320,7 @@ final class AppState {
         volume = saved.volume
         chat.backend = saved.chatBackend
         speaking.enabled = saved.speakAloud
+        speaking.engine = saved.voiceEngine
         live2d.modelDirectory = saved.live2dModelPath
         characterStyle = saved.characterStyle
         if characterStyle == .live2d { live2d.loadIfNeeded() }

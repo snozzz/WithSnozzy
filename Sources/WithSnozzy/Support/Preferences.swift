@@ -22,6 +22,8 @@ struct AppSettings: Codable {
     var chatBackend: SnozzyChat.Backend = .claude
     /// 她说话出不出声。
     var speakAloud = true
+    /// 她的嗓子用哪一把。
+    var voiceEngine: VoiceEngine = .system
 
     static let storeName = "settings"
 
@@ -54,6 +56,7 @@ struct AppSettings: Codable {
         live2dModelPath = get(.live2dModelPath, d.live2dModelPath)
         chatBackend = get(.chatBackend, d.chatBackend)
         speakAloud = get(.speakAloud, d.speakAloud)
+        voiceEngine = get(.voiceEngine, d.voiceEngine)
     }
 
     init() {}

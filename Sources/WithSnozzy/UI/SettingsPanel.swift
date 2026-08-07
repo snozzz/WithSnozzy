@@ -73,6 +73,24 @@ struct SettingsPanel: View {
                 }
                 .toggleStyle(.switch)
                 .tint(palette.accent.color)
+
+                if state.speaking.enabled {
+                    row("嗓子") {
+                        Picker("", selection: Binding(
+                            get: { state.speaking.engine },
+                            set: { state.speaking.engine = $0 })) {
+                            ForEach(VoiceEngine.allCases) { Text($0.label).tag($0) }
+                        }
+                        .labelsHidden()
+                        .frame(width: 178)
+                    }
+                    Text(state.speaking.engine == .local
+                         ? "需要先跑 Scripts/tts_serve.sh。服务没起来会自动退回系统声音。每句多等一秒半。"
+                         : "系统自带，零延迟。想要二次元音色选上面那一档。")
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.32))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             section("角色") {
