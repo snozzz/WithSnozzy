@@ -28,9 +28,6 @@ enum SceneCamera {
     static let anchor = (x: 0.53, y: 0.42)
     static var unitAnchor: UnitPoint { UnitPoint(x: anchor.x, y: anchor.y) }
 
-    /// 近景时房间虚多少（点）。一半是景深（镜头凑到她脸上，背景本来就该虚），
-    /// 一半是**遮丑**：放大两倍多的平面图边缘会发毛，虚化之后那点软成了效果。
-    static let backdropBlur: CGFloat = 3.5
 
     /// `scaleEffect(zoom, anchor: unitAnchor)` 会把某个点搬到哪。
     ///

@@ -585,7 +585,6 @@ private struct CloseUpStrip: View {
         return ZStack {
             ZStack(alignment: .topLeading) {
                 PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: t)
-                    .blur(radius: push * SceneCamera.backdropBlur)
                 RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
                                headphones: false, chin: chin, t: t)
                 PaintedRoomForeground(assets: assets, palette: .day)
