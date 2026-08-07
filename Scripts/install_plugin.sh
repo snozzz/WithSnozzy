@@ -23,15 +23,22 @@ if [ ! -x "$APP" ]; then
 fi
 echo "▸ MCP 服务器: $APP"
 
-python3 - "$ROOT" "$APP" <<'PY'
-import json, sys, pathlib
-root, app = sys.argv[1], sys.argv[2]
-p = pathlib.Path(root) / "Plugin/plugins/withsnozzy/.mcp.json"
-d = json.loads(p.read_text())
-d["mcpServers"]["withsnozzy"]["command"] = app
-p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
-print(f"▸ 已把路径写进 {p.name}")
+# 路径填进**启动壳**里，不填进 `.mcp.json`。
+#
+# `.mcp.json` 里的 command 必须是**相对路径 + cwd "."**，照抄 OpenAI 自己那几个
+# 跑得起来的插件的形状（computer-use 写的是 `./bin/computer-use-client-launcher`）。
+# 第一版这里写的是绝对路径，结果 ChatGPT 压根没去启动那个服务器——
+# 插件在菜单里看得见、也挂得上，但 mcp.log 一行都没有，查了两轮才发现。
+LAUNCHER="$ROOT/Plugin/plugins/withsnozzy/bin/withsnozzy-mcp"
+python3 - "$LAUNCHER" "$APP" <<'PY'
+import pathlib, re, sys
+p, app = pathlib.Path(sys.argv[1]), sys.argv[2]
+s = p.read_text()
+s = re.sub(r'^APP="[^"]*"$', f'APP="{app}"', s, count=1, flags=re.M)
+p.write_text(s)
+print(f"▸ 已把路径写进 bin/{p.name}")
 PY
+chmod +x "$LAUNCHER"
 
 codex plugin marketplace add "$ROOT/Plugin" >/dev/null 2>&1 || true
 # 已经装过的话先卸掉，否则版本号没变时不会重新拷贝

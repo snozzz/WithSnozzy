@@ -1,0 +1,10 @@
+#!/bin/sh
+# 启动 WithSnozzy 的 MCP 服务器。
+#
+# 为什么要这个壳而不在 .mcp.json 里直接写绝对路径：OpenAI 自己那几个能跑起来
+# 的插件用的都是**相对路径 + cwd "."**（`./bin/computer-use-client-launcher`），
+# 我们照抄那个形状。真实路径由 Scripts/install_plugin.sh 填进下面这行。
+APP="/Users/snoz/earn_sth/relax/dist/WithSnozzy.app/Contents/MacOS/WithSnozzy"
+[ -x "/Applications/WithSnozzy.app/Contents/MacOS/WithSnozzy" ] \
+  && APP="/Applications/WithSnozzy.app/Contents/MacOS/WithSnozzy"
+exec "$APP" --mcp
