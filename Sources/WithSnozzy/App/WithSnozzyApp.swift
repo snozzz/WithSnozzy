@@ -1,6 +1,5 @@
 import SwiftUI
 
-@main
 struct WithSnozzyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var state = AppState()

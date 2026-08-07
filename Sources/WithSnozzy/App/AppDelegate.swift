@@ -43,12 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
-        if MCPServer.isRequested {
-            // MCP 服务器：stdio 上跑 JSON-RPC，不开窗口、不碰 UI。
-            // **必须排在所有会画东西的分支之前**，而且不能返回——
-            // stdout 是协议通道，AppKit 往上面写一个字客户端就断了。
-            MCPServer.run()
-        }
+        // 注意： **不在这里**处理，在  里。
+        // 走到这个回调时 AppKit 已经起来了，而被别的 app 当子进程拉起来时
+        // 这个回调根本到不了（会卡在 Apple Event 握手上）。
         if VoiceInput.selfTestRequested {
             Task { exit(await VoiceInput.runSelfTest()) }
             return

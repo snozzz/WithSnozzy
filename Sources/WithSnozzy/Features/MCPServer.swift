@@ -77,6 +77,11 @@ enum MCPServer {
 
         switch method {
         case "initialize":
+            // 握手也记一笔。**只记 tools/call 是不够的**：服务器起来了但一个
+            // 工具都没暴露的时候，日志空着，看起来和"根本没被启动"一模一样，
+            // 而这两种情况要查的地方完全不同。我在这上面白查了三轮。
+            let client = (msg["params"] as? [String: Any])?["clientInfo"] as? [String: Any]
+            record("initialize ← " + ((client?["name"] as? String) ?? "未知客户端"))
             reply(id, [
                 // 跟着对方报的版本走，对不上时给我们支持的那个
                 "protocolVersion": (msg["params"] as? [String: Any])?["protocolVersion"]
@@ -86,6 +91,7 @@ enum MCPServer {
                 "instructions": Persona.forChatGPT,
             ])
         case "tools/list":
+            record("tools/list → 报出 \(Tool.all.count) 个工具")
             reply(id, ["tools": Tool.all.map(\.schema)])
         case "tools/call":
             let params = msg["params"] as? [String: Any] ?? [:]
