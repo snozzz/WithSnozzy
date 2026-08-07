@@ -59,6 +59,20 @@ struct SettingsPanel: View {
                     .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(.white.opacity(0.28))
                     .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(isOn: Binding(get: { state.speaking.enabled },
+                                     set: { state.speaking.enabled = $0 })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("她说话出声")
+                            .font(.system(size: 11, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.78))
+                        Text("本机合成，凑够一句就开口，不等整段")
+                            .font(.system(size: 9, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.38))
+                    }
+                }
+                .toggleStyle(.switch)
+                .tint(palette.accent.color)
             }
 
             section("角色") {

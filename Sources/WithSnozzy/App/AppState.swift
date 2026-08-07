@@ -82,6 +82,9 @@ final class AppState {
     /// 用麦克风跟她说话。识别走本机，声音不出这台机器。
     let voice = VoiceInput()
 
+    /// 她把话说出来。本机合成，零延迟。
+    let speaking = Speaking()
+
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
 
@@ -137,6 +140,15 @@ final class AppState {
         if h >= 1.5 && h < 5.0 { return 1.0 }
         if h >= 5.0 && h < 6.0 { return 1 - smoothstep((h - 5.0) / 1.0) }
         return 0
+    }
+
+    /// 她此刻嘴该不该在动。
+    ///
+    /// **有真语音的时候就别再估了。** 原来是按字数估时长（第 25 条），
+    /// 因为那时候她只有文字。现在 TTS 自己知道说到哪儿、什么时候说完，
+    /// 直接问它。台词库那些不出声的句子仍然走估算。
+    var sheIsTalking: Bool {
+        speaking.isSpeaking || chatter.isSpeaking
     }
 
     /// 说给对话系统听的"此刻的情况"。
@@ -234,6 +246,7 @@ final class AppState {
         s.characterStyle = characterStyle
         s.live2dModelPath = live2d.modelDirectory
         s.chatBackend = chat.backend
+        s.speakAloud = speaking.enabled
         return s
     }
 
@@ -246,6 +259,7 @@ final class AppState {
 
         volume = saved.volume
         chat.backend = saved.chatBackend
+        speaking.enabled = saved.speakAloud
         live2d.modelDirectory = saved.live2dModelPath
         characterStyle = saved.characterStyle
         if characterStyle == .live2d { live2d.loadIfNeeded() }
@@ -265,6 +279,11 @@ final class AppState {
 
     /// 退出前把所有待写的数据落盘。
     func flushAll() {
+        // 常驻的 claude 会话占 345 MB，退出时必须收掉——
+        // 它是我们 fork 出来的子进程，不关的话会跟着变成孤儿进程留在系统里
+        chat.shutdown()
+        speaking.stop()
+        voice.stop(send: false)
         focus.flush()
         tasks.flush()
         library.flush()
@@ -598,13 +617,33 @@ final class AppState {
 
         // 对话：她回话之后气泡也说一遍，不然只有面板里看得到，
         // 而这个 app 大部分时间面板是收起来的。
-        chat.onReply = { [weak self] line in self?.chatter.speak(line) }
+        chat.onReply = { [weak self] line in
+            guard let self else { return }
+            self.chatter.speak(line)
+            // 流式那条已经边流边念了，这里只把最后的零头补上；
+            // codex 那条不流式，整句到这儿才念。
+            if self.chat.backend == .claude { self.speaking.finish() }
+            else { self.speaking.say(line) }
+        }
+        speaking.onChanged = { [weak self] in self?.scheduleSave() }
         chat.onChanged = { [weak self] in self?.scheduleSave() }
         chat.context = { [weak self] in self?.situation ?? "" }
 
         // 说完一句就直接发出去，不用再点一次"发送"。
         // 语音的全部意义就是不动手，中间插一步确认等于白做。
         voice.onFinal = { [weak self] line in self?.chat.send(line) }
+        // **一按下麦克风就把会话热起来。** 预热要五秒，而这五秒和你说话的
+        // 时间是重叠的——等你说完，会话已经热好了，接下来 1.4 秒出第一个字。
+        // 这是"实时"感的一半，不预热的话每次都要先干等五秒。
+        voice.onStarted = { [weak self] in self?.chat.prewarm() }
+
+        // 一个字一个字地：气泡实时长出来，同时凑够一句就念出去。
+        // 感知延迟等于"第一个字什么时候到"，不是整句。
+        chat.onDelta = { [weak self] chunk in
+            guard let self else { return }
+            self.chatter.stream(self.chat.streaming)
+            self.speaking.feed(chunk)
+        }
 
         // 启动时按时段打个招呼，稍等一下再说，免得和窗口出现撞在一起。
         Task { [weak self] in

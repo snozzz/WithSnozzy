@@ -309,6 +309,21 @@ final class Chatter {
         idleChatter()
     }
 
+    /// 流式回复：一个字一个字地把气泡撑出来。
+    ///
+    /// 和 `speak` 分开，因为**不能每来一个字就重置一次"什么时候开始说的"**——
+    /// `spokeAt` 是嘴部动画的起点，每帧重置的话嘴会一直卡在开口的第一帧。
+    /// 这里只更新文字和到期时间，起点保持第一个字到达的那一刻。
+    func stream(_ partial: String) {
+        let text = partial.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        if current == nil || spokeAt == nil { spokeAt = Date() }
+        current = text
+        expiry = Date().addingTimeInterval(
+            max(Self.dwell, Double(text.count) * 0.22 + 2.5))
+        lastSpoke = Date()
+    }
+
     /// 手动收起气泡（比如切到桌宠模式）。
     func hush() {
         current = nil

@@ -28,7 +28,9 @@ struct VoiceHUD: View {
                      text: state.voice.transcript.isEmpty ? "在听……" : state.voice.transcript,
                      tint: palette.accent.color, meter: true)
             case .idle:
-                if state.chat.isThinking {
+                // 只在**还没开始流字**的时候显示。第一个字一到，气泡就自己
+                // 长出来了，这时候还挂着"她在想"等于说了两遍。
+                if state.chat.isThinking && state.chat.streaming.isEmpty {
                     pill(icon: "ellipsis.bubble", text: "她在想……",
                          tint: .white.opacity(0.5))
                 }

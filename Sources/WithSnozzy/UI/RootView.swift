@@ -160,7 +160,7 @@ private struct SceneStack: View {
                                                mood: state.mood,
                                                drowsy: state.drowsy,
                                                working: state.focus.phase == .work,
-                                               speaking: state.chatter.isSpeaking),
+                                               speaking: state.sheIsTalking),
                                            headphones: state.isPlaying,
                                            chin: state.closeUp.chinRest,
                                            t: t)

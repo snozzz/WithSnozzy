@@ -20,6 +20,8 @@ struct AppSettings: Codable {
     var live2dModelPath: String = "hiyori_en/hiyori_free"
     /// 对话走哪个命令行。默认 claude——比 codex 快一倍。
     var chatBackend: SnozzyChat.Backend = .claude
+    /// 她说话出不出声。
+    var speakAloud = true
 
     static let storeName = "settings"
 
@@ -51,6 +53,7 @@ struct AppSettings: Codable {
         characterStyle = get(.characterStyle, d.characterStyle)
         live2dModelPath = get(.live2dModelPath, d.live2dModelPath)
         chatBackend = get(.chatBackend, d.chatBackend)
+        speakAloud = get(.speakAloud, d.speakAloud)
     }
 
     init() {}

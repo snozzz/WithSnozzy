@@ -92,12 +92,23 @@ final class SnozzyChat {
     private(set) var isThinking = false
     /// 上一次出错的原因。nil 表示一切正常。
     private(set) var failure: String?
+    /// 正在流回来的那句话（还没说完）。UI 拿它做实时回显。
+    ///
+    /// **感知延迟等于"第一个字什么时候到"**，不是"整句什么时候到"。
+    /// 实测常驻会话首字 1.4 秒、整句 2.3 秒——等整句攒完再显示，
+    /// 等于把流式省下来的那一秒又还回去。
+    private(set) var streaming = ""
+
+    /// 一个字一个字地来。接给 TTS，让她凑够一句就开口。
+    var onDelta: ((String) -> Void)?
 
     var backend: Backend = .claude {
         didSet {
             guard backend != oldValue else { return }
             resolved = nil          // 换了后端，可执行文件要重新找
             failure = nil
+            // 旧后端的常驻会话要关掉，不然那 345 MB 就一直挂着了
+            shutdown()
             onChanged?()
         }
     }
@@ -156,8 +167,121 @@ final class SnozzyChat {
         turns.append(Turn(who: .you, text: message))
         trimAndSave()
         isThinking = true
+        streaming = ""
         failure = nil
+        idleAt = Date()
 
+        // claude 走常驻会话（快 3 倍，而且能流式）；codex 只能一问一答。
+        if backend == .claude {
+            sendLive(message)
+        } else {
+            sendOneShot()
+        }
+    }
+
+    // MARK: - 常驻会话（claude）
+
+    /// 会话闲置多久就关掉。
+    ///
+    /// 常驻进程实测 **345 MB**，一直挂着顶不住（app 自己一百来兆，
+    /// 硬约束是 500 MB）。三分钟是个折中：连着聊的时候一直是热的，
+    /// 聊完一会儿就把内存还回去，下次再花五秒热一遍。
+    private static let idleTimeout: Double = 180
+    private var live: LiveSession?
+    private var idleAt = Date()
+    private var reaper: Timer?
+
+    /// 先把会话热起来，别等用户说完才开始连。
+    ///
+    /// **这是"实时"感的一半。** 预热要 5 秒，而这 5 秒可以和你说话的时间
+    /// **重叠**——一按下麦克风就开始热，等你说完一句（通常两三秒）会话
+    /// 已经热好了，接下来就是 1.4 秒出第一个字。
+    /// 不预热的话每次对话都要先付那 5 秒，快不起来。
+    func prewarm() {
+        guard backend == .claude, live?.isRunning != true else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let path = try await self.executable(for: .claude)
+                try self.startLive(binary: path)
+            } catch {
+                // 预热失败不报错：等真发消息的时候再报，免得一按麦克风
+                // 就弹一句用户还没做任何事的错误
+            }
+        }
+    }
+
+    private func startLive(binary: String) throws {
+        let s = live ?? LiveSession()
+        live = s
+        s.onDelta = { [weak self] chunk in
+            guard let self else { return }
+            self.streaming += chunk
+            self.onDelta?(chunk)
+        }
+        s.onFinished = { [weak self] full in
+            guard let self else { return }
+            self.streaming = ""
+            self.finish(reply: full)
+        }
+        s.onFailed = { [weak self] why in
+            guard let self else { return }
+            self.streaming = ""
+            self.isThinking = false
+            self.failure = why
+        }
+        try s.start(binary: binary, persona: Self.persona)
+        startReaper()
+    }
+
+    private func sendLive(_ message: String) {
+        pending = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let path = try await self.executable(for: .claude)
+                if self.live?.isRunning != true { try self.startLive(binary: path) }
+                // 常驻会话自己记着上下文，所以**只发这一轮**——
+                // 但状态每轮都要重发一次：几点了、在放什么、待办剩几件
+                // 都是会变的，塞进历史里等于喂过期信息。
+                self.live?.ask(self.liveTurn(message))
+            } catch {
+                self.fail(error)
+            }
+        }
+    }
+
+    /// 常驻会话里一轮的内容：当前状态 + 他说的话。
+    private func liveTurn(_ message: String) -> String {
+        guard let state = context?(), !state.isEmpty else { return message }
+        return "【此刻的情况】\n\(state)\n\n【他说】\n\(message)"
+    }
+
+    private func startReaper() {
+        guard reaper == nil else { return }
+        reaper = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let live = self.live, live.isRunning else { return }
+                guard !self.isThinking,
+                      Date().timeIntervalSince(self.idleAt) > Self.idleTimeout
+                else { return }
+                live.stop()
+                self.reaper?.invalidate()
+                self.reaper = nil
+            }
+        }
+    }
+
+    /// 关掉常驻会话，把那 345 MB 还回去。切后端、退出时调。
+    func shutdown() {
+        live?.stop()
+        live = nil
+        reaper?.invalidate()
+        reaper = nil
+    }
+
+    // MARK: - 一问一答（codex）
+
+    private func sendOneShot() {
         let backend = self.backend
         let prompt = buildPrompt()
         pending = Task { [weak self] in
@@ -184,6 +308,7 @@ final class SnozzyChat {
 
     private func finish(reply: String) {
         isThinking = false
+        idleAt = Date()
         let clean = Self.tidy(reply)
         guard !clean.isEmpty else {
             failure = "她没说话（命令行返回了空）"
@@ -374,31 +499,62 @@ final class SnozzyChat {
         }
 
         print("后端：\(backend.label)")
-        print("你：\(message)")
-        let started = Date()
-        chat.send(message)
-        while chat.isThinking {
-            try? await Task.sleep(for: .milliseconds(60))
-        }
-        let took = Date().timeIntervalSince(started)
 
-        if let failure = chat.failure {
-            print("✗ \(failure)")
-            return 1
+        // **连问两轮，而且分开报。** 常驻会话的预热只付一次，只测一轮的话
+        // 看到的永远是"慢"；而真实使用中一按麦克风就开始预热了，
+        // 用户的体感是第二轮那个数。一轮一个数字会把结论带偏。
+        var ok = true
+        var round1 = (ttf: 0.0, total: 0.0)
+        for (i, msg) in [message, "嗯，然后呢"].enumerated() {
+            print(i == 0 ? "你：\(msg)" : "你（第二轮）：\(msg)")
+            let started = Date()
+            var tokenAt: Date?
+            chat.onDelta = { _ in if tokenAt == nil { tokenAt = Date() } }
+            chat.send(msg)
+            while chat.isThinking { try? await Task.sleep(for: .milliseconds(20)) }
+
+            if let failure = chat.failure {
+                print("✗ \(failure)")
+                return 1
+            }
+            guard let reply = chat.turns.last, reply.who == .snozzy else {
+                print("✗ 没拿到回复")
+                return 1
+            }
+            let total = Date().timeIntervalSince(started)
+            // 一问一答那条（codex）没有增量，首字就当整句
+            let ttf = tokenAt.map { $0.timeIntervalSince(started) } ?? total
+            print("她：\(reply.text)")
+
+            // 人设里写死了"最多 40 字"。管不住的话气泡会被截断，
+            // 而气泡是这句话的主要出口——所以这是条硬判据，不是建议。
+            let short = reply.text.count <= 45
+            let clean = !reply.text.contains("*") && !reply.text.contains("\n")
+            print(short ? "  ✓ 长度装得进气泡" : "  ✗ 太长了，气泡两行放不下（人设没管住）")
+            print(clean ? "  ✓ 没有动作描写和换行" : "  ✗ 混进了星号或换行（tidy 没剥干净）")
+            ok = ok && short && clean
+
+            if i == 0 {
+                round1 = (ttf, total)
+                print(String(format: "  首字 %.1fs 整句 %.1fs（这一轮含会话预热）",
+                             ttf, total))
+                continue
+            }
+            print(String(format: "  首字 %.1fs 整句 %.1fs", ttf, total))
+            print(String(format: "第一轮 首字 %.1fs / 整句 %.1fs（含预热）",
+                         round1.ttf, round1.total))
+            print(String(format: "第二轮 首字 %.1fs / 整句 %.1fs ← 预热之后就是这个数",
+                         ttf, total))
+            // 真实体感：一按麦克风就预热，所以预热被说话的时间盖掉了，
+            // 剩下的是「静音判定 + 首字」。
+            print(String(format: "说完到她开口 ≈ %.1f 秒（静音判定 %.1f + 首字 %.1f）",
+                         VoiceInput.silenceToStop + ttf,
+                         VoiceInput.silenceToStop, ttf))
+            let realtime = ttf <= 2.5
+            print(realtime ? "  ✓ 够得上「实时」" : "  ✗ 首字超过 2.5 秒，算不上实时")
+            ok = ok && realtime
         }
-        guard let reply = chat.turns.last, reply.who == .snozzy else {
-            print("✗ 没拿到回复")
-            return 1
-        }
-        print("她：\(reply.text)")
-        print(String(format: "耗时 %.1f 秒，%d 个字", took, reply.text.count))
-        // 人设里写死了"最多 40 字"。管不住的话气泡会被截断，
-        // 而气泡是这句话的主要出口——所以这是条硬判据，不是建议。
-        let short = reply.text.count <= 45
-        let clean = !reply.text.contains("*") && !reply.text.contains("\n")
-        print(short ? "  ✓ 长度装得进气泡" : "  ✗ 太长了，气泡两行放不下（人设没管住）")
-        print(clean ? "  ✓ 没有动作描写和换行" : "  ✗ 混进了星号或换行（tidy 没剥干净）")
-        return short && clean ? 0 : 1
+        return ok ? 0 : 1
     }
 
     /// 跑一个进程，把 stdout 收回来。

@@ -49,14 +49,21 @@ final class VoiceInput {
 
     /// 一句话说完了。由 `AppState` 接过去丢给对话系统。
     var onFinal: ((String) -> Void)?
+    /// 开始听了。`AppState` 拿它去**预热对话会话**——预热那五秒和你说话的
+    /// 时间重叠掉，是"实时"感的一半。
+    var onStarted: (() -> Void)?
 
     var isListening: Bool { status == .listening }
 
     /// 静多久算说完。
     ///
-    /// 1.6 秒是"想一下下一句"和"说完了"的分界。短了会在句中被切断
-    /// （中文句子里换气常常有一秒），长了每句话末尾都要干等。
-    private static let silenceToStop: Double = 1.6
+    /// **这段时间是纯粹的干等**，直接计进"我说完到她开口"的总延迟里，
+    /// 所以能压就压。1.6 秒太保守了（第一版），换成 0.9 秒——
+    /// 中文句子中间的换气一般在 0.5 秒以内，0.9 秒不会把句子切断，
+    /// 而每轮省下 0.7 秒。
+    ///
+    /// 串起来的账：静音判定 0.9 + 首字 1.4 ≈ **2.3 秒她就开口了**。
+    static let silenceToStop: Double = 0.9
     /// 一次最多听多久。防止麦克风一直开着——引擎开着就一直在耗电，
     /// 而且忘了关的话下一次点开会以为坏了。
     private static let maxDuration: Double = 30
@@ -83,6 +90,7 @@ final class VoiceInput {
         guard !isListening else { return }
         transcript = ""
         heardSomething = false
+        onStarted?()
 
         // 两个权限要分别问：语音识别（Speech）和麦克风（AVCaptureDevice）。
         // 少问一个的表现是"点了没反应"，不会有任何报错——
