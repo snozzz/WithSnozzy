@@ -5,18 +5,32 @@ import Observation
 ///
 /// ## 为什么不接 API
 ///
-/// 用户明确说了不想用 OpenAI 的 API，但他有 **Plus 订阅**，问能不能拿订阅号
-/// 说话。能——**订阅本来就带一个跑在本机的命令行**，直接驱动它就行：
+/// 用户不想用 OpenAI 的 API，问能不能拿订阅号说话。能，但**得看是哪份额度**。
 ///
-/// - `claude -p`（Claude Code CLI，走 Claude 订阅）
-/// - `codex exec`（Codex CLI，走 GPT Plus 订阅）
+/// ## ChatGPT 网页端那份额度用不了，这条要先说清楚
+///
+/// ChatGPT Plus 的额度是**分成两个池子**的：网页/桌面 App 里聊天那份，
+/// 和 Codex（写代码）那份。用户想走的是前者——那份他不心疼。
+///
+/// **走不了。** 网页端那份额度只有 chatgpt.com 和官方 App 能用，
+/// OpenAI 没有对应的 API 或命令行。硬要走只剩两条路，都不能选：
+/// 拿浏览器自动化去点网页，或者拿会话 token 调内部接口。
+/// 前者要常驻一个浏览器、页面一改版就废；后者违反 OpenAI 的条款。
+///
+/// 所以能用的只有这两条，**都不碰 ChatGPT 网页端那份额度**：
+///
+/// - `claude -p`（Claude Code CLI）——走 **Claude Pro 订阅**。
+///   和 OpenAI 完全没关系，不消耗任何 ChatGPT/Codex 额度。**默认走这条。**
+/// - `codex exec`（Codex CLI）——走 **Codex 那份额度**，也就是改代码用的那份。
+///   用户明确说过要留着，所以它在选单里的名字就叫「Codex（吃改代码的额度）」，
+///   免得选了才发现。
 ///
 /// 两个都已经登录在这台机器上（`Blender/…` 那条重绘管线一直在用 codex）。
 /// 于是这里既不需要 API key，也不产生按量计费——**代价是延迟**，
 /// 实测 claude 约 4–6 秒、codex 约 10–15 秒，因为每次都要冷启动一个进程。
 /// 对"陪你干活的人偶尔搭句话"这个用法足够了，做不了实时语音那种交互。
 ///
-/// 默认走 claude：快一倍，而且它把答案直接写在 stdout 上，
+/// 默认走 claude 还有两个顺带的好处：快一倍，而且它把答案直接写在 stdout 上，
 /// codex 要 `-o` 写到临时文件里再读回来。
 ///
 /// **这是自用功能。** 驱动的是用户自己机器上、自己登录的命令行，
@@ -45,8 +59,12 @@ final class SnozzyChat {
 
         var label: String {
             switch self {
-            case .claude: "Claude 订阅"
-            case .codex: "GPT Plus (codex)"
+            case .claude: "Claude Pro 订阅"
+            // **额度写在名字里。** ChatGPT Plus 的网页端额度和 Codex 额度是
+            // 分开的两个池子，而这条路吃的是 Codex 那个——也就是改代码用的
+            // 那份。名字里只写"GPT Plus"会让人以为花的是聊天那份，
+            // 等发现额度没了已经晚了。
+            case .codex: "Codex（吃改代码的额度）"
             case .off: "关闭"
             }
         }

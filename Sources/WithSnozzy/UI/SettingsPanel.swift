@@ -47,12 +47,21 @@ struct SettingsPanel: View {
                     .labelsHidden()
                     .frame(width: 138)
                 }
-                // 这一句必须写清楚：用户以为"能对话"就等于"要付 API 的钱"，
-                // 而这里走的是他本机已经登录的命令行，一分钱不多花。
-                Text("不用 API key，调用的是本机已登录的命令行"
-                     + "（`claude` / `codex`），按订阅走。每句要等几秒。")
+                // 这两句必须写清楚。第一句是因为用户以为"能对话"就等于
+                // "要付 API 的钱"；第二句是因为 ChatGPT Plus 的额度分两个池子，
+                // 而选 Codex 花掉的是改代码那一份，选错了不会有任何提示。
+                Text("不用 API key，调用的是本机已登录的命令行，按订阅走，"
+                     + "每句要等几秒。")
                     .font(.system(size: 10, design: .rounded))
                     .foregroundStyle(.white.opacity(0.34))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(state.chat.backend == .codex
+                     ? "⚠️ 这条走的是 Codex 额度（改代码那份），不是 ChatGPT 网页端那份。"
+                     : "ChatGPT 网页端那份额度没有 API，接不进来；Claude Pro 这条"
+                       + "和 OpenAI 无关，不消耗任何 ChatGPT 额度。")
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(state.chat.backend == .codex
+                                     ? .orange.opacity(0.8) : .white.opacity(0.28))
                     .fixedSize(horizontal: false, vertical: true)
             }
 

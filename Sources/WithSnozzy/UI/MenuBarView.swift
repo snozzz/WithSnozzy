@@ -101,21 +101,23 @@ struct MenuBarView: View {
 
             Divider()
 
+            // 叫她凑近。**单独一行**——和下面那排挤在一起时三个按钮加起来
+            // 顶到了 260 点的面板宽度，最长的那个会被切掉。
+            Button {
+                state.revealWindow?()
+                state.closeUp.begin()
+            } label: {
+                Label("叫她凑近看看", systemImage: "person.crop.circle.badge.questionmark")
+                    .font(.system(size: 11))
+            }
+            .disabled(state.windowMode != .normal)
+            .help(state.windowMode == .normal
+                  ? "托着腮凑过来，顺便念一句待办"
+                  : "只有完整窗口有这个画面")
+
             HStack {
                 Button("显示主窗口") { state.revealWindow?() }
                     .font(.system(size: 11))
-                // 近景平时是"你离开半分钟以上再回来"才触发的，而且四分钟内
-                // 只演一次（不然一天几十次切窗口会烦死）。想现在就看一眼、
-                // 或者刚改完素材要验一下，就得有个不走那两条门槛的入口。
-                Button("凑近看看") {
-                    state.revealWindow?()
-                    state.closeUp.begin()
-                }
-                .font(.system(size: 11))
-                .disabled(state.windowMode != .normal)
-                .help(state.windowMode == .normal
-                      ? "让她托着腮凑过来，顺便念一句待办"
-                      : "只有完整窗口有这个画面")
                 Spacer()
                 Button("退出") { NSApplication.shared.terminate(nil) }
                     .font(.system(size: 11))

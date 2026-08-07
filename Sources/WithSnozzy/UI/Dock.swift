@@ -75,6 +75,20 @@ struct Dock: View {
 
             divider
 
+            // ── 叫她凑近 ──────────────────────────────
+            // 近景平时是"你离开半分钟以上再回来"才触发的，而且四分钟内只演一次
+            // （不然一天几十次切窗口会烦死）。所以要有个不走那两条门槛的入口。
+            //
+            // 放在控制条里而不是只放菜单栏：菜单栏那一栏是"不开主窗口也想用"的
+            // 东西，而这个功能的全部内容就是主窗口里的画面，塞在那儿等于藏起来。
+            IconButton(symbol: "person.crop.circle.badge.questionmark", size: 14,
+                       isOn: state.closeUp.isActive, tint: palette.accent,
+                       help: "叫她凑近看看") {
+                state.closeUp.begin()
+            }
+
+            divider
+
             // ── 面板开关 ──────────────────────────────
             ForEach(Panel.allCases) { p in
                 IconButton(
