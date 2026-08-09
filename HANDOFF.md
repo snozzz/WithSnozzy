@@ -9,13 +9,11 @@
 macOS 上的 lofi 陪伴应用，对标《放松时光：与你共享 Lo-Fi 故事》。
 女主叫 **Snozzy**。作者自用，不发布。
 
-**硬约束**（用户反复强调过）：
+**当前约束**（2026-08-09 用户明确更新）：
 
-- 包体 < 1GB，运行内存 < 500MB。目前包 13MB，闲时内存 **95–115MB**
-  （**这个数要量了再写，而且只能给区间**。NSImage 是**懒解码**的，
-  一张图要等真的画过一次才占内存——换腿的过渡帧平均两分多钟才用到一支，
-  所以刚跑起来是 78MB，跑久了各支陆续解码上去才到 120MB 左右。
-  文档里一直写的 66MB 实测早就不对了，改换腿之前那一版就已经 107MB。）
+- **不再限制包体和运行内存。** 旧的 `<1GB / <500MB` 条款已经撤销，不要为了
+  省几十 MB 降近景分辨率、缩动作帧或回收热会话。仍要测资源，目的是发现泄漏
+  和异常，不是卡旧阈值；报告内存仍需注明测量场景与 NSImage 懒解码阶段
 - **代码优化到极致，同时要方便维护**——后者是后来补的，优先级同样高
 - 零第三方 Swift 依赖。`Package.swift` + `Scripts/build_app.sh` 就是全部构建系统
 - 每完成一个功能就 push 到 `git@github.com:snozzz/WithSnozzy.git`
@@ -72,8 +70,16 @@ python3 Scripts/hand_frames.py 手部目录 --out Assets
 ```
 
 ```bash
-# 近景（托腮）那三张。约 10 秒
-blender --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm 输出目录
+# 近景（托腮）：先更新 1× 兼容终态，再发布 2× 常态、8 帧、终态、耳机与手层
+blender --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm 输出目录1x
+python3 Scripts/leg_frames.py 输出目录1x --out Assets
+python3 Scripts/hand_frames.py 输出目录1x --out Assets
+blender --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm 输出目录2x 2
+python3 Scripts/chin_frames.py 输出目录2x --out Assets
+
+# 近景专用 2× 面部贴片
+blender --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm 面部目录 2
+python3 Scripts/face_patches.py 面部目录 --out Assets --prefix face2x
 ```
 
 **改了手臂姿势，上面这几趟都得重跑**：手臂在缝线以上，姿势一变，
@@ -144,25 +150,25 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 - `keyboard.home_row(back=0.085)`——放的是**手腕**，要靠她那一侧。
   手掌和手指是从手腕往前伸一截的，手腕摆在键盘正中，指尖会挂到外沿之外。
   0.058 时指尖落在最外那排，0.085 才落回中间两排
-- `home_row(spread=0.090)`——两腕 18 厘米，比肩宽（15.4）略宽。
+- `home_row(spread=0.085)`——两腕 17 厘米，比肩宽（15.4）略宽。
   比肩窄的话小臂朝内收、手掌朝外，一拧就是扭腕
-- `pose.WRIST_LIFT = 0.048` + `HAND_DIR = (0.08, -0.96, -0.24)`——
+- `pose.WRIST_LIFT = 0.038` + 左右分开的 `HAND_DIR`（俯角 −0.12）——
   指尖落在键面上下几毫米。**这两个数错了最难看**：原来是 0.030 配 −0.30，
   指尖沉到键面以下 23 毫米，整只手扎进键盘里、从前沿那排漏出来，
   看着就是"手指超出键盘"（第 36 条）
 - `pose.ELBOW_POLE`——肘往哪拐。**最省的一个杠杆**，不动键盘不动手，
   光挪肘就削掉十几度腕角（第 37 条）。**左右分开写，但分的是往外张多少、
-  不是往哪边张**：两只肘都在身侧，右肘往内拐是错的（第 43 条）。
-  键盘在她左边，左手往外够、肘自然外张（大臂 34°，已顶到 36° 那条硬线），
-  右手横过身体去够、肘反而被带得很正（19°），小臂几乎指着镜头、
-  投影只剩 17 像素。右边还有余量，张到 1.4：大臂 30°、投影 39 像素，
-  和左手对上了。镜像着调没用——一起张的话左臂立刻出线而右臂还差得远
+  不是往哪边张**：两只肘都在身侧，右肘往内拐是错的（第 43 条）。最终实测
+  左/右大臂 23°/19°、肘比肩低 21cm、腕角 19.1°/17.0°；旧版 34°/31°
+  和右腕 32.2° 已消掉。21cm 略低于真人经验区间 25–30cm，是固定肩腕距离与
+  22.4cm 上臂长度的几何结果，继续压只会破坏自然落键
 - `pose.HAND_ROLL`——也左右分开，而且**跟着 `ELBOW_POLE` 走**：肘一外张
   手掌跟着倾，右手小指指尖翘到键面上方 9 毫米。它不影响腕角和投影，
-  是白送的杠杆，专门把四根指尖调平（第 41 条）
+  是白送的杠杆，专门把四根指尖调平（第 41 条）。最终静止指尖 L
+  `[4,-4,0,4]`、R `[5,-2,1,5]` mm，按压也都留在 −5…+5mm，零出界
 - `snozzy_lib.slim_sleeves` + `Blender/sleeve.py`——袖子。广袖照旧收一收，
   里面再衬一层内袖伸出来盖住手腕。**别再试着把广袖压成窄袖**（第 44 条）
-- `pose.KEY_CURL = 1.0` + `FINGER_CURL`——打字的手是**拱起来**的，
+- `pose.KEY_CURL = 1.16` + `KEY_FINGER_SPLAY` + `FINGER_CURL`——打字的手是**拱起来**的，
   手指伸直会又长又平；四根手指还要各弯各的，同一个弯曲量下
   小指指尖比食指高 14 毫米（第 38 条）
 - 手的朝向必须**转进键盘的坐标系**（`type_hands` 里的 `basis`）。
@@ -175,13 +181,30 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 
 手**一直搭在键盘上**，工作时才动起来。让手时有时无就得给手臂也做过渡帧，
 而手臂在缝线以上、要连带换掉共用的上半身那张图，代价比这个功能本身大。
-改完用 `--handstrip` 验。
+运行时四张常态手也是 2×：`hands.json.pixelScale == 2`，加载时逐张验证实际像素
+必须等于 `rect × pixelScale`；托腮的 −1 起点沿用启动那一刻的高清打字帧，
+不先强制硬切静止手 0。frame 00 才是第一张真骨骼收手动作；底图全程
+都是 2×，也不会在这一拍偷换清晰度。改完用 `--handstrip` 验。
 
 **托腮**（`pose.chin_rest` + `Blender/render_closeup.py`）：
 
-近景切换时她抬起左手托住下颌。这是**第二张上半身**，和耳机层同一个路子——
-共用同一台相机，运行时换图。三张：`torso_chin.png`、
-`torso_chin_headphones.png`，加上托腮时**还留在键盘上**的那只手 `hand_chin.png`。
+近景切换时她用 0.75 秒抬起左手托住下颌，停留后把同一列倒放 0.75 秒。
+`pose.chin_rest(amount:)` 在骨骼局部变换上做 smoothstep + quaternion slerp，
+不是两张位图淡入。运行时序列是：2× 常态 base（编号 −1）→ 8 张中间帧
+（00…07）→ 终态（08）→ 07…00 → base → 普通常态。
+
+发布素材由 `Assets/chin.json` 统一约束：普通/耳机上半身、桌面手层、2× 常态和
+终态必须全部完整，帧数、逻辑画布、裁切矩形与实际像素尺寸都匹配才启用；少一张
+就整套回退，不允许在动作中途闪回 1×。面部 2× 贴片也要求 manifest 的 13 个键、
+2× 画布、通道和每张 PNG 的真实像素尺寸全部匹配才启用。
+视线也不再在 frame 00 二值跳到用户，而是跟着 00…08 的骨骼帧逐格转过去，
+退回时同列倒放。
+
+终态不是旧版“手指竖在脸侧”。当前定稿 `t_z_open` 把掌根移到下颌下、掌轴斜托，
+近端指节沿手掌局部 Z 轴展开；换成新版键盘基姿后又把 `CHIN_WRIST.x` 外移到
+0.048 m，避免掌侧网格插进脸。测得手脸最近 0.3cm，3D 投影离最近贴片还有
+6 个逻辑像素，2× 渲后像素判据仍有 15 个逻辑像素；头和脊柱不动，脸贴片与
+腰部缝线仍保持同一套坐标合同。
 
 这一套姿势有三条硬约束，全都不是"好不好看"而是"能不能用"：
 
@@ -189,10 +212,11 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
    头一转贴片就贴到脸外面（第 7/22 条）；脊柱一动上半身和腿在缝线处对不上。
    所以只动一条胳膊，"托腮"全靠手的位置去读。
 2. **手不能探进任何一块贴片的矩形。** 探进去了，她一眨眼手背上就缺一块。
-   眼贴片到 x=852、嘴贴片只到 x=824，于是「x ≥ 828 且 y ≥ 397」是一块
-   空地——正好是下颌侧面，手就挤在那儿。判据两道：`measure_chin.py`
+   旧版靠「x ≥ 828」把竖掌塞在脸侧，结果虽然不碰撞，语义却不像托腮；新版
+   用真实 13 块贴片逐块测，而不是继续把一个坐标阈值当美术目标。判据两道：`measure_chin.py`
    在 3D 里查手部网格（快，不渲染），`Scripts/chin_check.py` 渲完再查像素
-   （头发、袖子这些跟着手走的东西只有像素查得到）。实测余量 17 像素。
+   （头发、袖子这些跟着手走的东西只有像素查得到）。当前 2× 像素余量
+   30 物理像素，也就是 15 个逻辑像素。
 3. **这张要切得比常态深**（611 行，常态 600）。抬起来那条胳膊的袖子伸到
    y=644，切在 600 会齐齐削掉一截；而桌面层要到 611 才完全不透明，
    中间十行是桌沿那道由虚到实的窄带。切深了就和腿图重叠，所以运行时
@@ -1142,19 +1166,21 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   （实测 ±6%）——交叉淡入时中段会有两套腿同时半透明，面积接近翻倍
 - 分层合成对没对上：把上半身和腿拼回去，和原整幅图比预乘后的像素。
   中枢那一套必须**完全为零**（它的上半身就是切出来的那张），这条一错整个切图就是错的
-- **托腮那张能不能直接换上去**：两道，缺一不可。
+- **托腮终态与动作能不能直接上屏**：几何、像素、连续性三道都要过。
   `Blender/measure_chin.py` 在 3D 里查（几秒，不渲染）——手压没压到贴片、
   人做不做得出这个姿势、肘有没有沉到桌沿以下、手够不够得着脸；
   `Scripts/chin_check.py` 渲完在**真正上屏的像素**上再查一遍——
   头发和袖子会跟着手一起动，那些只有像素查得到。
-  两处的"离贴片多远"要对得上（实测 3D 6px / 像素 17px，方向一致）
+  `Scripts/chin_frames.py` 还要证明：动作走廊之外逐像素漂移为 0、八帧无重复、
+  相邻剪影没有尖峰，真实 2× base→00 和 07→终态都连续
 - **近景的取景和顺序**：`--closeup out.png`。它按真实层序把**整个窗口**
   一档一档画出来（第 29 条：看整张，别只放大看一小块），同时算出推到头时
   画面对应画布上哪一块，逐点报发顶/下巴/托腮的手/桌沿在不在画面里。
-  然后**走一遍时间轴**核对顺序——镜头和姿势是两条不同的曲线
-  （一条连续、一条硬切），姿势要在镜头**起步时**换（换图被运镜盖住）、
-  手要在镜头退完**之前**放下。这两条写反了画面上都还"能用"，
-  只是难看，靠看截图发现不了
+  然后**走一遍时间轴**核对完整序列：−1 → 00…07 → 08 → 07…00 → −1 → nil。
+  镜头和骨骼帧同步抵达终态，抵达后才开口；放手倒放同一列，并在镜头退完前
+  回到键盘。它还直接验 2× 常态/身体/耳机/手层/终态以及 13 张面部贴片
+  的完整契约；缺一帧、提前到终态或漏倒放都必须报红，不能只看
+  `chinRest` 布尔
 - **麦克风这条路通不通**：`--voice`（**要用 `open` 启动**，第 61 条；
   输出在 `/tmp/snozzy-voice.log`）。逐条报中文识别器在不在、两个权限给没给、
   有几个输入设备、系统默认输入是不是个虚拟声卡——**开口之前**能坏的全在这儿，
@@ -1165,8 +1191,10 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   （不是排进队列，第 68 条）。系统嗓子 0.01 秒，本机合成 2.6 秒
 - **对话够不够快**：`--chat "一句话" [--backend codex]`。**连问两轮分开报**——
   常驻会话的预热只付一次，只看一轮永远是含预热那个数（第 63 条）。
-  报首字/整句、以及换算出来的"说完到她开口"，卡一条硬线：
+  报首字/整句、以及换算出来的“说完到屏幕出字”，卡一条硬线：
   **第二轮首字 ≤ 2.5 秒**才算实时。
+  这条不经过 `Speaking`，不能拿它冒充首段音频延迟；语音还要等第一句切分，
+  再加 `--say` 实测出来的 TTS 首音频时间
   并且卡两条硬判据：回复**装不装得进气泡**（≤45 字，人设里写的是 40）、
   有没有混进星号动作描写或换行。这条路上能坏的全在 UI 之外——
   找不找得到命令行、订阅登没登录、人设管不管得住输出，
@@ -1189,12 +1217,18 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
 - 角色：五套腿部姿势随机切换（**播真的过渡帧，不是淡入**）、
   表情节拍（视线/眼型/眨眼/嘴，跟着心情和番茄钟阶段走，说话时嘴会动）、
   **手搭在 3D 键盘上，工作时敲字**、听歌时戴耳机（戴着也照样换腿）
+- **Activity 闭环**：typing / researching / planning / resting / takingBreak 由番茄阶段
+  选择，同一份 cue 联动视线、打字概率、侧屏内容、杯子热气、手机偶发亮屏与航灯；
+  每档切换用 2.4 秒 smoothstep，屏幕内容交叉过渡；任意时刻切番茄阶段或音乐
+  播放状态会先冻结屏幕此刻的完整混合 cue 再过渡。2.4 秒内连续 skip/
+  toggle 也不会回跳到某个离散枚举状态；判据同时覆盖 58 秒槽内切换和连续二次切换
 - 场景里的键盘是 **3D 建的**（`Blender/keyboard.py`），斜着放；
   重绘图里画的那块已抹掉。桌板也在 3D 里，只当遮挡用
 - 底部控制条鼠标靠近才浮出
 - 窗口三形态（完整 / 迷你 / 桌宠）、菜单栏常驻
 - **近景切换**：你把窗口切回前台（离开超过 30 秒、且距上次超过 4 分钟），
-  她托着腮凑近看你一眼，停 5–10 秒再退回去，同时念一句你**待办里最老的
+  她用八张真实骨骼帧抬手斜托下颌、凑近看你一眼，停 5–10 秒再把同一列
+  倒放退回去，同时念一句你**待办里最老的
   那件事**。想随时看一次：底部控制条上那个人形图标（面板开关左边），
   菜单栏里也有一个。**这个入口是必须的**——自动触发有"离开 >30 秒"和
   "距上次 >4 分钟"两道门槛，改完素材想验一眼根本等不起
@@ -1203,28 +1237,21 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   而且她知道现在几点、在放什么、番茄钟到哪一步、待办还剩几件。
   **也可以直接对着麦克风说**——控制条上的麦克风按钮，说完自动发，
   识别在本机完成
+- **长期记忆 v1**：`memories.json` 结构化保存 profile / preference / project /
+  promise / note，可固定、分类、删除；“记住……”与“忘掉……”本地即时执行。
+  Claude 每轮按中文 bigram 检索相关记忆，冷会话还恢复最近 8 轮；记忆变化会
+  重建热会话，删除后不会继续残留。MCP 收件箱用 `flock` + 处理后确认，日志不记正文
 
 **已知未做完的**：
 
-- 电脑屏幕是画死的白背板，可以做成跟播放状态联动发光
 - 白天档的窗外城市只能算及格（`CyberCity.airy` 加了但没细调）
 - Live2D 那条线（`Sources/WithSnozzy/Character/Live2D/`）是完整可用的，
   但现在没在用——渲染版走通之后它成了备选。`Vendor/CubismCore/` 未入库
-- **近景推得不够近，而且这是素材分辨率的天花板，不是参数问题。**
-  房间和桌子是 1536×1024 的平面图（用户交付的重绘图），窗口在 2 倍屏上
-  就有 2000 像素宽——**本来就已经在放大 1.3 倍了**。现在推到 1.55 倍
-  （合计 2.1 倍）已经是"再多就糊得明显"的位置，背景那层加了模糊
-  既当景深也顺手盖住放大的软边。想真正推到"半身特写"那种程度，
-  只有两条路：把整套房间重绘到 3072 宽；或者**给近景单独架一台推近的相机**
-  重渲角色，她清楚、房间虚化（近景本来就该有景深）。后者便宜得多，
-  但**要连面部贴片一起重出**，不然会是"糊眼睛配清楚的脸"。
-  调 `SceneCamera.zoom` 那个数没用，只会越来越糊
-- **托腮是硬切的，没有中间帧。** 换图那一下靠推镜头盖住（姿势在镜头
-  起步的同一帧换），实测不明显，但它终究是"跳"上去的而不是"抬"上去的。
-  要做成真的抬手，路子和换腿完全一样（第 9 条）：`chin_rest` 收一个
-  0…1 的插值参数，把手腕落点从键盘插到下颌、渲 8 帧中间帧。
-  代价比换腿小——只用存**变化的那一块**（手臂扫过的区域），
-  但**手那一层也要跟着出中间帧**，而且每一帧都要过一遍第 60 条那个检查
+- 房间仍以高完成度静态画为主体；Activity 已补上小反馈，但喝水、看书、伸懒腰
+  这些需要新上半身与 3D 道具的长动作还没做
+- 当前明确**不改运行时全 3D**。固定相机下收益不足，却要重建插画房间、材质、
+  222 骨与 58 形态键；继续用 Blender 离线 3D + SwiftUI 2.5D。只有加入自由镜头
+  才重新评估
 
 ---
 
@@ -1232,12 +1259,12 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
 
 ### 1. 女主的动作
 
-现在只有腿在换姿势 + 眨眼。缺的是**上半身在干什么**。
+Activity v1 已实现（`Features/Activity.swift`）：typing / researching / planning /
+resting / takingBreak 由 `FocusTimer.phase` 驱动，并联动现有手、眼神和房间反馈。
+它先解决了“番茄钟只是文字、房间除了天气全冻结”的问题，而且不需要先堆五套大素材。
 
-已经设计好但没实现的方案在 `Art/SCENE.md`：引入一个 `Activity` 状态机
-（敲键盘 / 看书 / 写字 / 喝水 / 发呆 / 伸懒腰），**由已有的 `FocusTimer.phase`
-驱动**——work 阶段在几种工作动作间随机漫游，休息阶段走喝水/伸懒腰。
-这样番茄钟就不只是计时器，而是真的改变了她在做的事。
+下一阶段才是带新上半身资产的长动作：看书 / 写字 / 喝水 / 伸懒腰。状态机和
+场景入口已经有了，新动作只需接入对应 cue，不要再另造一套互不相识的计时器。
 
 **敲键盘和托腮都做完了**（见第二节）。剩下的是喝水、伸懒腰、看书这几套——
 实现上就是多渲几套上半身。做新道具（杯子、书）照键盘那条路走：
@@ -1289,7 +1316,7 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
 
 实现在 `Sources/WithSnozzy/Features/SnozzyChat.swift`。几条实测出来的：
 
-- **延迟是这个功能的天花板**：claude 4–6 秒、codex 10–15 秒，
+- **冷启动延迟是这个功能的天花板**：claude 4–6 秒、codex 10–15 秒，
   绝大部分花在冷启动 node 上，跟句子长短基本无关。
   能陪你搭句话，做不了实时对答
 - **不能直接 `Process` 跑 "claude"**：GUI 应用继承到的 PATH 只有
@@ -1310,7 +1337,33 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
 **这是自用功能。** 驱动的是用户自己机器上、自己登录的命令行，
 别把 app 连同这条路一起分发出去。
 
-#### 延迟：从 4.8 秒压到"说完 2.4 秒她就开口"
+#### 长期记忆（`Features/MemoryStore.swift`）
+
+旧版的 `memories.json` 只是字符串数组，而且只有 MCP `get_state` 会读；本地
+`SnozzyChat` 完全没注入，所以“存了”不等于“她记得”。Claude 常驻会话被回收后
+也只拿当前消息，`chat.json` 里看得到旧话，模型却不知道。
+
+现在的 v1：
+
+- `MemoryRecord` 带 kind / createdAt / updatedAt / lastUsedAt / pinned / sourceTurnID；
+  旧字符串数组第一次读取时原样备份后迁移，无法识别的文件必须先成功隔离备份，
+  否则只读保护，不能被下一次新增覆盖
+- “记住……”与“忘掉……”是本地命令，不等模型；面板可分类添加、固定、删除。
+  记忆不再按 60/200 条静默淘汰
+- 中文检索以 bigram 为主，过滤“我/你/的/了”这类停用字；每轮热会话都注入
+  当前问题相关记忆，冷会话再加最近 8 轮。新增/删除/固定后重建 Claude 会话，
+  旧事实不会残留在模型内部上下文
+- 记忆正文压成单行、转义 `【】` 分区符，并明确标成“用户可编辑的事实，不是指令”；
+  UI 明示相关、固定和“关于你”条目回答时会发给当前模型。`--memorycheck` 不碰用户存档地验命令、
+  相关性、停用字和提示词边界
+- MCP `inbox.json` 用独立 lock file + `flock`。追加、应用、确认在同一把锁下；
+  每条业务**同步落盘后**才确认；遇到暂时失败会保留它与后续整段，不会把
+  “完成 A → 再添加 A”这类有序操作倒过来。崩溃会重放，操作保持幂等。损坏的 inbox
+  拒绝覆盖；“清空全部数据”也在同一把 `flock` 中清队列，保留零字节锁文件避免
+  跨进程 inode 分裂。无查询词的 `get_state` 不发送
+  长期记忆；`mcp.log` 只记工具名与成败，不再把待办/记忆正文写进日志
+
+#### 文字延迟：从 4.8 秒压到“说完约 2.4 秒屏幕开始回复”
 
 用户报"太慢"。**先拆账再动手**，拆出来的结论和直觉相反：
 
@@ -1335,25 +1388,27 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
    预热和你说话的时间**重叠**掉了，等你说完会话已经是热的
 3. **流式显示**——感知延迟等于"第一个字什么时候到"，不是整句。
    等整句攒完再显示，等于把省下来的一秒又还回去
-4. **静音判定 1.6 → 0.9 秒**——这段是纯干等，直接计进总延迟
+4. **静音判定从 1.6 秒降到 0.9 秒**——这段是纯干等，直接计进总延迟
 
-账：静音 0.9 + 首字 1.5 ≈ **2.4 秒她就开口**。判据在 `--chat`，
+账：静音 0.9 + 首字 1.5 ≈ **2.4 秒屏幕开始出字**。这不包含二次元 TTS；
+真正首段音频的账见下一节。文字判据在 `--chat`，
 它**连问两轮并分开报**——只测一轮看到的永远是含预热那个数，会把结论带偏。
 
-**代价：常驻进程 345 MB。** app 自己才 119 MB，硬约束是 500 MB，
-所以闲置 3 分钟就关掉、退出时也关（`shutdown()`，不关会留下孤儿进程）。
-这是一笔明确的交易：热着的时候快 3 倍，代价是那 345 MB。
+**代价：常驻进程约 345 MB。** 旧版因 500MB 上限闲置 3 分钟就回收，
+2026-08-09 用户撤销资源上限后改为 app 生命周期内保持热会话，优先连续上下文和
+1.4–2.0 秒首字；切后端、清空聊天和退出仍会 `shutdown()`，不会留下孤儿进程。
 
 **codex 快不了，别在它身上试。** 它的延迟不在启动在推理——
 `codex exec` 一个"回一个字"的提示实测 9 秒到 **90 秒直接超时**。
 常驻连接省不掉推理时间。想要实时只能用 claude 这条。
 
-#### 二次元音色：本机跑 GPT-SoVITS（`Features/VoiceEngine.swift` + `Scripts/tts_server.py`）
+#### 二次元音色：现有 GPT-SoVITS 试验与推荐方案
 
 用户要"日本动漫那种甜美可爱的萝莉音"。**ChatGPT 的语音音色改不了**——
 固定九个（Cove/Ember/…，机器上的偏好里就存着那个列表），不能上传不能克隆。
 系统 TTS 的中文声音也全是 compact 档，变调只能得到"捏着嗓子的机器音"。
-所以音色这件事只能收回本机做。
+所以音色要走 app 可控的外部 TTS：默认系统音兜底，二次元音色可选流式云服务，
+或未来验证过延迟后再切本地模型。
 
 装在 `~/earn_sth/snozzy-tts/`（**不在仓库里**，和 Blender、codex 同一个性质：
 外部工具，不算第三方依赖）。app 那边服务不在就自动退回系统声音。
@@ -1364,9 +1419,10 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
 是按 `<角色>/Chinese/<id>_audio.wav` 组织的，能按需取单个文件。
 现在用的是 Nahida（用户挑的），换音色只要换 `voices/genshin/refs.json` 里那一条。
 
-实测：**模型加载 34 秒（只此一次），之后每句 1.4–1.6 秒**。
-所以必须是常驻服务——每句重开进程的话延迟被启动完全支配，
-和对话那条"每个新进程重付一遍会话预热"是同一个账。
+2026-08-09 重测：TTS Python 进程 physical footprint **3.9GB**，外部目录约 1.5GB；
+单句约 1.3–3.1 秒，而且当前 HTTP 协议要整句 WAV 合成完才播。真实二次元音色
+端到端不是文档旧说法的 2.4 秒，而是静音 0.9 + LLM 首句约 2.3 + TTS 1.3–3.1，
+常见 **4.5–6.3 秒**。资源上限虽已撤销，延迟仍使它不适合默认实时对话。
 
 参考音有两条硬要求，都撞过：
 
@@ -1378,6 +1434,24 @@ API 或命令行。硬走只剩浏览器自动化和拿会话 token 调内部接
 四个环境坑写在 `tts_server.py` 的注释里：代理变量会让本地推理卡死
 （httpx 见到 SOCKS 就要 socksio）、`dict_language` 的键是英文、
 torchaudio 2.9 移除了旧解码后端（用 soundfile 顶掉，别趟版本泥潭）。
+
+**本轮不接新语音，只保留方案：**
+
+1. 默认继续系统 TTS：免费、即时、服务故障时永远可用。
+2. 二次元主方案优先实测 MiniMax `speech-2.8-turbo` + Voice Design，做一把原创的
+   “甜、明亮、轻熟但不幼态”声线。用北京接口和 WebSocket/HTTP stream；官方未
+   承诺 TTFA，上海本机目标是首音频 <500ms，必须实测后再写数。价格 ¥2/万计费字符，
+   中文 1 字算 2 字符；40 汉字/回复，20 次/天约 ¥9.6/月，100 次/天约 ¥48/月，
+   第一次正式使用设计音色另 ¥9.9。
+3. 海外备选 ElevenLabs Flash v2.5；官方给中文、模型推理约 75ms，东北亚 WebSocket
+   TTFB 250–350ms，但上海 + Clash 的实际网络必须另测。
+4. 本地未来试验 Qwen3-TTS 0.6B（Apache-2.0，流式、Voice Design/Clone，官方称
+   低至 97ms）。官方路径偏 CUDA/FlashAttention，M 系列没有可直接承诺的性能；
+   资源已不是障碍，但要先做 MPS/MLX 实测再决定是否产品化。
+
+**版权边界：** 当前 Nahida / Genshin 参考音只可视为作者自用试验，不是可分发资产，
+也不要以角色名或声优克隆宣传。更稳的是 Voice Design 生成原创声线，或使用本人/
+有书面授权的配音参考。
 
 #### 她把话说出来（`Features/Speaking.swift`）
 
@@ -1394,7 +1468,7 @@ torchaudio 2.9 移除了旧解码后端（用 soundfile 顶掉，别趟版本泥
 
 **用麦克风说**（`Sources/WithSnozzy/Features/VoiceInput.swift`）：
 
-底部控制条上的麦克风按钮，点一下开始听，**静 1.6 秒自动收并发出去**。
+底部控制条上的麦克风按钮，点一下开始听，**静 0.9 秒自动收并发出去**。
 走 Apple 自带的 `Speech`，零第三方依赖；实测这台机器 `zh-CN`
 `supportsOnDeviceRecognition == true`，所以强制本地识别——声音不出这台机器。
 
@@ -1450,7 +1524,11 @@ Plugin/
   `state.json` 快照把"在放什么"这类补上。**app 没开着也能回答**，
   但会在开头说明"这是几分钟前的"，不假装实时
 - **写回去不能直接改 `tasks.json`**：待办在界面内存里，它下次存盘会整份覆盖。
-  所以走 `inbox.json` 单向队列，界面收完清空。两个进程各写各的文件
+  所以走 `inbox.json` 单向队列。界面逐条应用、同步写入权威 JSON 后才确认；
+  临时失败的条目留下重试但不挡后续，无效条目隔离丢弃。`flock` 锁的是独立
+  lock file，原 inbox 损坏时拒绝把它当空数组覆盖
+- `get_state` 没有查询词，因此只返回时间、音乐、番茄钟和待办，**不顺手附带
+  长期记忆**。本地 SnozzyChat 才按当前问题检索相关记忆；这条是隐私边界
 - **收件要排在写快照之前**。反过来的话 GPT 刚记的东西要等下一轮才进快照，
   它紧接着再查会发现自己刚记的不在，看着像没记住
 - `.mcp.json` 里的路径**必须绝对**：那个进程的工作目录和 PATH 和终端不一样，
@@ -1492,7 +1570,9 @@ Codex/agent 那一半，ChatGPT 聊天（以及语音，语音是聊天的一个
 剩下两条实际有用的：
 
 - **Codex/Work 模式里能用**：在那儿干活时她知道你的待办。代价是 Codex 额度
-- **本地那套**（`SnozzyChat` + `VoiceInput` + `Speaking`）：说完 2.4 秒开口，
+- **本地那套**（`SnozzyChat` + `VoiceInput` + `Speaking`）：热会话下说完约
+  2.3–2.9 秒开始出字；系统 TTS 还要等第一句切分后才真正出声。当前本地
+  GPT-SoVITS 二次元音色端到端常见 4.5–6.3 秒，不要再写成 2.4 秒。
   嘴型气泡全联动，走 Claude Pro，不碰任何 OpenAI 额度
 
 MCP 这套代码没白写：协议层面和 OpenAI 自己的插件已经完全一致，
@@ -1557,18 +1637,26 @@ python3 Scripts/leg_frames.py /tmp/poses --out Assets && python3 Scripts/leg_met
 $B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/face
 python3 Scripts/face_patches.py /tmp/face --out Assets
 
-# 键盘+手重出（改完 keyboard.py 之后）。约 20 秒
+# 键盘+手重出（改完 keyboard.py 之后）；1× 兼容层 + 2× 运行时层
 $B --background --factory-startup --python Blender/render_hands.py -- Snozzy.vrm /tmp/hands
 python3 Scripts/hand_frames.py /tmp/hands --out Assets
+$B --background --factory-startup --python Blender/render_hands.py -- Snozzy.vrm /tmp/hands2x 2
+python3 Scripts/hand_frames.py /tmp/hands2x --out Assets
 
 # 手放得对不对（腕角/指尖高度/出界/袖口）。不渲染，几秒钟
 $B --background --factory-startup --python Blender/measure_hands.py -- Snozzy.vrm
 
-# 近景（托腮）那三张重出 + 切图 + 判据。约 10 秒
-$B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup
-python3 Scripts/leg_frames.py /tmp/closeup --out Assets    # 切上半身，要有整套姿势图
-python3 Scripts/hand_frames.py /tmp/closeup --out Assets   # 切手，含托腮那一帧
-python3 Scripts/chin_check.py /tmp/closeup                 # 贴片/缝线/手那一层
+# 近景（托腮）先重出 1× 兼容终态/chinSeam，再出 2× 完整动作
+$B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup1x
+python3 Scripts/leg_frames.py /tmp/closeup1x --out Assets
+python3 Scripts/hand_frames.py /tmp/closeup1x --out Assets
+python3 Scripts/chin_check.py /tmp/closeup1x
+$B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup2x 2
+python3 Scripts/chin_frames.py /tmp/closeup2x --out Assets  # base/逐帧/连续性/chin.json
+
+# 近景 2× 面部贴片
+$B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/face2x 2
+python3 Scripts/face_patches.py /tmp/face2x --out Assets --prefix face2x
 
 # 托腮姿势对不对（压没压到贴片、人做不做得出来、肘在不在桌沿以下）。不渲染
 $B --background --factory-startup --python Blender/measure_chin.py -- Snozzy.vrm
@@ -1579,6 +1667,9 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip  /tmp/legs.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip /tmp/face.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip /tmp/hands.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitystrip /tmp/activity.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --memorycheck
 
 # 对话接得通不通（报耗时，并卡"装不装得进气泡"）
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --chat "在干嘛"

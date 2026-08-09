@@ -20,13 +20,17 @@ import bpy, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import snozzy_lib as S, pose as P, keyboard as K
 
-VRM, OUT = sys.argv[-2], sys.argv[-1]
+args = sys.argv[sys.argv.index("--") + 1:]
+VRM, OUT = args[:2]
+SCALE = int(args[2]) if len(args) > 2 else 1
+if SCALE not in (1, 2):
+    raise SystemExit("像素倍率只支持 1 或 2")
 os.makedirs(OUT, exist_ok=True)
 
 for i, (press, first) in enumerate(P.TYPING_FRAMES):
     meshes = S.load(VRM)
-    scene = S.setup_scene(res=1536)
-    scene.render.resolution_x, scene.render.resolution_y = 1536, 1024
+    scene = S.setup_scene(res=1536 * SCALE)
+    scene.render.resolution_x, scene.render.resolution_y = 1536 * SCALE, 1024 * SCALE
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
 

@@ -87,6 +87,7 @@ def measure(press=0.0, side_first="L"):
         sh, el, wr = head("UpperArm"), head("LowerArm"), head("Hand")
         fore = (wr - el).normalized()
         palm = (head("Middle1") - wr).normalized()
+        fore_local, palm_local = inv @ fore, inv @ palm
         tips = [inv @ ((arm.matrix_world
                         @ arm.pose.bones[f"J_Bip_{side}_{t}"].tail) - kbd.location)
                 for t in TIPS]
@@ -115,6 +116,8 @@ def measure(press=0.0, side_first="L"):
               f"  出界 {off * 1000:.1f}mm"
               f"  掌根高 {((inv @ (head('Middle1') - kbd.location)).z - top) * 1000:+.0f}mm"
               f"  指尖高 {[round((t.z - top) * 1000) for t in tips]}mm")
+        print(f"    键盘坐标小臂 {tuple(round(v, 2) for v in fore_local)}"
+              f"  掌轴 {tuple(round(v, 2) for v in palm_local)}")
 
     # 袖子盖住手腕了没有、胳膊有没有从袖子里透出来。
     #

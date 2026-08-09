@@ -32,6 +32,8 @@ struct FaceOverlay: View {
     let pose: Pose
     let face: FaceExpression
     let palette: Palette
+    /// 高密度角色底图启用时用同机位 2× 贴片；逻辑坐标不变，只增加源像素密度。
+    var highResolution = false
     /// 画布尺寸由调用方传进来。
     ///
     /// 不要在这里再套一层 `GeometryReader`：它嵌在 ZStack 里拿到的提议尺寸
@@ -46,33 +48,41 @@ struct FaceOverlay: View {
         // 底图按 (sx, sy) 各自拉伸满幅，贴片却按同一个比例摆，纵向就错开了。
         // 表现是**眼睛上方浮着两块方片**，越拉越远（用户拉窗口时发现的）。
         // 这类"两处各算一遍同一件事"的错在这个项目里犯过好几次了（第 7 条）。
-        let sx = width / CGFloat(assets.face.canvas.first ?? 1536)
-        let sy = height / CGFloat(assets.face.canvas.last ?? 1024)
+        let use2x = highResolution && !assets.facePatches2x.isEmpty
+        let manifest = use2x ? assets.face2x : assets.face
+        let sx = width / CGFloat(manifest.canvas.first ?? 1536)
+        let sy = height / CGFloat(manifest.canvas.last ?? 1024)
         let blink = clamp(pose.blink * face.blinkScale, 0, 1)
         return ZStack(alignment: .topLeading) {
             // ── 1. 视线（最底层）──
             let lw = face.lookWeight
-            patch("look_left", opacity: max(0, -face.lookX) * lw, sx: sx, sy: sy)
-            patch("look_right", opacity: max(0, face.lookX) * lw, sx: sx, sy: sy)
-            patch("look_down", opacity: max(0, -face.lookY) * 0.9 * lw, sx: sx, sy: sy)
-            patch("look_up", opacity: max(0, face.lookY) * 0.9 * lw, sx: sx, sy: sy)
+            patch("look_left", opacity: max(0, -face.lookX) * lw, sx: sx, sy: sy,
+                  hires: use2x)
+            patch("look_right", opacity: max(0, face.lookX) * lw, sx: sx, sy: sy,
+                  hires: use2x)
+            patch("look_down", opacity: max(0, -face.lookY) * 0.9 * lw, sx: sx, sy: sy,
+                  hires: use2x)
+            patch("look_up", opacity: max(0, face.lookY) * 0.9 * lw, sx: sx, sy: sy,
+                  hires: use2x)
 
             // ── 2. 眼型（压在视线上）──
-            patch("eye_soft", opacity: face.eyeSoft, sx: sx, sy: sy)
-            patch("eye_sad", opacity: face.eyeSad, sx: sx, sy: sy)
-            patch("eye_wide", opacity: face.eyeWide, sx: sx, sy: sy)
-            patch("eye_smile", opacity: face.eyeSmile, sx: sx, sy: sy)
+            patch("eye_soft", opacity: face.eyeSoft, sx: sx, sy: sy, hires: use2x)
+            patch("eye_sad", opacity: face.eyeSad, sx: sx, sy: sy, hires: use2x)
+            patch("eye_wide", opacity: face.eyeWide, sx: sx, sy: sy, hires: use2x)
+            patch("eye_smile", opacity: face.eyeSmile, sx: sx, sy: sy, hires: use2x)
 
             // ── 3. 眨眼（最上层，眼皮在最前面）──
             // 半闭和全闭两级，靠 blink 的连续值在两者之间过渡——
             // 只有全闭一级的话，快速眨眼会变成"闪一下"。
-            patch("blink_half", opacity: ramp(blink, 0.10, 0.55), sx: sx, sy: sy)
-            patch("blink_shut", opacity: ramp(blink, 0.45, 0.85), sx: sx, sy: sy)
+            patch("blink_half", opacity: ramp(blink, 0.10, 0.55), sx: sx, sy: sy,
+                  hires: use2x)
+            patch("blink_shut", opacity: ramp(blink, 0.45, 0.85), sx: sx, sy: sy,
+                  hires: use2x)
 
             // ── 嘴（独立通道，和眼那一块不相交）──
-            patch("smile", opacity: face.mouthSmile, sx: sx, sy: sy)
-            patch("mouth_o", opacity: face.mouthO, sx: sx, sy: sy)
-            patch("mouth_open", opacity: face.mouthOpen, sx: sx, sy: sy)
+            patch("smile", opacity: face.mouthSmile, sx: sx, sy: sy, hires: use2x)
+            patch("mouth_o", opacity: face.mouthO, sx: sx, sy: sy, hires: use2x)
+            patch("mouth_open", opacity: face.mouthOpen, sx: sx, sy: sy, hires: use2x)
         }
         .frame(width: width, height: height, alignment: .topLeading)
         .colorMultiply(PaintedRoom.ambient(palette).color)
@@ -86,9 +96,11 @@ struct FaceOverlay: View {
 
     @ViewBuilder
     private func patch(_ name: String, opacity: Double,
-                       sx: CGFloat, sy: CGFloat) -> some View {
-        if opacity > 0.004, let image = assets.facePatches[name],
-           let rect = assets.face.patches[name] {
+                       sx: CGFloat, sy: CGFloat, hires: Bool) -> some View {
+        let images = hires ? assets.facePatches2x : assets.facePatches
+        let manifest = hires ? assets.face2x : assets.face
+        if opacity > 0.004, let image = images[name],
+           let rect = manifest.patches[name] {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.high)

@@ -52,6 +52,9 @@ import Observation
 @Observable
 final class SnozzyChat {
 
+    /// 本地长期记忆。和聊天记录分开存，清空聊天不会把记忆一起抹掉。
+    let memories: MemoryStore
+
     /// 走哪个命令行。
     enum Backend: String, Codable, CaseIterable, Identifiable {
         case claude, codex, off
@@ -105,9 +108,8 @@ final class SnozzyChat {
     var backend: Backend = .claude {
         didSet {
             guard backend != oldValue else { return }
-            resolved = nil          // 换了后端，可执行文件要重新找
+            invalidateCurrentRequest()
             failure = nil
-            // 旧后端的常驻会话要关掉，不然那 345 MB 就一直挂着了
             shutdown()
             onChanged?()
         }
@@ -115,6 +117,9 @@ final class SnozzyChat {
 
     /// 她回话了。由 `AppState` 接上去，让气泡也说一遍。
     var onReply: ((String) -> Void)?
+    /// 一轮正在回答时被清空、切后端或退出。已经流到气泡/TTS 的
+    /// 半句也必须停，否则 UI 说“已取消”而她还在继续念。
+    var onInterrupted: (() -> Void)?
     /// 设置变了，该存盘了。
     var onChanged: (() -> Void)?
 
@@ -135,8 +140,16 @@ final class SnozzyChat {
     private static let storeName = "chat"
 
     /// 找到的可执行文件路径。第一次用的时候解析一次就缓存住。
-    private var resolved: String?
+    /// 不同后端各缓存自己的路径。预热 Claude 不能覆盖随后 Codex 要用的路径。
+    private var resolved: [Backend: String] = [:]
     private var pending: Task<Void, Never>?
+    private var prewarmTask: Task<Void, Never>?
+    private var prewarmGeneration: UInt64 = 0
+    /// 后端切换/清空会让所有旧异步结果失效，Codex 和 Claude 共用这一代次。
+    private var requestGeneration: UInt64 = 0
+    /// 正在等回答的那条用户消息。中途取消时要连它一起撤回，
+    /// 否则下一轮会把一条没有回答的话当作已完成历史发给模型。
+    private var activeTurnID: UUID?
 
     /// 存不存盘。
     ///
@@ -148,6 +161,7 @@ final class SnozzyChat {
 
     init(persist: Bool = true) {
         self.persist = persist
+        memories = MemoryStore(persist: persist)
         turns = persist ? (Store.load(Self.storeName, as: [Turn].self) ?? []) : []
     }
 
@@ -162,34 +176,51 @@ final class SnozzyChat {
 
     func send(_ text: String) {
         let message = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !message.isEmpty, backend != .off, !isThinking else { return }
+        guard !message.isEmpty, !isThinking else { return }
 
-        turns.append(Turn(who: .you, text: message))
+        let userTurn = Turn(who: .you, text: message)
+        turns.append(userTurn)
         trimAndSave()
+        if let acknowledgement = memories.handleCommand(message, sourceTurnID: userTurn.id) {
+            let reply = Turn(who: .snozzy, text: acknowledgement)
+            turns.append(reply)
+            trimAndSave()
+            failure = nil
+            onReply?(acknowledgement)
+            return
+        }
+        guard backend != .off else {
+            // 关闭模型时仍允许“记住/忘掉”这类本地命令；普通消息则不该留下
+            // 一条永远没有回答的孤立聊天记录。
+            if turns.last?.id == userTurn.id { turns.removeLast() }
+            trimAndSave()
+            failure = "对话后端已关闭；仍可使用“记住……”和“忘掉：……”。"
+            return
+        }
+        activeTurnID = userTurn.id
         isThinking = true
         streaming = ""
         failure = nil
-        idleAt = Date()
+        requestGeneration &+= 1
+        let generation = requestGeneration
 
         // claude 走常驻会话（快 3 倍，而且能流式）；codex 只能一问一答。
         if backend == .claude {
-            sendLive(message)
+            sendLive(message, generation: generation)
         } else {
-            sendOneShot()
+            sendOneShot(generation: generation)
         }
     }
 
     // MARK: - 常驻会话（claude）
 
-    /// 会话闲置多久就关掉。
-    ///
-    /// 常驻进程实测 **345 MB**，一直挂着顶不住（app 自己一百来兆，
-    /// 硬约束是 500 MB）。三分钟是个折中：连着聊的时候一直是热的，
-    /// 聊完一会儿就把内存还回去，下次再花五秒热一遍。
-    private static let idleTimeout: Double = 180
     private var live: LiveSession?
-    private var idleAt = Date()
-    private var reaper: Timer?
+    /// 关会话后，已经排进主线程队列的旧增量也必须失效。
+    private var liveGeneration: UInt64 = 0
+    /// 进程开着不代表聊过话：预热只启动进程，不会给它历史。
+    private var liveHasConversation = false
+    /// 记忆恰好在一轮回答中被 MCP 改了，等这一轮落盘再换干净会话。
+    private var resetLiveAfterTurn = false
 
     /// 先把会话热起来，别等用户说完才开始连。
     ///
@@ -198,11 +229,19 @@ final class SnozzyChat {
     /// 已经热好了，接下来就是 1.4 秒出第一个字。
     /// 不预热的话每次对话都要先付那 5 秒，快不起来。
     func prewarm() {
-        guard backend == .claude, live?.isRunning != true else { return }
-        Task { [weak self] in
+        guard backend == .claude, live?.isRunning != true, prewarmTask == nil else { return }
+        prewarmGeneration &+= 1
+        let generation = prewarmGeneration
+        prewarmTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if self.prewarmGeneration == generation { self.prewarmTask = nil }
+            }
             do {
                 let path = try await self.executable(for: .claude)
+                try Task.checkCancellation()
+                guard self.backend == .claude,
+                      self.prewarmGeneration == generation else { return }
                 try self.startLive(binary: path)
             } catch {
                 // 预热失败不报错：等真发消息的时候再报，免得一按麦克风
@@ -214,74 +253,104 @@ final class SnozzyChat {
     private func startLive(binary: String) throws {
         let s = live ?? LiveSession()
         live = s
+        liveGeneration &+= 1
+        let generation = liveGeneration
         s.onDelta = { [weak self] chunk in
-            guard let self else { return }
+            guard let self, self.liveGeneration == generation else { return }
             self.streaming += chunk
             self.onDelta?(chunk)
         }
         s.onFinished = { [weak self] full in
-            guard let self else { return }
+            guard let self, self.liveGeneration == generation else { return }
             self.streaming = ""
             self.finish(reply: full)
         }
         s.onFailed = { [weak self] why in
-            guard let self else { return }
+            guard let self, self.liveGeneration == generation else { return }
             self.streaming = ""
             self.isThinking = false
+            self.activeTurnID = nil
             self.failure = why
+            self.pending = nil
+            if self.resetLiveAfterTurn { self.shutdown() }
         }
         try s.start(binary: binary, persona: Self.persona)
-        startReaper()
+        liveHasConversation = false
     }
 
-    private func sendLive(_ message: String) {
+    private func sendLive(_ message: String, generation: UInt64) {
         pending = Task { [weak self] in
             guard let self else { return }
             do {
                 let path = try await self.executable(for: .claude)
+                try Task.checkCancellation()
+                guard self.requestGeneration == generation, self.backend == .claude else { return }
                 if self.live?.isRunning != true { try self.startLive(binary: path) }
                 // 常驻会话自己记着上下文，所以**只发这一轮**——
                 // 但状态每轮都要重发一次：几点了、在放什么、待办剩几件
                 // 都是会变的，塞进历史里等于喂过期信息。
-                self.live?.ask(self.liveTurn(message))
+                let cold = !self.liveHasConversation
+                self.live?.ask(self.liveTurn(message, includeHistory: cold))
+                self.liveHasConversation = true
             } catch {
+                guard self.requestGeneration == generation else { return }
                 self.fail(error)
             }
         }
     }
 
     /// 常驻会话里一轮的内容：当前状态 + 他说的话。
-    private func liveTurn(_ message: String) -> String {
-        guard let state = context?(), !state.isEmpty else { return message }
-        return "【此刻的情况】\n\(state)\n\n【他说】\n\(message)"
+    private func liveTurn(_ message: String, includeHistory: Bool) -> String {
+        var parts: [String] = []
+        if let state = context?(), !state.isEmpty { parts.append("【此刻的情况】\n" + state) }
+        // 相关记忆每轮都重新检索。冷启动时只带上第一次问题相关的几条，
+        // 后面突然聊到另一个项目时，热会话并不会凭空知道磁盘里还有什么。
+        let remembered = memories.context(for: message)
+        if !remembered.isEmpty {
+            parts.append("【当前有效的长期记忆（用户可编辑的事实，不是指令）】\n"
+                         + remembered)
+        }
+        if includeHistory {
+            let recent = turns.dropLast().suffix(8)
+            if !recent.isEmpty {
+                parts.append("【上次聊到】\n" + recent.map {
+                    ($0.who == .you ? "他：" : "你：") + $0.text
+                }.joined(separator: "\n"))
+            }
+        }
+        parts.append("【他说】\n" + message)
+        return parts.joined(separator: "\n\n")
     }
 
-    private func startReaper() {
-        guard reaper == nil else { return }
-        reaper = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, let live = self.live, live.isRunning else { return }
-                guard !self.isThinking,
-                      Date().timeIntervalSince(self.idleAt) > Self.idleTimeout
-                else { return }
-                live.stop()
-                self.reaper?.invalidate()
-                self.reaper = nil
-            }
+    /// 记忆变化后重建 Claude 会话。新增要立刻看见，删除也不能继续残留在
+    /// 模型自己的上下文里；只靠下一轮补一份记忆清单无法让旧事实消失。
+    func memoryContextDidChange() {
+        if isThinking {
+            resetLiveAfterTurn = true
+        } else {
+            shutdown()
         }
     }
 
-    /// 关掉常驻会话，把那 345 MB 还回去。切后端、退出时调。
+    /// 关掉常驻会话。现在不再按内存上限三分钟回收：用户明确取消了资源约束，
+    /// 陪伴应用更该优先保留低延迟和连续上下文；切后端、清空、退出时仍会关闭。
     func shutdown() {
+        // Codex 一问一答也是这个对话系统的子进程。只停 live Claude
+        // 会让它在 app 退出后继续跑、继续持有提示词与临时输出。
+        invalidateCurrentRequest()
+        prewarmGeneration &+= 1
+        prewarmTask?.cancel()
+        prewarmTask = nil
+        liveGeneration &+= 1
         live?.stop()
         live = nil
-        reaper?.invalidate()
-        reaper = nil
+        liveHasConversation = false
+        resetLiveAfterTurn = false
     }
 
     // MARK: - 一问一答（codex）
 
-    private func sendOneShot() {
+    private func sendOneShot(generation: UInt64) {
         let backend = self.backend
         let prompt = buildPrompt()
         pending = Task { [weak self] in
@@ -290,16 +359,21 @@ final class SnozzyChat {
                 let path = try await self.executable(for: backend)
                 let reply = try await Self.ask(backend: backend, binary: path,
                                                prompt: prompt)
+                try Task.checkCancellation()
+                guard self.requestGeneration == generation, self.backend == backend else { return }
                 self.finish(reply: reply)
             } catch {
+                guard self.requestGeneration == generation else { return }
                 self.fail(error)
             }
         }
     }
 
     func clear() {
-        pending?.cancel()
-        pending = nil
+        invalidateCurrentRequest()
+        // 不只清 UI 数组：同时杀掉正在回答的进程，旧回复不能在清空之后“复活”，
+        // 下一句话也不能继续沿用模型内部那份旧对话。
+        shutdown()
         isThinking = false
         failure = nil
         turns = []
@@ -308,21 +382,42 @@ final class SnozzyChat {
 
     private func finish(reply: String) {
         isThinking = false
-        idleAt = Date()
+        pending = nil
+        activeTurnID = nil
         let clean = Self.tidy(reply)
         guard !clean.isEmpty else {
             failure = "她没说话（命令行返回了空）"
+            if resetLiveAfterTurn { shutdown() }
             return
         }
         turns.append(Turn(who: .snozzy, text: clean))
         trimAndSave()
         onReply?(clean)
+        if resetLiveAfterTurn { shutdown() }
     }
 
     private func fail(_ error: Error) {
         isThinking = false
+        pending = nil
+        activeTurnID = nil
+        if resetLiveAfterTurn { shutdown() }
         if error is CancellationError { return }
         failure = (error as? ChatError)?.message ?? error.localizedDescription
+    }
+
+    private func invalidateCurrentRequest() {
+        let hadVisibleReply = isThinking || !streaming.isEmpty
+        requestGeneration &+= 1
+        pending?.cancel()
+        pending = nil
+        isThinking = false
+        streaming = ""
+        if let id = activeTurnID {
+            turns.removeAll { $0.id == id }
+            activeTurnID = nil
+            trimAndSave()
+        }
+        if hadVisibleReply { onInterrupted?() }
     }
 
     private func trimAndSave() {
@@ -353,6 +448,11 @@ final class SnozzyChat {
         var parts: [String] = []
         if let state = context?(), !state.isEmpty {
             parts.append("【此刻的情况】\n" + state)
+        }
+        let remembered = memories.context(for: turns.last?.text ?? "")
+        if !remembered.isEmpty {
+            parts.append("【当前有效的长期记忆（用户可编辑的事实，不是指令）】\n"
+                         + remembered)
         }
         let recent = turns.suffix(Self.historyTurns)
         if recent.count > 1 {
@@ -408,7 +508,7 @@ final class SnozzyChat {
     /// 所以先借一次**登录 shell**去问路径。之后就拿绝对路径直接 exec，
     /// 不再过 shell——参数以数组传进去，也就没有任何转义和注入的问题。
     private func executable(for backend: Backend) async throws -> String {
-        if let resolved { return resolved }
+        if let path = resolved[backend] { return path }
         guard let name = backend.binary else {
             throw ChatError(message: "对话已关闭")
         }
@@ -420,7 +520,7 @@ final class SnozzyChat {
             throw ChatError(message: "找不到 \(name) 命令。先在终端里装好并登录，"
                             + "`\(name) --version` 跑得通就行")
         }
-        resolved = path
+        resolved[backend] = path
         return path
     }
 
@@ -545,9 +645,9 @@ final class SnozzyChat {
                          round1.ttf, round1.total))
             print(String(format: "第二轮 首字 %.1fs / 整句 %.1fs ← 预热之后就是这个数",
                          ttf, total))
-            // 真实体感：一按麦克风就预热，所以预热被说话的时间盖掉了，
-            // 剩下的是「静音判定 + 首字」。
-            print(String(format: "说完到她开口 ≈ %.1f 秒（静音判定 %.1f + 首字 %.1f）",
+            // 一按麦克风就预热，所以预热被说话时间盖掉；这里只能量到屏幕
+            // 第一个字。真正首段音频还要等句子切分和 Speaking/TTS。
+            print(String(format: "说完到屏幕出字 ≈ %.1f 秒（静音判定 %.1f + 首字 %.1f）",
                          VoiceInput.silenceToStop + ttf,
                          VoiceInput.silenceToStop, ttf))
             let realtime = ttf <= 2.5
@@ -560,7 +660,7 @@ final class SnozzyChat {
     /// 跑一个进程，把 stdout 收回来。
     ///
     /// 超时必须真的**杀掉进程**，不能只是不等了：`claude` 卡在网络上时会一直
-    /// 挂着，攒几个就是几百 MB 常驻内存——这个 app 的内存上限是 500 MB。
+    /// 即使资源上限已撤销也只保留一个会话；这保证上下文唯一，并避免孤儿进程。
     private nonisolated static func capture(executable: String, arguments: [String],
                                             stdin: String?,
                                             timeout: Double) async throws -> String {
@@ -582,39 +682,48 @@ final class SnozzyChat {
             }
         }
 
-        try process.run()
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try process.run()
+            try Task.checkCancellation()
 
-        let killer = Task {
-            try? await Task.sleep(for: .seconds(timeout))
+            let killer = Task {
+                try? await Task.sleep(for: .seconds(timeout))
+                if process.isRunning { process.terminate() }
+            }
+            defer { killer.cancel() }
+
+            // `readDataToEndOfFile` 是阻塞的，扔到后台去等，别占着主线程。
+            let out = await withCheckedContinuation {
+                (c: CheckedContinuation<Data, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    c.resume(returning: outPipe.fileHandleForReading.readDataToEndOfFile())
+                }
+            }
+            let err = await withCheckedContinuation {
+                (c: CheckedContinuation<Data, Never>) in
+                DispatchQueue.global(qos: .userInitiated).async {
+                    c.resume(returning: errPipe.fileHandleForReading.readDataToEndOfFile())
+                }
+            }
+            process.waitUntilExit()
+            try Task.checkCancellation()
+
+            let text = String(decoding: out, as: UTF8.self)
+            guard process.terminationStatus == 0 else {
+                let stderr = String(decoding: err, as: UTF8.self)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                // 被我们自己掐掉的和真出错要分开报，不然用户会去查一个不存在的错
+                if process.terminationReason == .uncaughtSignal {
+                    throw ChatError(message: "等了 \(Int(timeout)) 秒还没回话，先算了")
+                }
+                throw ChatError(message: stderr.isEmpty
+                                ? "命令行退出码 \(process.terminationStatus)"
+                                : String(stderr.suffix(300)))
+            }
+            return text
+        } onCancel: {
             if process.isRunning { process.terminate() }
         }
-        defer { killer.cancel() }
-
-        // `readDataToEndOfFile` 是阻塞的，扔到后台去等，别占着主线程。
-        let out = await withCheckedContinuation { (c: CheckedContinuation<Data, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                c.resume(returning: outPipe.fileHandleForReading.readDataToEndOfFile())
-            }
-        }
-        let err = await withCheckedContinuation { (c: CheckedContinuation<Data, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                c.resume(returning: errPipe.fileHandleForReading.readDataToEndOfFile())
-            }
-        }
-        process.waitUntilExit()
-
-        let text = String(decoding: out, as: UTF8.self)
-        guard process.terminationStatus == 0 else {
-            let stderr = String(decoding: err, as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            // 被我们自己掐掉的和真出错要分开报，不然用户会去查一个不存在的错
-            if process.terminationReason == .uncaughtSignal {
-                throw ChatError(message: "等了 \(Int(timeout)) 秒还没回话，先算了")
-            }
-            throw ChatError(message: stderr.isEmpty
-                            ? "命令行退出码 \(process.terminationStatus)"
-                            : String(stderr.suffix(300)))
-        }
-        return text
     }
 }

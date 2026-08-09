@@ -13,14 +13,12 @@ enum SceneCamera {
 
     /// 推到多近。
     ///
-    /// 1.55 是**素材分辨率定的上限**，不是构图偏好。房间和桌子是 1536×1024
-    /// 的平面图（用户交付的重绘图），没法重渲得更大；窗口在 2 倍屏上大约
-    /// 2000 像素宽，本来就已经在放大 1.3 倍了，再乘 1.55 是 2.1 倍。
+    /// 1.55 是**房间素材分辨率定的上限**，不是构图偏好。托腮角色、动作和脸
+    /// 已有独立 2× 素材，但房间和桌子仍是 1536×1024 的交付平面图；窗口在
+    /// 2 倍屏上大约 2000 像素宽，本来就已放大 1.3 倍，再乘 1.55 是 2.1 倍。
     ///
-    /// **想推得更近只能换素材，调这个数没用**——继续往上加只会越来越糊。
-    /// 两条路：把整套房间重绘到 3072 宽，或者给近景单独架一台推近的相机
-    /// 重渲角色和面部贴片（她清楚、房间虚化，反正近景本来就该有景深）。
-    /// 后者便宜得多，但要连面部贴片一起重出，不然会出现"糊眼睛配清楚的脸"。
+    /// **想推得更近要先换房间/桌面素材，调这个数没用**——角色扛得住，背景会
+    /// 先糊。可把整套房间重绘到 3072 宽，或把近景背景改成专门的景深版本。
     static let zoom: CGFloat = 1.55
 
     /// 镜头往哪儿推。画布坐标 (818, 401) 是她的头骨，往下让一点，
@@ -60,14 +58,13 @@ enum SceneCamera {
 
 /// 近景切换：察觉你在看她，于是托着腮凑近，顺便念叨一句你的待办。
 ///
-/// 这是这个 app 里**唯一一处有状态的动画**。腿、表情、打字那几层都是
+/// 这是这个 app 里由事件触发的有状态动画。腿、表情、打字那几层都是
 /// 「给定时刻算出同一个结果」的纯函数（`LegPose` / `FaceRig` / `TypingRig`），
 /// 因为它们是自发的、什么时候看都行。近景不一样——它由一个**事件**触发
 /// （你把窗口切到前台），所以必须记住"从什么时候开始的"。
 ///
-/// 但记的只有一个时刻：`startedAt`。别的一切（推到多近、摆不摆托腮、
-/// 什么时候说话）都还是从它算出来的纯函数。窗口被遮挡时时间线会暂停，
-/// 而这里读的是墙钟，所以恢复之后不会跳变——它自己往前走完就收了。
+/// 镜头缓动交给 SwiftUI，骨骼动作由一个 Task 以 1/12 秒推进离散素材档位；
+/// 正放抬手、倒放落手共用同一列，所以不会出现两条路径或锚点不一致。
 @MainActor
 @Observable
 final class CloseUp {
@@ -77,12 +74,13 @@ final class CloseUp {
     // 推进 → 停留 → 退回。停留时长每次随机，5…10 秒（用户定的区间）：
     // 固定时长几次之后就能预判，而"她盯了你多久"本来就该有点不确定。
 
-    /// 推进用多久。
-    ///
-    /// 托腮是**硬切**的（没有中间帧），所以这一段的意义不只是运镜，
-    /// 还要盖住那一下换图：镜头正在动的时候换姿势，眼睛跟着尺度变化走，
-    /// 基本注意不到胳膊是"跳"上去的。太慢就盖不住了。
-    static let pushIn: Double = 0.75
+    /// 抬手八张中间姿势，两端复用常态和终态。帧长必须比空闲动画 tick
+    /// （1/15 秒）长；1/12 秒在轻微掉帧下也不会漏档，和换腿的判据一致。
+    static let transitionFrames = 8
+    static let frameTime: Double = 1.0 / 12.0
+    static let motionDuration = Double(transitionFrames + 1) * frameTime
+    /// 镜头推进和抬手同时结束，动作不会在镜头停住后还拖一小截。
+    static let pushIn: Double = motionDuration
     /// 退回用多久。比推进慢一点——凑近是"注意到了"，退回是"算了继续干活"。
     static let pullOut: Double = 1.1
     static let holdRange: ClosedRange<Double> = 5...10
@@ -115,9 +113,18 @@ final class CloseUp {
     /// 全是 SwiftUI 自带可动画的属性，缓动、打断、反向全归它管，
     /// 而且不推镜头的时候一点开销都没有。
     private(set) var pushed = false
-    /// 摆不摆托腮。和 `pushed` 分开，因为它是**硬切**的——只有一张图，
-    /// 没有中间帧，跟着缓动走只会得到一次交叉淡入（第 9 条：位图溶解不出动作）。
-    private(set) var chinRest = false
+    /// nil 是常态，-1 是发布的 2× 常态起点，0..<transitionFrames 是骨骼
+    /// 中间姿势，transitionFrames 是终态。
+    /// 这是离散帧，不交叉淡入；放手时把同一列倒放，锚点和路径天然一致。
+    private(set) var chinFrame: Int?
+    /// -1 仍是双手在键盘上的高清常态；frame 0 才真正开始抬手。
+    var chinRest: Bool { (chinFrame ?? -1) >= 0 }
+    /// 视线跟着八张骨骼帧逐步转向用户，退回时同列倒放。
+    /// 不直接用 `chinRest` 二值切，否则 frame 0 会先瞬移眼球再抬手。
+    var attentionAmount: Double {
+        guard let frame = chinFrame, frame >= 0 else { return 0 }
+        return min(1, Double(frame + 1) / Double(Self.transitionFrames + 1))
+    }
 
     private var running: Task<Void, Never>?
     private var lastFinished = Date.distantPast
@@ -173,28 +180,38 @@ final class CloseUp {
     /// 就能停在任何一步，不需要每步再去认一次身份。
     func begin() {
         running?.cancel()
+        // Set the published base synchronously.  Waiting for the child Task to
+        // get its first actor turn can otherwise leave one old hand-layer frame
+        // on screen at the instant the camera starts moving.
+        chinFrame = -1
         let hold = Double.random(in: Self.holdRange)
         running = Task { [weak self] in
             guard let self else { return }
 
-            // 姿势立刻换，镜头开始推。**同一帧**——换图那一下是硬切
-            // （没有中间帧），得靠运镜盖住；等镜头推完再换的话，
-            // 画面正静止着，一眼就看见胳膊跳上去了。
-            self.chinRest = true
+            // 镜头和抬手同时开始。-1 是专门发布的 2× 常态底图，也是 frame 0
+            // 真正采用的合成基准；不能先画旧 1× 再在第一拍偷偷换清晰度。
             withAnimation(.easeInOut(duration: Self.pushIn)) { self.pushed = true }
+            for frame in 0..<Self.transitionFrames {
+                guard await self.pause(Self.frameTime) else { return }
+                self.chinFrame = frame
+            }
+            guard await self.pause(Self.frameTime) else { return }
+            self.chinFrame = Self.transitionFrames
 
-            // 推到位了才开口。先凑近、再说话，才像"看了你一会儿才决定说"。
-            guard await self.pause(Self.pushIn) else { return }
+            // 推到位、掌根落到下颌之后才开口。
             self.onArrived?()
 
             guard await self.pause(hold) else { return }
             withAnimation(.easeInOut(duration: Self.pullOut)) { self.pushed = false }
-
-            // 手**先**放下，镜头再退完。反过来像是被镜头拖走的。
-            guard await self.pause(Self.pullOut * 0.45) else { return }
-            self.chinRest = false
-
-            guard await self.pause(Self.pullOut * 0.55) else { return }
+            // 同一列倒放，手在 0.75 秒时先回到键盘；镜头再用余下 0.35 秒退完。
+            for frame in stride(from: Self.transitionFrames - 1, through: 0, by: -1) {
+                guard await self.pause(Self.frameTime) else { return }
+                self.chinFrame = frame
+            }
+            guard await self.pause(Self.frameTime) else { return }
+            self.chinFrame = -1
+            guard await self.pause(Self.pullOut - Self.motionDuration) else { return }
+            self.chinFrame = nil
             self.running = nil
             self.lastFinished = Date()
         }
@@ -215,7 +232,7 @@ final class CloseUp {
         guard running != nil else { return }
         running?.cancel()
         running = nil
-        chinRest = false
+        chinFrame = nil
         withAnimation(.easeInOut(duration: 0.25)) { pushed = false }
         lastFinished = Date()
     }

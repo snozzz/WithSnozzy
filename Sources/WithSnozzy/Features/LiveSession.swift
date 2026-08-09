@@ -22,11 +22,10 @@ import Foundation
 /// **一按麦克风就先把会话热起来**（`prewarm`），那 5 秒预热和你说话的
 /// 时间重叠，等你说完时会话已经是热的。
 ///
-/// ## 代价：常驻进程占 345 MB
+/// ## 代价：常驻进程占约 345 MB
 ///
-/// 实测整个进程树 345 MB，这个不能一直挂着（app 自己才 100 MB 出头，
-/// 而硬约束是 500 MB）。所以**闲置一段时间就关掉**，下次再热一遍。
-/// 换句话说这是一笔明确的交易：热着的时候快 3 倍，代价是 345 MB。
+/// 2026-08-09 用户撤销了旧的运行内存上限。会话现在跟 app 同寿命，避免闲置后
+/// 再次支付预热延迟；切换后端、清空聊天和退出时仍会显式关闭，不留孤儿进程。
 ///
 /// ## 为什么只有 claude 这条
 ///
@@ -46,6 +45,11 @@ final class LiveSession {
     private var process: Process?
     private var stdin: FileHandle?
     private(set) var isBusy = false
+    private var roundTimeout: Task<Void, Never>?
+    private var writeGeneration: UInt64 = 0
+    /// 每次重起进程都换一代。旧管道已经排进 MainActor 的增量或
+    /// termination 回调可能比新进程晚到，不隔离就会污染新一轮。
+    private var sessionGeneration: UInt64 = 0
 
     var isRunning: Bool { process?.isRunning == true }
 
@@ -53,6 +57,8 @@ final class LiveSession {
     func start(binary: String, persona: String) throws {
         guard !isRunning else { return }
         stop()
+        sessionGeneration &+= 1
+        let generation = sessionGeneration
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: binary)
@@ -80,11 +86,17 @@ final class LiveSession {
             guard !data.isEmpty else { return }
             for line in reader.feed(data) {
                 guard let event = LineReader.parse(line) else { continue }
-                Task { @MainActor in self?.handle(event) }
+                Task { @MainActor in
+                    guard let self, self.sessionGeneration == generation else { return }
+                    self.handle(event)
+                }
             }
         }
         p.terminationHandler = { [weak self] _ in
-            Task { @MainActor in self?.died() }
+            Task { @MainActor in
+                guard let self, self.sessionGeneration == generation else { return }
+                self.died()
+            }
         }
 
         try p.run()
@@ -107,15 +119,40 @@ final class LiveSession {
             return
         }
         isBusy = true
+        writeGeneration &+= 1
+        let generation = writeGeneration
+        roundTimeout?.cancel()
+        roundTimeout = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(90)) }
+            catch { return }
+            guard let self, self.isBusy, self.writeGeneration == generation else { return }
+            let failed = self.onFailed
+            self.stop()
+            failed?("会话 90 秒没有完成，已重置")
+        }
         var line = data
         line.append(0x0A)
         // 写 stdin 可能阻塞（子进程还没读），扔到后台去
-        DispatchQueue.global(qos: .userInitiated).async {
-            try? stdin.write(contentsOf: line)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            do {
+                try stdin.write(contentsOf: line)
+            } catch {
+                Task { @MainActor in
+                    guard let self, self.isBusy,
+                          self.writeGeneration == generation else { return }
+                    let failed = self.onFailed
+                    self.stop()
+                    failed?("发送给会话失败：\(error.localizedDescription)")
+                }
+            }
         }
     }
 
     func stop() {
+        sessionGeneration &+= 1
+        writeGeneration &+= 1
+        roundTimeout?.cancel()
+        roundTimeout = nil
         if let p = process, p.isRunning {
             p.terminationHandler = nil
             (p.standardOutput as? Pipe)?.fileHandleForReading.readabilityHandler = nil
@@ -132,6 +169,8 @@ final class LiveSession {
         case .delta(let text):
             onDelta?(text)
         case .finished(let text, let failed):
+            roundTimeout?.cancel()
+            roundTimeout = nil
             isBusy = false
             if failed {
                 onFailed?(text.isEmpty ? "她没说话" : text)
@@ -143,6 +182,10 @@ final class LiveSession {
 
     private func died() {
         let wasBusy = isBusy
+        sessionGeneration &+= 1
+        writeGeneration &+= 1
+        roundTimeout?.cancel()
+        roundTimeout = nil
         process = nil
         stdin = nil
         isBusy = false

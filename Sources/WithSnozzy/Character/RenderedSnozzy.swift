@@ -21,8 +21,10 @@ struct RenderedSnozzy: View, Equatable {
     let face: FaceExpression
     /// 戴不戴耳机。听歌时她陪你一起听。
     let headphones: Bool
-    /// 托不托腮。近景切换时为 true，换成另一张上半身。
-    var chin = false
+    /// 托腮动作的档位。nil 是常态，-1 是 2× 常态起点，0..<frames 是抬手
+    /// 中间姿势，frames 是终态。
+    /// 两端之间播真实的 Blender 骨骼姿势，不做位图交叉淡入。
+    var chinFrame: Int? = nil
     /// 当前时间。腿部姿势由它推导。
     let t: Double
 
@@ -30,7 +32,8 @@ struct RenderedSnozzy: View, Equatable {
     /// 所以直接满幅绘制。构图在 `Scripts/blocking.py` 里定，不在这里调。
 
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
-        a.headphones == b.headphones && a.palette == b.palette && a.chin == b.chin
+        a.headphones == b.headphones && a.palette == b.palette
+            && a.chinFrame == b.chinFrame
             && abs(a.pose.breath - b.pose.breath) < 0.01
             && abs(a.pose.bodySway - b.pose.bodySway) < 0.01
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
@@ -53,7 +56,9 @@ struct RenderedSnozzy: View, Equatable {
                     .colorMultiply(PaintedRoom.ambient(palette).color)
                 // 眨眼、视线、眼型、嘴。贴片和底图共用同一台相机，直接盖上即可。
                 FaceOverlay(assets: assets, pose: pose, face: face,
-                            palette: palette, width: w, height: h)
+                            palette: palette,
+                            highResolution: assets.hasHighResolutionFace,
+                            width: w, height: h)
             }
             .frame(width: w, height: h, alignment: .topLeading)
             // 呼吸、摇摆、点头对**整个人**一起做。分头做的话上下半身、
@@ -91,11 +96,31 @@ struct RenderedSnozzy: View, Equatable {
     /// 托腮戴耳机 → 托腮 → 常态戴耳机 → 常态。少了托腮那两张就只推镜头
     /// 不换姿势，功能仍然可用——和素材缺失时回落到程序化房间同一个原则。
     private var torsoLayer: (NSImage, LegManifest.Rect)? {
-        if chin, assets.legs.hasChin {
-            if let img = (headphones ? assets.snozzyBodyChinPhones : nil)
-                ?? assets.snozzyBodyChin {
-                return (img, assets.legs.chinRect)
+        if assets.chin.isUsable, assets.legs.hasChin {
+            if let frame = chinFrame, assets.chinBodyFrames.indices.contains(frame) {
+                let frames = headphones ? assets.chinBodyPhoneFrames : assets.chinBodyFrames
+                if frames.indices.contains(frame) {
+                    return (frames[frame], assets.chin.bodyRect)
+                }
             }
+            if let frame = chinFrame, frame >= assets.chin.frames,
+               assets.chin.pixelScale > 1,
+               let img = (headphones ? assets.chinBodyPhoneFinal : nil)
+                ?? assets.chinBodyFinal {
+                return (img, assets.chin.bodyRect)
+            }
+            // Use the published 2× base even outside close-up.  It is the exact
+            // source used to build frame 0, so focus cannot swap 1×→2× at the
+            // same moment the arm starts moving.
+            if let img = (headphones ? assets.chinBodyPhoneBase : nil)
+                ?? assets.chinBodyBase {
+                return (img, assets.chin.bodyRect)
+            }
+        }
+        if chinFrame != nil, assets.legs.hasChin,
+           let img = (headphones ? assets.snozzyBodyChinPhones : nil)
+            ?? assets.snozzyBodyChin {
+            return (img, assets.legs.chinRect)
         }
         guard let img = (headphones ? assets.snozzyBodyPhones : nil)
             ?? assets.snozzyBody else { return nil }

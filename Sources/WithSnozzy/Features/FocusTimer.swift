@@ -94,6 +94,8 @@ final class FocusTimer {
 
     /// 一个阶段自然走完时回调（用来响铃、加心情值）。
     var onPhaseFinished: ((FocusPhase) -> Void)?
+    /// 在 phase 真正改变前发出，让 AppState 冻结屏幕此刻的完整 ActivityCue。
+    var onPhaseWillChange: ((FocusPhase, FocusPhase, Date) -> Void)?
 
     private var deadline: Date?
     private var ticker: Timer?
@@ -142,7 +144,7 @@ final class FocusTimer {
     func reset() {
         creditWorkedTime()
         stopTicker()
-        phase = .idle
+        setPhase(.idle)
         remaining = 0
         round = 0
         isRunning = false
@@ -162,7 +164,7 @@ final class FocusTimer {
     }
 
     private func begin(_ next: FocusPhase) {
-        phase = next
+        setPhase(next)
         remaining = duration(of: next)
         creditedMinutes = 0
         phaseStart = Date()
@@ -236,13 +238,20 @@ final class FocusTimer {
             begin(next)
         } else {
             stopTicker()
-            phase = next
+            setPhase(next)
             remaining = duration(of: next)
             creditedMinutes = 0
             phaseStart = nil
             isRunning = false
             deadline = nil
         }
+    }
+
+    private func setPhase(_ next: FocusPhase) {
+        guard next != phase else { return }
+        let changedAt = Date()
+        onPhaseWillChange?(phase, next, changedAt)
+        phase = next
     }
 
     // MARK: - 展示

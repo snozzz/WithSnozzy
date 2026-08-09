@@ -146,7 +146,11 @@ def build(base_color=(0.42, 0.40, 0.50), key_color=(0.94, 0.93, 0.97),
     return kbd
 
 
-def home_row(side, spread=0.115, back=0.085):
+HOME_SPREAD = 0.085
+HOME_BACK = 0.085
+
+
+def home_row(side, spread=None, back=None):
     """**手腕**该落在哪儿——键盘靠她那一侧、左右各偏开一点。
 
     返回世界坐标。手按这个点摆，键盘一转手也跟着转，不用另外对齐。
@@ -156,9 +160,11 @@ def home_row(side, spread=0.115, back=0.085):
     看着像两只手挂在键盘前面。手腕落在靠她的那条边上，指尖才落在中排。
     0.058 时指尖落在最外那排（距中线 40 毫米），0.085 才落回中间两排。
 
-    `spread` 要比肩宽略宽（肩距 15.4 厘米，这里两腕 23 厘米）。手腕比肩窄
+    `spread` 取 0.085，两腕 17 厘米，略宽于 15.4 厘米肩距。手腕比肩窄
     的话小臂朝内收，而手掌是照键盘方向摆的、朝外，两者一拧就是扭腕。
     """
+    spread = HOME_SPREAD if spread is None else spread
+    back = HOME_BACK if back is None else back
     sx = 1 if side == "L" else -1
     local = Vector((sx * spread, back, BASE_H + KEY_H))
     rot = (bpy.data.objects["Keyboard"].rotation_euler.to_matrix()

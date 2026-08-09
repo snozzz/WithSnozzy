@@ -106,8 +106,8 @@ enum MCPServer {
                 return
             }
             let (text, failed) = tool.run(args)
-            record("\(name)\(args.isEmpty ? "" : " \(args)") → "
-                   + (failed ? "失败：" : "") + text.prefix(60))
+            // 参数和返回里可能有待办、偏好等私密正文，日志只记成败。
+            record("\(name) → " + (failed ? "失败" : "成功"))
             reply(id, text: text, isError: failed)
         case "ping":
             reply(id, [:])

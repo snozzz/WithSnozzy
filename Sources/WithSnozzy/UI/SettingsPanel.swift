@@ -8,6 +8,8 @@ struct SettingsPanel: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var launchError: String?
     @State private var didResetData = false
+    @State private var resetError: String?
+    @State private var confirmReset = false
 
     var body: some View {
         @Bindable var s = state
@@ -85,7 +87,7 @@ struct SettingsPanel: View {
                         .frame(width: 178)
                     }
                     Text(state.speaking.engine == .local
-                         ? "需要先跑 Scripts/tts_serve.sh。服务没起来会自动退回系统声音。每句多等一秒半。"
+                         ? "实验项：需先跑 Scripts/tts_serve.sh；当前整句 WAV 约等 1.3–3.1 秒，失败自动退回系统声音。"
                          : "系统自带，零延迟。想要二次元音色选上面那一档。")
                         .font(.system(size: 9, design: .rounded))
                         .foregroundStyle(.white.opacity(0.32))
@@ -178,7 +180,8 @@ struct SettingsPanel: View {
             }
 
             section("数据") {
-                Text("待办、专注记录和偏好都以 JSON 存在本地，可以直接打开查看或备份。")
+                Text("待办、专注、聊天和长期记忆都以 JSON 存在本地，可以直接查看或备份。"
+                     + "清空成功后 app 会退出，重开即为全新状态。")
                     .font(.system(size: 9, design: .rounded))
                     .foregroundStyle(.white.opacity(0.32))
                     .fixedSize(horizontal: false, vertical: true)
@@ -188,8 +191,14 @@ struct SettingsPanel: View {
                         NSWorkspace.shared.open(Store.directory)
                     }
                     smallButton(didResetData ? "已清空" : "清空全部数据", destructive: true) {
-                        resetEverything()
+                        confirmReset = true
                     }
+                }
+                if let resetError {
+                    Text(resetError)
+                        .font(.system(size: 9, design: .rounded))
+                        .foregroundStyle(.orange.opacity(0.8))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
@@ -203,11 +212,19 @@ struct SettingsPanel: View {
                         .font(.system(size: 10, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
                 }
-                Text("音乐是实时合成的，Snozzy 和房间是矢量绘制的。整个应用不含任何音频或图片素材。")
+                Text("音乐由实时 DSP 合成；Snozzy 使用 VRoid/Blender 离线渲染的分层 2.5D 素材，"
+                     + "房间叠加实时天气、时段和活动反馈。")
                     .font(.system(size: 9, design: .rounded))
                     .foregroundStyle(.white.opacity(0.3))
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+        .confirmationDialog("确定清空全部数据？", isPresented: $confirmReset,
+                            titleVisibility: .visible) {
+            Button("清空并退出", role: .destructive) { resetEverything() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("待办、专注、聊天、长期记忆、设置与本机 MCP 队列都会删除，无法撤销。")
         }
     }
 
@@ -224,7 +241,7 @@ struct SettingsPanel: View {
             + "每句要等十来秒。"
         case .claude:
             "走 Claude Pro 订阅，和 OpenAI 无关，不消耗任何 ChatGPT / Codex 额度。"
-            + "每句四到六秒。"
+            + "常驻热会话约 1.4–2.0 秒开始出字。"
         case .off:
             "ChatGPT 网页端那份额度没有 API 也没有命令行，接不进来，所以选单里没有它。"
         }
@@ -269,11 +286,8 @@ struct SettingsPanel: View {
     }
 
     private func resetEverything() {
-        // 只删自己写的文件，不动整个目录——万一用户往里放了别的东西。
-        for name in ["settings", "tasks", "focus-history", "focus-settings", "library"] {
-            try? FileManager.default.removeItem(at: Store.url(name))
-        }
-        didResetData = true
+        resetError = state.resetAllData()
+        didResetData = resetError == nil
     }
 
     // MARK: - 小组件

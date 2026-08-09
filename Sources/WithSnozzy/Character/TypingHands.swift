@@ -15,21 +15,33 @@ struct TypingHands: View, Equatable {
     let palette: Palette
     /// 此刻该画第几帧。
     let frame: Int
+    /// 托腮动作档位；-1 是常态起点，终态才换成专用单手层。
+    var chinFrame: Int? = nil
 
     static func == (a: TypingHands, b: TypingHands) -> Bool {
-        a.frame == b.frame && a.palette == b.palette
+        a.frame == b.frame && a.chinFrame == b.chinFrame && a.palette == b.palette
     }
 
     var body: some View {
         GeometryReader { geo in
             let m = assets.hands
-            if assets.handFrames.indices.contains(frame),
+            let moving = chinFrame.flatMap {
+                assets.chinHandFrames.indices.contains($0) ? assets.chinHandFrames[$0] : nil
+            }
+            let final = (chinFrame ?? -1) >= assets.chin.frames
+                ? assets.chinHandFinal : nil
+            // -1 只换成近景的高清底图，手仍保留启动那一刻的真实
+            // 打字帧。若在这里强制归到 frame 0，镜头还没开始动，手指
+            // 就会先硬切一次；第一张真骨骼帧自然负责收手动作。
+            let still = assets.handFrames.indices.contains(frame)
+                ? assets.handFrames[frame] : nil
+            if let image = moving ?? final ?? still,
                m.isUsable, let w = m.canvas.first, w > 0,
                m.canvas.count > 1, m.canvas[1] > 0 {
                 let sx = geo.size.width / CGFloat(w)
                 let sy = geo.size.height / CGFloat(m.canvas[1])
-                let r = m.rect
-                Image(nsImage: assets.handFrames[frame])
+                let r = (moving != nil || final != nil) ? assets.chin.handRect : m.rect
+                Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
                     .frame(width: CGFloat(r.w) * sx, height: CGFloat(r.h) * sy)
@@ -67,14 +79,15 @@ enum TypingRig {
     /// 托腮的时候直接给那一帧（只剩一只手在键盘上），不掷骰子也不循环——
     /// 另一只手在脸上，让它继续敲字就见鬼了。
     static func frame(at t: Double, working: Bool, frames: Int,
-                      chin: Int? = nil) -> Int {
+                      chin: Int? = nil, activity: ActivityCue? = nil) -> Int {
         if let chin { return chin }
         guard frames > 1 else { return 0 }
         let slotIndex = Int64(floor(t / slot))
-        guard hash(slotIndex) % 100 < (working ? workChance : idleChance) else { return 0 }
+        let chance = activity?.typingChance ?? (working ? workChance : idleChance)
+        guard hash(slotIndex) % 100 < chance else { return 0 }
         // 每档只敲前面一段，剩下的时间手停着——一直敲不像人，像打字机
         let into = t - Double(slotIndex) * slot
-        let burst = slot * (working ? 0.72 : 0.38)
+        let burst = slot * (activity?.typingBurst ?? (working ? 0.72 : 0.38))
         guard into < burst else { return 0 }
         return 1 + Int(into / frameTime) % (frames - 1)
     }

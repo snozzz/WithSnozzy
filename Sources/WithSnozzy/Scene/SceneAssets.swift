@@ -82,13 +82,30 @@ struct LegManifest: Codable {
 struct HandManifest: Codable {
     var canvas: [Int] = [1536, 1024]
     var rect = LegManifest.Rect(x: 0, y: 0, w: 0, h: 0)
+    /// PNG 内部像素倍率；布局仍使用上面的逻辑画布和 rect。
+    var pixelScale: Int = 1
     /// 打字循环有几帧。**不含托腮那一帧**——`TypingRig` 拿它取模，
     /// 算进去的话打字打到一半会冒出一只抬起来的手。
     var frames: Int = 0
     /// 托腮时留在键盘上的那只手是第几帧。近景专用，不参与循环。
     var chin: Int?
 
-    var isUsable: Bool { frames > 0 && rect.w > 0 && rect.h > 0 }
+    var isUsable: Bool {
+        frames > 0 && rect.w > 0 && rect.h > 0 && pixelScale > 0
+    }
+}
+
+/// 托腮抬手的中间帧。单独一份清单；素材不完整时宁可保留常态，也不播放残缺动作。
+/// 2× 套装会把常态与终态也一起发布，避免推进第一拍突然换清晰度。
+struct ChinManifest: Codable {
+    var canvas: [Int] = [1536, 1024]
+    var bodyRect = LegManifest.Rect(x: 0, y: 0, w: 0, h: 0)
+    var handRect = LegManifest.Rect(x: 0, y: 0, w: 0, h: 0)
+    var frames: Int = 0
+    /// 逻辑坐标仍是 1536×1024；这里只说明 PNG 内部用了几倍像素采样。
+    var pixelScale: Int = 1
+
+    var isUsable: Bool { frames > 0 && bodyRect.w > 0 && bodyRect.h > 0 }
 }
 
 /// 手绘素材的加载与持有。
@@ -121,11 +138,26 @@ final class SceneAssets {
     /// 打字的手。画在桌面层**之上**。
     private(set) var handFrames: [NSImage] = []
     private(set) var hands = HandManifest()
+    /// 键盘 → 下颌之间的真正骨骼中间姿势；不含常态和最终托腮两端。
+    private(set) var chinBodyFrames: [NSImage] = []
+    private(set) var chinBodyPhoneFrames: [NSImage] = []
+    private(set) var chinBodyBase: NSImage?
+    private(set) var chinBodyPhoneBase: NSImage?
+    private(set) var chinBodyFinal: NSImage?
+    private(set) var chinBodyPhoneFinal: NSImage?
+    private(set) var chinHandFrames: [NSImage] = []
+    private(set) var chinHandFinal: NSImage?
+    private(set) var chin = ChinManifest()
 
     /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
     /// 单独出贴片比整张重渲便宜三个数量级。
     private(set) var facePatches: [String: NSImage] = [:]
     private(set) var face = FaceManifest()
+    private(set) var facePatches2x: [String: NSImage] = [:]
+    private(set) var face2x = FaceManifest()
+    var hasHighResolutionFace: Bool {
+        !face2x.patches.isEmpty && facePatches2x.count == face2x.patches.count
+    }
 
     /// 渲染版角色是否可用。缺图就回落到矢量绘制。
     var hasRenderedCharacter: Bool { snozzyIdle != nil }
@@ -166,6 +198,7 @@ final class SceneAssets {
                 dir.appendingPathComponent("snozzy_body_chin_headphones.png"))
             loadLegs(dir)
             loadHands(dir)
+            loadChin(dir)
 
             var found: [NSImage] = []
             for i in 0..<8 {
@@ -181,6 +214,36 @@ final class SceneAssets {
                 face = m
                 facePatches = m.patches.keys.reduce(into: [:]) { out, key in
                     out[key] = NSImage(contentsOf: dir.appendingPathComponent("face_\(key).png"))
+                }
+            }
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("face2x.json")),
+               let m = try? JSONDecoder().decode(FaceManifest.self, from: data) {
+                let loaded = m.patches.keys.reduce(into: [String: NSImage]()) { out, key in
+                    out[key] = NSImage(contentsOf:
+                        dir.appendingPathComponent("face2x_\(key).png"))
+                }
+                // A partial high-resolution set is worse than a complete 1× set:
+                // individual expressions would go soft or disappear mid-blink.  Count alone
+                // is not a contract: a valid PNG with the wrong dimensions still loads.
+                let sameKeys = !face.patches.isEmpty
+                    && Set(m.patches.keys) == Set(face.patches.keys)
+                let scaledCanvas = face.canvas.count == 2 && m.canvas.count == 2
+                    && m.canvas[0] == face.canvas[0] * 2
+                    && m.canvas[1] == face.canvas[1] * 2
+                let sameChannels = m.channels == face.channels
+                let exactImages = m.patches.allSatisfy { key, rect in
+                    guard rect.w > 0, rect.h > 0,
+                          rect.x >= 0, rect.y >= 0,
+                          rect.x + rect.w <= (m.canvas.first ?? 0),
+                          rect.y + rect.h <= (m.canvas.last ?? 0),
+                          let image = loaded[key] else { return false }
+                    return image.representations.contains {
+                        $0.pixelsWide == rect.w && $0.pixelsHigh == rect.h
+                    }
+                }
+                if sameKeys && scaledCanvas && sameChannels && exactImages {
+                    face2x = m
+                    facePatches2x = loaded
                 }
             }
 
@@ -238,13 +301,20 @@ final class SceneAssets {
     private func loadHands(_ dir: URL) {
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("hands.json")),
               var m = try? JSONDecoder().decode(HandManifest.self, from: data),
-              m.isUsable else { return }
+              m.isUsable, m.canvas == legs.canvas else { return }
         func image(_ i: Int) -> NSImage? {
-            NSImage(contentsOf: dir.appendingPathComponent(
-                String(format: "snozzy_hand_%02d.png", i)))
+            let prefix = m.pixelScale > 1 ? "snozzy_hand2x" : "snozzy_hand"
+            return NSImage(contentsOf: dir.appendingPathComponent(
+                String(format: "\(prefix)_%02d.png", i)))
         }
         let frames = (0..<m.frames).compactMap(image)
-        guard frames.count == m.frames else { return }
+        func matches(_ image: NSImage) -> Bool {
+            image.representations.contains {
+                $0.pixelsWide == m.rect.w * m.pixelScale
+                    && $0.pixelsHigh == m.rect.h * m.pixelScale
+            }
+        }
+        guard frames.count == m.frames, frames.allSatisfy(matches) else { return }
         handFrames = frames
         if let i = m.chin, let chin = image(i) {
             handFrames.append(chin)
@@ -253,6 +323,71 @@ final class SceneAssets {
             m.chin = nil
         }
         hands = m
+    }
+
+    /// 托腮动作中间帧。三路（上半身、耳机上半身、桌面手层）必须同时完整，
+    /// 少一张就整套停用，不能在动作中途让手或耳机闪一下，也不能退回旧终态硬切。
+    private func loadChin(_ dir: URL) {
+        guard let data = try? Data(contentsOf: dir.appendingPathComponent("chin.json")),
+              let m = try? JSONDecoder().decode(ChinManifest.self, from: data),
+              m.isUsable,
+              m.frames == CloseUp.transitionFrames,
+              m.canvas == legs.canvas,
+              m.bodyRect.x == 0, m.bodyRect.y == 0,
+              m.bodyRect.w == (legs.canvas.first ?? 1536),
+              m.bodyRect.h == legs.chinSeam,
+              m.handRect.x == hands.rect.x, m.handRect.y == hands.rect.y,
+              m.handRect.w == hands.rect.w, m.handRect.h == hands.rect.h,
+              m.pixelScale == hands.pixelScale else { return }
+
+        func images(_ prefix: String) -> [NSImage] {
+            (0..<m.frames).compactMap { i in
+                NSImage(contentsOf: dir.appendingPathComponent(
+                    String(format: "\(prefix)_%02d.png", i)))
+            }
+        }
+        let hi = m.pixelScale > 1
+        let bodies = images(hi ? "snozzy_body_chin2x" : "snozzy_body_chin")
+        let phones = images(hi ? "snozzy_body_chin_headphones2x"
+                               : "snozzy_body_chin_headphones")
+        let hands = images("snozzy_chin_hand")
+        let bodyBase = hi ? NSImage(contentsOf: dir.appendingPathComponent(
+            "snozzy_body_closeup2x.png")) : nil
+        let phoneBase = hi ? NSImage(contentsOf: dir.appendingPathComponent(
+            "snozzy_body_closeup_headphones2x.png")) : nil
+        let bodyFinal = hi ? NSImage(contentsOf: dir.appendingPathComponent(
+            "snozzy_body_chin2x.png")) : nil
+        let phoneFinal = hi ? NSImage(contentsOf: dir.appendingPathComponent(
+            "snozzy_body_chin_headphones2x.png")) : nil
+        let final = hi ? NSImage(contentsOf: dir.appendingPathComponent(
+            "snozzy_chin_hand_final.png")) : nil
+        func matches(_ image: NSImage, _ rect: LegManifest.Rect) -> Bool {
+            image.representations.contains {
+                $0.pixelsWide == rect.w * m.pixelScale
+                    && $0.pixelsHigh == rect.h * m.pixelScale
+            }
+        }
+        guard bodies.count == m.frames, phones.count == m.frames,
+              hands.count == m.frames,
+              bodies.allSatisfy({ matches($0, m.bodyRect) }),
+              phones.allSatisfy({ matches($0, m.bodyRect) }),
+              hands.allSatisfy({ matches($0, m.handRect) }),
+              !hi || (bodyBase != nil && phoneBase != nil && bodyFinal != nil
+                      && phoneFinal != nil && final != nil
+                      && matches(bodyBase!, m.bodyRect)
+                      && matches(phoneBase!, m.bodyRect)
+                      && matches(bodyFinal!, m.bodyRect)
+                      && matches(phoneFinal!, m.bodyRect)
+                      && matches(final!, m.handRect)) else { return }
+        chin = m
+        chinBodyFrames = bodies
+        chinBodyPhoneFrames = phones
+        chinBodyBase = bodyBase
+        chinBodyPhoneBase = phoneBase
+        chinBodyFinal = bodyFinal
+        chinBodyPhoneFinal = phoneFinal
+        chinHandFrames = hands
+        chinHandFinal = final
     }
 
     // MARK: - 布局计算

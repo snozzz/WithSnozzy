@@ -46,9 +46,11 @@ import bpy, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import snozzy_lib as S, pose as P
 
-VRM, OUT = sys.argv[-2], sys.argv[-1]
+args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[-2:]
+VRM, OUT = args[:2]
+SCALE = int(args[2]) if len(args) > 2 else 1
 os.makedirs(OUT, exist_ok=True)
-W, H = 1536, 1024
+W, H = 1536 * SCALE, 1024 * SCALE
 
 
 def shape(meshes, name, value):

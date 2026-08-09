@@ -55,6 +55,9 @@ def main():
 
     imgs = [Image.open(p).convert("RGBA") for p in paths]
     canvas = imgs[0].size
+    scale = canvas[0] // 1536
+    if scale < 1 or canvas != (1536 * scale, 1024 * scale):
+        raise SystemExit(f"手层画幅 {canvas} 不是 1536×1024 的整数倍")
     masks = [np.asarray(im)[:, :, 3] > 4 for im in imgs]
     # 托腮那帧要和循环帧**共用同一个裁切矩形**（运行时按同一个 rect 贴回去），
     # 所以它必须参与矩形的求并集，但不参与"逐帧变化量"那条判据。
@@ -66,7 +69,14 @@ def main():
     for m in rect_masks:
         cols |= m.any(axis=0)
     xs = np.where(cols)[0]
-    top = desk_top(a.desk, int(xs.min()), int(xs.max()) + 1)
+    desk_path = a.desk
+    desk = Image.open(desk_path).convert("RGBA")
+    if desk.size != canvas:
+        desk = desk.resize(canvas, Image.Resampling.BILINEAR)
+        scaled_desk = os.path.join(a.src, "_desk_scaled.png")
+        desk.save(scaled_desk)
+        desk_path = scaled_desk
+    top = desk_top(desk_path, int(xs.min()), int(xs.max()) + 1)
     if top is None:
         raise SystemExit("桌面层在手臂那一段上没有完全不透明的行，--desk 对吗？")
 
@@ -81,24 +91,37 @@ def main():
     if x1 < 0:
         raise SystemExit(f"桌板上沿 y={top} 以下一个手臂像素都没有——手是不是没伸到桌上？")
 
-    rect = {"x": max(0, x0 - PAD), "y": top,
-            "w": min(canvas[0], x1 + PAD + 1) - max(0, x0 - PAD),
-            "h": min(canvas[1], y1 + PAD + 1) - top}
+    # PAD is a logical-pixel margin.  At 2× the raw alpha bbox can end on an
+    # odd physical pixel because of antialiasing; align all crop edges to the
+    # sampling grid so `logical rect × pixelScale` exactly equals PNG pixels.
+    pad = PAD * scale
+    rx0 = max(0, x0 - pad)
+    rx1 = min(canvas[0], x1 + pad + 1)
+    ry0 = top
+    ry1 = min(canvas[1], y1 + pad + 1)
+    rx0 = rx0 // scale * scale
+    ry0 = ry0 // scale * scale
+    rx1 = min(canvas[0], (rx1 + scale - 1) // scale * scale)
+    ry1 = min(canvas[1], (ry1 + scale - 1) // scale * scale)
+    rect = {"x": rx0, "y": ry0, "w": rx1 - rx0, "h": ry1 - ry0}
     box = (rect["x"], rect["y"], rect["x"] + rect["w"], rect["y"] + rect["h"])
 
     os.makedirs(a.out, exist_ok=True)
     total = 0
+    prefix = "snozzy_hand2x" if scale > 1 else "snozzy_hand"
     for i, im in enumerate(imgs):
-        dst = os.path.join(a.out, f"snozzy_hand_{i:02d}.png")
+        dst = os.path.join(a.out, f"{prefix}_{i:02d}.png")
         im.crop(box).save(dst)
         total += os.path.getsize(dst)
 
     # 托腮那一帧排在循环之后。运行时按下标取图，所以它就是第 len(imgs) 帧，
     # 但 `frames` 只报循环的长度——`TypingRig` 拿它取模，把托腮算进去
     # 就会在打字的时候播出一只抬起来的手。
-    meta = {"canvas": list(canvas), "rect": rect, "frames": len(imgs)}
+    logical_rect = {key: value // scale for key, value in rect.items()}
+    meta = {"canvas": [1536, 1024], "rect": logical_rect,
+            "frames": len(imgs), "pixelScale": scale}
     if has_chin:
-        dst = os.path.join(a.out, f"snozzy_hand_{len(imgs):02d}.png")
+        dst = os.path.join(a.out, f"{prefix}_{len(imgs):02d}.png")
         chin_img.crop(box).save(dst)
         total += os.path.getsize(dst)
         meta["chin"] = len(imgs)
@@ -109,7 +132,8 @@ def main():
 
     json.dump(meta, open(os.path.join(a.out, "hands.json"), "w"), indent=2)
     print(f"桌板上沿 y={top}（手从这一行起画在桌子上面）")
-    print(f"手那一块 {rect['w']}×{rect['h']} @ ({rect['x']},{rect['y']})")
+    print(f"手那一块 {logical_rect['w']}×{logical_rect['h']} @ "
+          f"({logical_rect['x']},{logical_rect['y']})，{scale}× 像素密度")
     print(f"逐帧剪影变化 {changes}（有 0 就是那两帧一样，动画白做）")
     print(f"HAND 打字循环 {len(imgs)} 帧"
           + ("＋托腮 1 帧" if has_chin else "，没有托腮那一帧")

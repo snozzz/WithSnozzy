@@ -95,6 +95,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src")
     ap.add_argument("--out", default="Assets")
+    ap.add_argument("--prefix", default="face",
+                    help="输出文件前缀；近景 2× 素材用 face2x")
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
@@ -131,7 +133,7 @@ def main():
             print(f"  {name}: 夹取之后什么都不剩，跳过")
             continue
         x0, y0, x1, y1 = box
-        out = os.path.join(a.out, f"face_{name}.png")
+        out = os.path.join(a.out, f"{a.prefix}_{name}.png")
         Image.fromarray(np.asarray(img)[y0:y1, x0:x1]).save(out)
         manifest["patches"][name] = {"x": int(x0), "y": int(y0),
                                      "w": int(x1 - x0), "h": int(y1 - y0)}
@@ -147,8 +149,8 @@ def main():
     else:
         print("\n跨通道无重叠 ✓ 眼和嘴可以独立叠加")
 
-    json.dump(manifest, open(os.path.join(a.out, "face.json"), "w"), indent=2)
-    total = sum(os.path.getsize(os.path.join(a.out, f"face_{n}.png"))
+    json.dump(manifest, open(os.path.join(a.out, f"{a.prefix}.json"), "w"), indent=2)
+    total = sum(os.path.getsize(os.path.join(a.out, f"{a.prefix}_{n}.png"))
                 for n in manifest["patches"])
     print(f"FACE 共 {len(manifest['patches'])} 块贴片，{total/1024:.0f} KB")
     if bad:

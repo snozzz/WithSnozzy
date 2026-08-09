@@ -43,6 +43,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
+        if Snapshot.activityCheck {
+            exit(ActivityRig.selfCheck() ? 0 : 1)
+        }
+        if let path = Snapshot.activityStripPath {
+            Snapshot.runActivityStrip(path: path)
+            return
+        }
+        if MemoryStore.selfTestRequested {
+            exit(MemoryStore.selfCheck() ? 0 : 1)
+        }
         // 注意： **不在这里**处理，在  里。
         // 走到这个回调时 AppKit 已经起来了，而被别的 app 当子进程拉起来时
         // 这个回调根本到不了（会卡在 Apple Event 握手上）。

@@ -58,9 +58,13 @@ def main():
     ap.add_argument("--seam", type=int, default=600)
     a = ap.parse_args()
 
-    face = json.load(open(os.path.join(a.assets, "face.json")))
-    normal = load(os.path.join(a.assets, "snozzy_idle.png"))
     chin = load(os.path.join(a.src, "torso_chin.png"))
+    scale = max(1, chin.shape[1] // 1536)
+    face_name = "face2x.json" if scale > 1 else "face.json"
+    face = json.load(open(os.path.join(a.assets, face_name)))
+    base_path = os.path.join(a.src, "torso_chin_base.png")
+    normal = load(base_path if os.path.exists(base_path)
+                  else os.path.join(a.assets, "snozzy_idle.png"))
     if normal.shape != chin.shape:
         raise SystemExit(f"画幅对不上：常态 {normal.shape} vs 托腮 {chin.shape}")
 
@@ -106,15 +110,20 @@ def main():
     # 桌子完全不透明的那一行，剩下的才交给桌子挡。
     ys, xs = np.where(d)
     need = int(ys.max()) + 1
-    desk = np.asarray(Image.open(os.path.join(a.assets, "desk.png")).convert("RGBA"))
+    desk_image = Image.open(os.path.join(a.assets, "desk.png")).convert("RGBA")
+    if desk_image.size != (chin.shape[1], chin.shape[0]):
+        desk_image = desk_image.resize((chin.shape[1], chin.shape[0]), Image.Resampling.BILINEAR)
+    desk = np.asarray(desk_image)
     cover = desk[:, int(xs.min()):int(xs.max()) + 1, 3]
     opaque = np.where((cover >= 254).all(axis=1))[0]
     chin_seam = int(opaque.min()) if len(opaque) else need
     enough = chin_seam <= need
     ok &= enough
-    print(f"托腮的胳膊伸到第 {need - 1} 行；桌子在 x {xs.min()}…{xs.max()} 这一段"
-          f"从第 {chin_seam} 行起完全不透明")
-    print(f"  → 托腮那张上半身要切到第 {chin_seam} 行（常态那张切在 {a.seam}）  "
+    print(f"托腮的胳膊伸到逻辑第 {(need - 1) / scale:.0f} 行；桌子在逻辑 x "
+          f"{xs.min() / scale:.0f}…{xs.max() / scale:.0f} 这一段"
+          f"从第 {chin_seam / scale:.0f} 行起完全不透明")
+    print(f"  → 托腮那张上半身要切到逻辑第 {chin_seam / scale:.0f} 行"
+          f"（常态那张切在 {a.seam}）  "
           + ("✓" if enough else "✗ 桌子盖不住，袖子会被削掉一截"))
 
     print(f"  改动落在 x {xs.min()}…{xs.max()}  y {ys.min()}…{ys.max()}"

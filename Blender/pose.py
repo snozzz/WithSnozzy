@@ -6,7 +6,7 @@
 每根之后刷新一次依赖图，否则子骨骼拿到的还是旧的父变换。
 """
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 # 她面朝 -Y（0° 机位在 -Y 看过去正好是正脸）
 FWD, DOWN, RIGHT = Vector((0, -1, 0)), Vector((0, 0, -1)), Vector((1, 0, 0))
@@ -368,10 +368,9 @@ KEYS_DIST = 2.30
 #
 # **左右分开写，而且这才是该分开的地方**（第 43 条）。键盘在她左边，
 # 右手要横过身体中线去够——真人这时候是**手腕转一点、手指朝内**，
-# 而不是把肘拐进胸口。我一开始拿肘去补偿（`ELBOW_POLE` 左右反着摆），
-# 腕角是好看了，但右肘缩到了肩膀内侧 6 厘米、鼓在胸前，一眼就不对。
-# 肘摆回身侧、改成让右手的手指朝内 0.22，腕角一样能压回 27°。
-HAND_DIR = {"L": (0.08, -0.96, -0.24), "R": (-0.22, -0.95, -0.24)}
+# 而不是把肘拐进胸口。右掌横向分量加到 0.46、俯角从 −0.24 收到 −0.12，
+# 是为了跟略向上的小臂同向；否则光纵向方向差就白白制造近 20° 腕折。
+HAND_DIR = {"L": (0.08, -0.96, -0.12), "R": (-0.46, -0.95, -0.12)}
 # 手背绕小臂轴拧多少（弧度），左右相反（见 `roll` 和第 30 条）。
 #
 # 这一拧**不改变腕角、也不改变小臂的投影长度**（它绕的就是手掌自己的轴），
@@ -389,20 +388,24 @@ HAND_ROLL = {"L": 0.45, "R": 0.70}
 #
 # **0.030 是错的**：配 −0.30 的俯角，指尖落到键面**以下 23 毫米**——
 # 键帽才 8 毫米高，等于整只手扎进键盘里，从前沿那一排漏出来，
-# 看着就是"手指头超出键盘"。抬到 0.048、俯角收到 −0.24，
-# 指尖回到键面上下几毫米，掌根离键面 33 毫米，正好是真人打字的高度。
-WRIST_LIFT = 0.048
+# 看着就是"手指头超出键盘"。新姿态把俯角收平后腕高改为 0.038，
+# 再用更深的指节弯曲补回键面接触，四根指尖仍在键面上下约 5 毫米。
+WRIST_LIFT = 0.038
 # 键盘模式下手指弯多少。比"手放桌上"要弯不少——打字的手是拱起来的，
 # 手指伸直会又长又平，指尖直接戳到键盘外沿去。
 # 和 `keyboard.home_row` 的 `back`、`WRIST_LIFT` 一起决定手落不落得进键盘。
 # 判据用 `measure_hands.py` 量，别拿眼睛看。
-KEY_CURL = 1.0
+KEY_CURL = 1.16
+# 四指本身带一点摊开的静置外形。键盘姿势可在近端指节的局部 Z 轴上反向
+# 收拢；数值来自同构图候选，不靠轴名猜方向。
+KEY_FINGER_SPLAY = {"Index": -0.136, "Middle": -0.043,
+                    "Ring": 0.051, "Little": 0.145}
 # 按下去那一帧：手腕沉多少米、手指多弯多少。
 # 两个加起来就是指尖的行程，**行程要落在键面附近**——抬起的那一帧指尖
 # 刚好点在键上，按下的那一帧压进去几毫米，才是"敲键盘"。
 # 原来是 0.010 + 0.30，指尖一路沉到键帽底下两厘米，等于手插进键盘里。
-PRESS_DROP = 0.004
-PRESS_CURL = 0.13
+PRESS_DROP = 0.0025
+PRESS_CURL = 0.06
 # 肘往哪边拐（键盘坐标系，第一个分量左右镜像）。
 # 手肘是弯的，所以**肘的位置就决定了小臂的朝向**——手掌的朝向是键盘定死的，
 # 两者差多少就是腕扭多少。臂长和落点定下之后，肘只能在一个圆上跑，
@@ -425,10 +428,10 @@ PRESS_CURL = 0.13
 # 第三个分量（肘的高低）**不要拿来调画面**（第 42 条）。抬肘确实能把小臂
 # 在画面上拉长（+0.2 时投影 95/105），但那是靠**把大臂张开到 60 多度、
 # 肘抬到和肩齐平**换来的——人做不出那个姿势，画面上就是肩膀鼓出一大坨。
-# 肘必须压在身侧：-1.4 时肘在肩下方 19 厘米，才是坐着打字的样子。
+# 肘必须压在身侧：候选把 pole 压到 −4，最终肘在肩下约 21 厘米。
 # 小臂投影三四十像素是**这个机位的正常结果**，真人正面拍打字也是这样；
 # 低到十几像素才是毛病。别去最大化它。
-ELBOW_POLE = {"L": (0.6, 0.6, -1.4), "R": (1.4, 0.6, -1.4)}
+ELBOW_POLE = {"L": (0.45, 0.30, -4.0), "R": (0.60, 0.30, -4.0)}
 # 打字时上身前倾多少。比常态（0.07）多一点，够得着键盘，看着也更像在做事。
 TYPING_LEAN = 0.30
 
@@ -475,6 +478,13 @@ def type_hands(arm, scene, press=0.0, side_first="L", on_keyboard=False):
         roll(arm, f"J_Bip_{side}_Hand", sx * hr, prefer="Middle")
         curl(arm, side,
              (KEY_CURL + down * PRESS_CURL) if on_keyboard else (0.42 + down * 0.30))
+        if on_keyboard:
+            for finger, angle in KEY_FINGER_SPLAY.items():
+                pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}1")
+                if pb is not None:
+                    pb.rotation_mode = 'XYZ'
+                    pb.rotation_euler[2] += sx * angle
+            bpy.context.view_layer.update()
 
 
 # 打字循环的帧。0 号是"手放在键上不动"，也是不打字时用的那一张。
@@ -525,25 +535,20 @@ CHIN_SIDE = "L"
 # 嘴贴片只到 x=824。于是「x ≥ 828 且 y ≥ 397」是一整块空地——
 # 正好就是下颌的侧面。托腮的手要挤进的就是这块地方。
 #
-# 这三个数是扫出来的，判据见 `measure_chin.py`。三档实测：
-#
-#     z 偏移   手的画布占位        离贴片   离脸
-#     −0.132   x 827…866 y 414…488   6 px   1.5 cm   ← 用这个
-#     −0.118   x 824…864 y 406…480   3 px   1.0 cm
-#     −0.106   x 821…861 y 399…473   压到嘴  0.8 cm
-#
-# 手越往上贴脸越近、离嘴的贴片也越近，两者是同一个方向上的拉锯。
-# 取中间那一档：6 像素余量经得起下一版素材的微小改动，
-# 1.5 厘米在画面上是七八个像素，读出来就是抵着下颌。
-CHIN_WRIST = (0.090, -0.078, -0.132)
-# 指尖朝哪。托腮是手指朝上**贴着下颌**，不是手掌拍在脸上。
-# 第一个分量往内（−X）收得越多，指尖越往脸中线靠。
-CHIN_HAND_DIR = (-0.26, -0.20, 0.92)
-# 手背绕小臂轴拧多少。把掌心转向她自己，画面上看到的是手背和指节。
-CHIN_HAND_ROLL = -0.55
-# 手指弯多少。0 摊平、1 握拳。松松地拢起来撑住下颌最自然，
-# 摊平了像在挡脸，握死了像在生气。
-CHIN_CURL = 0.55
+# 旧版虽然数值过关，画面上仍是竖掌挡在耳边，掌根离下颌太远。候选联系表
+# 证明关键不是继续抬腕，而是把腕点收进下颌下方、把整只手改成斜向承托。
+# 这一版掌根抵住下颌，四指沿脸侧斜上方展开；不再像挥手，也不会遮住眼嘴。
+CHIN_WRIST = (0.048, -0.068, -0.104)
+# 指节轴沿脸侧斜上方，掌根留在下颌下方。横向分量必须明显大于旧版；太小
+# 会退回竖掌，太大则横穿嘴部。
+CHIN_HAND_DIR = (0.64, -0.08, 0.76)
+# 掌面略朝镜头，虎口和掌根都能读出来。
+CHIN_HAND_ROLL = -0.12
+# 基础弯曲配合下面的近端指节展开，避免四指并成一块直板。
+CHIN_CURL = 1.15
+# VRM 的指节局部 Z 轴是这个机位里可见的横向展开轴。只转第一节，后两节
+# 继续保留 `curl` 的自然弯曲；四指因此是有层次的扇形，而不是僵直叉开。
+CHIN_FINGER_SPLAY = {"Index": .16, "Middle": .05, "Ring": -.06, "Little": -.17}
 # 肘往哪拐（世界方向）。**肘要尽量往下压**，理由不是解剖而是层序：
 #
 # 桌面层画在角色**之上**（不然挡不住她的下半身），所以肘只要落到画上去的
@@ -560,7 +565,7 @@ CHIN_CURL = 0.55
 CHIN_ELBOW = (0.22, -0.16, -1.0)
 
 
-def chin_rest(arm, scene, side=CHIN_SIDE):
+def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
     """把一条胳膊抬起来托住下颌。**在 `settle` 之后调**。
 
     只动这条胳膊：肩、肘、腕、手指。脊柱、头、另一条胳膊、腿全部保持
@@ -571,6 +576,22 @@ def chin_rest(arm, scene, side=CHIN_SIDE):
     而我们要的是那个圆上**最低**的点。把想要的方向投影到垂直于
     「肩→腕」的平面上就直接得到了，不用二分。
     """
+    # 抬手不能靠两张位图淡入：那会在中途同时看见两条胳膊。这里先算出完整的
+    # 托腮姿势，再在**骨骼的局部变换**之间插值。运行时只需播放离线渲好的
+    # 中间帧，就是真动作而不是溶解。矩阵分解后对旋转做 slerp，手腕走的是
+    # 自然圆弧；直接逐元素混矩阵会把骨骼缩短、手指也会发软。
+    amount = max(0.0, min(1.0, float(amount)))
+    moving = [
+        f"J_Bip_{side}_UpperArm", f"J_Bip_{side}_LowerArm",
+        f"J_Bip_{side}_Hand",
+    ] + [
+        f"J_Bip_{side}_{finger}{seg}"
+        for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
+        for seg in (1, 2, 3)
+    ]
+    moving = [arm.pose.bones[n] for n in moving if n in arm.pose.bones]
+    start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
     head = arm.matrix_world @ arm.pose.bones["J_Bip_C_Head"].head
     target = head + Vector(CHIN_WRIST)
     sx = 1 if side == "L" else -1
@@ -585,14 +606,36 @@ def chin_rest(arm, scene, side=CHIN_SIDE):
     if p.length < 1e-6:
         p = Vector((0, 0, -1))
     reach(arm, side, target, target + p.normalized())
-    z = (arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_LowerArm"].head).z
-
     aim(arm, f"J_Bip_{side}_Hand",
         Vector((sx * CHIN_HAND_DIR[0], CHIN_HAND_DIR[1], CHIN_HAND_DIR[2])),
         prefer="Middle")
     roll(arm, f"J_Bip_{side}_Hand", sx * CHIN_HAND_ROLL, prefer="Middle")
     curl(arm, side, CHIN_CURL)
-    return z
+    for finger, angle in CHIN_FINGER_SPLAY.items():
+        pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}1")
+        if pb is not None:
+            pb.rotation_mode = 'XYZ'
+            # Terminal chin geometry must not inherit the keyboard pose's
+            # proximal-finger closure.  Assignment keeps the final hand stable
+            # when typing ergonomics change; interpolation still starts from
+            # the captured keyboard matrix above.
+            pb.rotation_euler[2] = sx * angle
+    bpy.context.view_layer.update()
+
+    if amount < 1.0:
+        # smoothstep 留出柔和的起落，但每一档仍是不同的真实姿势。
+        t = amount * amount * (3.0 - 2.0 * amount)
+        for pb in moving:
+            a_loc, a_rot, a_scale = start[pb.name].decompose()
+            b_loc, b_rot, b_scale = pb.matrix_basis.decompose()
+            loc = a_loc.lerp(b_loc, t)
+            rot = a_rot.slerp(b_rot, t)
+            scale = a_scale.lerp(b_scale, t)
+            pb.matrix_basis = Matrix.LocRotScale(loc, rot, scale)
+        bpy.context.view_layer.update()
+
+    return (arm.matrix_world
+            @ arm.pose.bones[f"J_Bip_{side}_LowerArm"].head).z
 
 
 # 每根手指各弯多少，无名指和小指要多弯一点。

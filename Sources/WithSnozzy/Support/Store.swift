@@ -32,13 +32,16 @@ enum Store {
         }
     }
 
-    static func save<T: Encodable>(_ value: T, as name: String) {
+    @discardableResult
+    static func save<T: Encodable>(_ value: T, as name: String) -> Bool {
         do {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(value).write(to: url(name), options: .atomic)
+            return true
         } catch {
             NSLog("[WithSnozzy] \(name).json 写入失败: \(error)")
+            return false
         }
     }
 }
@@ -69,5 +72,10 @@ final class DebouncedSaver {
         pending?.cancel()
         pending = nil
         action()
+    }
+
+    func cancel() {
+        pending?.cancel()
+        pending = nil
     }
 }

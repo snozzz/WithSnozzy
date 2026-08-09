@@ -155,6 +155,12 @@ private struct SceneStack: View {
                 // 所以能合并的动画层一定要合并——这比优化绘制本身有效得多。
                 TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in
                     let t = tl.date.timeIntervalSinceReferenceDate
+                    let activity = ActivityRig.cue(
+                        at: t, phase: state.focus.phase, playing: state.isPlaying,
+                        transitionFrom: state.activityTransitionFrom,
+                        transitionStartedAt: state.activityTransitionStartedAt)
+                    let faceActivity = ActivityRig.attentionCue(
+                        from: activity, amount: state.closeUp.attentionAmount)
                     ZStack {
                         // 渲染版自己按整块画布取景（构图写死在 RenderedSnozzy 里），
                         // 所以不能塞进 figure 这个正方形框里。
@@ -173,9 +179,10 @@ private struct SceneStack: View {
                                                mood: state.mood,
                                                drowsy: state.drowsy,
                                                working: state.focus.phase == .work,
-                                               speaking: state.sheIsTalking),
+                                               speaking: state.sheIsTalking,
+                                               activity: faceActivity),
                                            headphones: state.isPlaying,
-                                           chin: state.closeUp.chinRest,
+                                           chinFrame: state.closeUp.chinFrame,
                                            t: t)
                                 .equatable()
                         } else {
@@ -199,6 +206,15 @@ private struct SceneStack: View {
                             RoomForeground(palette: palette).equatable()
                         }
 
+                        // 3.25 场景里的生活反馈：侧屏内容、杯子热气、手机偶发亮屏。
+                        // 和角色共用这条时间线、共用 ActivityCue，不另开一棵每帧
+                        // 失效的视图树；而且放在桌面层之后，才不会被 desk.png 盖掉。
+                        if state.sceneAssets.isAvailable {
+                            PaintedRoomActivityOverlay(assets: state.sceneAssets,
+                                                       cue: activity, palette: palette,
+                                                       playing: state.isPlaying, t: t)
+                        }
+
                         // 3.5 敲键盘的手。**必须画在桌面层之后**——
                         //     手伸到键盘上，而桌子是盖在角色之上的，
                         //     画在前面就被桌子吃掉了。
@@ -212,7 +228,9 @@ private struct SceneStack: View {
                                             // 上半身那张图和这一层必须同时换，
                                             // 不然桌上会多出一只没有来路的手
                                             chin: state.closeUp.chinRest
-                                                ? state.sceneAssets.hands.chin : nil))
+                                                ? state.sceneAssets.hands.chin : nil,
+                                            activity: activity),
+                                        chinFrame: state.closeUp.chinFrame)
                                 .equatable()
                         }
 

@@ -87,9 +87,8 @@ final class AppState {
 
     /// 给 ChatGPT 那条 MCP 通道用的：定期写一份状态快照、收 GPT 写回来的东西。
     @ObservationIgnored private var bridge: Timer?
-    /// GPT 让记下的事。存盘，下次还在。
-    private(set) var memories: [String] = Store.load("memories", as: [String].self) ?? []
-
+    /// “清空全部数据”成功后，退出回调不能把刚删掉的内存状态重新写回来。
+    @ObservationIgnored private var suppressPersistenceOnExit = false
     /// Live2D 模型的加载状态。加载失败只会回落到矢量绘制，不影响其它功能。
     let live2d = Live2DStage()
 
@@ -171,43 +170,50 @@ final class AppState {
         snap.track = trackTitle
         snap.focusPhase = String(describing: focus.phase)
         snap.todayMinutes = focus.todayMinutes
-        snap.memories = memories
+        // 长期记忆不复制进无查询词的 MCP 状态快照；本地聊天按当前问题检索。
+        snap.memories = []
         Store.save(snap, as: MCPServer.stateName)
     }
 
     /// 收 GPT 写回来的东西。
     ///
     /// **它不能直接改 `tasks.json`**：待办在我们内存里，下一次存盘会把它
-    /// 整份覆盖掉。所以它写进 `inbox.json`，我们在这里合并、然后清空。
-    /// 两个进程各写各的文件，谁也覆盖不了谁。
+    /// 整份覆盖掉。所以它写进 `inbox.json`，我们在同一把跨进程锁中应用并确认。
+    /// 业务成功后才清空；中途崩溃会重放，也不会覆盖恰好同时写进来的那条。
     private func drainInbox() {
-        let url = Store.url(MCPServer.inboxName)
-        guard let data = try? Data(contentsOf: url),
-              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-              !items.isEmpty else { return }
-
-        for item in items {
+        Inbox.consume { item in
+            guard let id = item["id"] as? String, !id.isEmpty else { return .discard }
             switch item["kind"] as? String {
             case "addTodo":
-                if let t = item["title"] as? String { tasks.add(t) }
+                guard let raw = item["title"] as? String else { return .discard }
+                let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { return .discard }
+                if !tasks.pending.contains(where: { $0.title == title }) { tasks.add(title) }
+                // 即使这是上次写盘失败后留在内存里的重复项，也要再同步落盘，
+                // 不能仅凭“已经看见”就清掉权威队列。
+                return tasks.persistNow() ? .applied : .retry
+
             case "completeTodo":
-                if let t = item["title"] as? String,
-                   let hit = tasks.pending.first(where: { $0.title == t }) {
+                guard let raw = item["title"] as? String else { return .discard }
+                let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !title.isEmpty else { return .discard }
+                if let hit = tasks.pending.first(where: { $0.title == title }) {
                     tasks.toggle(hit)
+                } else if !tasks.items.contains(where: { $0.title == title && $0.done }) {
+                    return .discard
                 }
+                return tasks.persistNow() ? .applied : .retry
+
             case "remember":
-                if let n = item["note"] as? String, !memories.contains(n) {
-                    memories.append(n)
-                    if memories.count > 60 { memories.removeFirst(memories.count - 60) }
-                    Store.save(memories, as: "memories")
-                }
+                guard let raw = item["note"] as? String else { return .discard }
+                let note = MemoryStore.sanitizedInput(raw)
+                guard !note.isEmpty else { return .discard }
+                return chat.memories.add(note) != nil ? .applied : .retry
+
             default:
-                break
+                return .discard
             }
         }
-        // 收完就清空。**必须写空数组而不是删文件**——删了之后 MCP 那边
-        // 正好在追加的话会拿旧内容重建，刚处理过的又会回来一遍。
-        try? Data("[]".utf8).write(to: url, options: .atomic)
     }
 
     /// 说给对话系统听的"此刻的情况"。
@@ -340,20 +346,77 @@ final class AppState {
 
     /// 退出前把所有待写的数据落盘。
     func flushAll() {
-        // 常驻的 claude 会话占 345 MB，退出时必须收掉——
-        // 它是我们 fork 出来的子进程，不关的话会跟着变成孤儿进程留在系统里
+        // 子进程和音频不论是否在清数据都必须停掉，不能留下孤儿或继续占设备。
         chat.shutdown()
         speaking.stop()
         voice.stop(send: false)
+        guard !suppressPersistenceOnExit else { return }
         focus.flush()
         tasks.flush()
         library.flush()
         settingsSaver?.flush()
     }
 
+    /// 删除 app 自己管理的全部用户数据并退出。只按白名单文件名处理，目录里用户
+    /// 自己放的其它内容不碰；退出时 `flushAll()` 也不会把内存快照写回来。
+    func resetAllData() -> String? {
+        flushAll()
+        bridge?.invalidate()
+        bridge = nil
+        settingsSaver?.cancel()
+        suppressPersistenceOnExit = true
+
+        let exact: Set<String> = [
+            "settings.json", "tasks.json", "focus-history.json", "focus-settings.json",
+            "library.json", "chat.json", "memories.json", "state.json", "mcp.log",
+        ]
+        do {
+            let files = try FileManager.default.contentsOfDirectory(
+                at: Store.directory, includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])
+            let targets = try files.filter { url in
+                let name = url.lastPathComponent
+                let managed = exact.contains(name)
+                    || name == "memories-v0-backup.json"
+                    || (name.hasPrefix("memories-unreadable-") && name.hasSuffix(".json"))
+                guard managed else { return false }
+                return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory != true
+            }
+            for url in targets { try FileManager.default.removeItem(at: url) }
+        } catch {
+            suppressPersistenceOnExit = false
+            return "清空失败：\(error.localizedDescription)"
+        }
+        guard Inbox.resetForErase() else {
+            suppressPersistenceOnExit = false
+            return "清空失败：无法取得 MCP 收件箱锁。"
+        }
+
+        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        return nil
+    }
+
     // MARK: - 播放
 
-    var isPlaying = false
+    /// 最近一次外部状态改变前，屏幕真正显示的完整 cue。
+    /// phase/playing 连续切换时会把尚未结束的混合结果再次冻结到这里。
+    private(set) var activityTransitionFrom: ActivityCue?
+    private(set) var activityTransitionStartedAt = Date.distantPast
+    var isPlaying = false {
+        willSet {
+            guard newValue != isPlaying else { return }
+            captureActivityTransition(at: Date())
+        }
+    }
+
+    private func captureActivityTransition(at changedAt: Date) {
+        let t = changedAt.timeIntervalSinceReferenceDate
+        activityTransitionFrom = ActivityRig.cue(
+            at: t, phase: focus.phase, playing: isPlaying,
+            transitionFrom: activityTransitionFrom,
+            transitionStartedAt: activityTransitionStartedAt)
+        activityTransitionStartedAt = changedAt
+    }
 
     /// 播放来源：生成电台，还是本地文件。
     var source: MusicSource = .radio {
@@ -648,6 +711,11 @@ final class AppState {
         library.volume = volume
         setUpNowPlaying()
 
+        // phase 真正改变前先冻结当前混合画面；连续 skip 也从肉眼此刻所见起步。
+        focus.onPhaseWillChange = { [weak self] _, _, changedAt in
+            self?.captureActivityTransition(at: changedAt)
+        }
+
         // 番茄钟阶段切换：响一下提示音；专注段完成时 Snozzy 会高兴一阵。
         focus.onPhaseFinished = { [weak self] finished in
             guard let self else { return }
@@ -703,8 +771,16 @@ final class AppState {
             if self.chat.backend == .claude { self.speaking.finish() }
             else { self.speaking.say(line) }
         }
+        chat.onInterrupted = { [weak self] in
+            self?.chatter.hush()
+            self?.speaking.stop()
+        }
         speaking.onChanged = { [weak self] in self?.scheduleSave() }
         chat.onChanged = { [weak self] in self?.scheduleSave() }
+        chat.memories.onChanged = { [weak self] in
+            self?.chat.memoryContextDidChange()
+            self?.writeSnapshot()
+        }
         chat.context = { [weak self] in self?.situation ?? "" }
 
         // 说完一句就直接发出去，不用再点一次"发送"。

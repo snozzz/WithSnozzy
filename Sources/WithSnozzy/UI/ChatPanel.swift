@@ -82,6 +82,9 @@ struct ChatPanel: View {
     let palette: Palette
     @Environment(AppState.self) private var state
     @State private var draft = ""
+    @State private var memoryDraft = ""
+    @State private var memoryKind: MemoryRecord.Kind = .note
+    @State private var showMemories = false
     @FocusState private var fieldFocused: Bool
 
     var body: some View {
@@ -89,6 +92,8 @@ struct ChatPanel: View {
 
         VStack(alignment: .leading, spacing: 10) {
             composer
+
+            memorySection
 
             if let failure = chat.failure {
                 Text(failure)
@@ -123,12 +128,14 @@ struct ChatPanel: View {
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(chat.isThinking ? 0.6 : 0.35))
                     .symbolEffect(.pulse, isActive: chat.isThinking)
-                TextField(chat.isThinking ? "她在想…" : "说点什么…", text: $draft)
+                TextField(chat.isThinking ? "她在想…"
+                          : (chat.backend == .off ? "可输入“记住……”或“忘掉：……”"
+                             : "说点什么…"), text: $draft)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12, design: .rounded))
                     .foregroundStyle(.white.opacity(0.9))
                     .focused($fieldFocused)
-                    .disabled(chat.backend == .off || chat.isThinking)
+                    .disabled(chat.isThinking)
                     .onSubmit { commit() }
                 // 面板里也放一个，虽然控制条上已经有了：打字打到一半想改口说，
                 // 手就在这儿，不用再去够下面那条。
@@ -163,8 +170,125 @@ struct ChatPanel: View {
                         .font(.system(size: 9.5, design: .rounded))
                         .foregroundStyle(.white.opacity(0.3))
                 }
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) { showMemories.toggle() }
+                } label: {
+                    Label("记忆 \(chat.memories.records.count)", systemImage: "brain.head.profile")
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 9.5, design: .rounded))
+                .foregroundStyle(.white.opacity(showMemories ? 0.65 : 0.3))
             }
         }
+    }
+
+    private var memorySection: some View {
+        Group {
+            if showMemories {
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 6) {
+                        Menu {
+                            ForEach(MemoryRecord.Kind.allCases) { kind in
+                                Button(kind.label) { memoryKind = kind }
+                            }
+                        } label: {
+                            Image(systemName: memoryKind.icon)
+                                .frame(width: 16)
+                                .foregroundStyle(.white.opacity(0.45))
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+
+                        TextField("加一条她该记得的事…", text: $memoryDraft)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 10.5, design: .rounded))
+                            .onSubmit { addMemory() }
+                        Button(action: addMemory) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(palette.accent.color.opacity(0.8))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!state.chat.memories.canWrite
+                                  || memoryDraft.trimmingCharacters(
+                                    in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 7)
+                    .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 9))
+
+                    if let warning = state.chat.memories.recoveryWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.system(size: 9, design: .rounded))
+                            .foregroundStyle(.orange.opacity(0.75))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Text("保存在本机；相关、固定及“关于你”条目会发送给当前对话模型。")
+                        .font(.system(size: 8.5, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.24))
+
+                    if state.chat.memories.records.isEmpty {
+                        Text("还没有长期记忆。也可以直接说“记住……”")
+                            .font(.system(size: 9.5, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.28))
+                            .padding(.vertical, 4)
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 7) {
+                                ForEach(state.chat.memories.records.reversed()) { record in
+                                    memoryRow(record)
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 190)
+                    }
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func memoryRow(_ record: MemoryRecord) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Image(systemName: record.kind.icon)
+                .font(.system(size: 9))
+                .foregroundStyle(.white.opacity(0.3))
+                .frame(width: 12, height: 15)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(record.text)
+                    .font(.system(size: 10.5, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(record.kind.label)
+                    .font(.system(size: 8.5, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.24))
+            }
+            Spacer(minLength: 4)
+            Button {
+                state.chat.memories.setPinned(record.id, !record.pinned)
+            } label: {
+                Image(systemName: record.pinned ? "pin.fill" : "pin")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(record.pinned ? 0.65 : 0.22))
+            .disabled(!state.chat.memories.canWrite)
+            .help(record.pinned ? "取消固定" : "每次冷启动都带上")
+            Button {
+                state.chat.memories.remove(record.id)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.22))
+            .disabled(!state.chat.memories.canWrite)
+            .help("忘掉")
+        }
+        .padding(.horizontal, 3)
+    }
+
+    private func addMemory() {
+        guard state.chat.memories.add(memoryDraft, kind: memoryKind) != nil else { return }
+        memoryDraft = ""
     }
 
     private func commit() {

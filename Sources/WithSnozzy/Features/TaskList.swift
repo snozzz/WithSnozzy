@@ -79,4 +79,12 @@ final class TaskList {
     }
 
     func flush() { saver?.flush() }
+
+    /// MCP 收件箱只有在待办真正写到磁盘后才能确认。取消延迟写并同步落盘，
+    /// 返回失败时队列会保留并重试；不能先回复成功、0.8 秒内崩溃就丢数据。
+    @discardableResult
+    func persistNow() -> Bool {
+        saver?.cancel()
+        return Store.save(items, as: Self.storeName)
+    }
 }

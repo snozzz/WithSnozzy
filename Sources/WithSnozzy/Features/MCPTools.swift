@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Snozzy 的人设，给 ChatGPT 用的那一份。
@@ -116,7 +117,9 @@ struct Tool {
                 .trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
                 return ("没给事情的名字", true)
             }
-            Inbox.append(["kind": "addTodo", "title": title])
+            guard Inbox.append(["kind": "addTodo", "title": title]) else {
+                return ("写入收件箱失败，没有记下", true)
+            }
             return ("记下了：\(title)", false)
         })
 
@@ -139,7 +142,9 @@ struct Tool {
                 return ("清单上没有这一条。现在还剩：" +
                         (pending.isEmpty ? "（空的）" : pending.joined(separator: "、")), true)
             }
-            Inbox.append(["kind": "completeTodo", "title": hit])
+            guard Inbox.append(["kind": "completeTodo", "title": hit]) else {
+                return ("写入收件箱失败，没有划掉", true)
+            }
             return ("划掉了：\(hit)", false)
         })
 
@@ -153,37 +158,137 @@ struct Tool {
         properties: ["note": ["type": "string", "description": "一句话，说清楚要记什么"]],
         required: ["note"], readOnly: false,
         run: { args in
-            guard let note = (args["note"] as? String)?
-                .trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty else {
+            guard let raw = args["note"] as? String else {
                 return ("没给内容", true)
             }
-            Inbox.append(["kind": "remember", "note": note])
+            let note = MemoryStore.sanitizedInput(raw)
+            guard !note.isEmpty else { return ("内容里没有可记住的文字", true) }
+            guard Inbox.append(["kind": "remember", "note": note]) else {
+                return ("写入收件箱失败，没有记住", true)
+            }
             return ("记住了", false)
         })
 }
 
 /// GPT 写给界面的单向队列。
 enum Inbox {
+    enum Disposition {
+        case applied
+        case retry
+        case discard
+    }
+
+    private enum ReadError: Error { case invalidJSON }
+
     /// 追加一条。
     ///
-    /// **每次都重读再写整份**，不做增量：这个文件一天也就几条，
-    /// 而两个进程同时写的话，增量写法会把对方那条冲掉。
-    static func append(_ item: [String: Any]) {
-        var items = current()
-        var entry = item
-        entry["at"] = ISO8601DateFormatter().string(from: Date())
-        entry["id"] = UUID().uuidString
-        items.append(entry)
-        guard let data = try? JSONSerialization.data(
-            withJSONObject: items, options: [.prettyPrinted]) else { return }
-        try? data.write(to: Store.url(MCPServer.inboxName), options: .atomic)
+    /// **每次都重读再写整份**，不做增量：这个文件一天也就几条。
+    /// 重读、追加、清空都拿同一把 `flock`，避免界面收件时覆盖刚写进来的那条。
+    @discardableResult
+    static func append(_ item: [String: Any]) -> Bool {
+        withExclusiveLock {
+            do {
+                var items = try currentUnlocked()
+                var entry = item
+                entry["at"] = ISO8601DateFormatter().string(from: Date())
+                entry["id"] = UUID().uuidString
+                items.append(entry)
+                return writeUnlocked(items)
+            } catch {
+                // 解析失败绝不能当成空队列覆盖；原文件留在原处供人工恢复。
+                NSLog("[WithSnozzy] inbox.json 无法读取，拒绝覆盖: \(error)")
+                return false
+            }
+        } ?? false
     }
 
     static func current() -> [[String: Any]] {
-        guard let data = try? Data(contentsOf: Store.url(MCPServer.inboxName)),
-              let items = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-        else { return [] }
+        withExclusiveLock { (try? currentUnlocked()) ?? [] } ?? []
+    }
+
+    /// 在同一把锁里逐条应用并确认。暂时失败的条目保留，并保留它之后的
+    /// 所有顺序；不能跳过“完成 A”先应用后面的“再添加 A”。永久无效的条目
+    /// 隔离丢弃。业务处理必须先同步落盘，再返回 `.applied`。
+    /// 若进程在写回队列前崩溃会重放，所以调用方仍须保持幂等。
+    @discardableResult
+    static func consume(_ body: ([String: Any]) -> Disposition) -> Bool {
+        withExclusiveLock {
+            do {
+                let items = try currentUnlocked()
+                guard !items.isEmpty else { return true }
+                var remaining: [[String: Any]] = []
+                var seen = Set<String>()
+                var blockedByRetry = false
+                for item in items {
+                    let id = item["id"] as? String
+                    if let id, !seen.insert(id).inserted { continue }
+                    if blockedByRetry {
+                        remaining.append(item)
+                        continue
+                    }
+                    switch body(item) {
+                    case .applied: break
+                    case .retry:
+                        remaining.append(item)
+                        blockedByRetry = true
+                    case .discard:
+                        NSLog("[WithSnozzy] 丢弃无效 inbox 条目 kind=\(item["kind"] as? String ?? "?") id=\(id ?? "?")")
+                    }
+                }
+                return writeUnlocked(remaining)
+            } catch {
+                NSLog("[WithSnozzy] inbox.json 无法读取，保留原文件: \(error)")
+                return false
+            }
+        } ?? false
+    }
+
+    /// “清空全部数据”不能直接删锁文件：另一个 MCP 进程可能正锁着旧
+    /// inode，删后新进程会锁一个同名新文件，两把“锁”互不相认。在同一把
+    /// flock 里删队列，并把零字节锁文件保留为协调基础设施。
+    @discardableResult
+    static func resetForErase() -> Bool {
+        withExclusiveLock {
+            let url = Store.url(MCPServer.inboxName)
+            guard FileManager.default.fileExists(atPath: url.path) else { return true }
+            do {
+                try FileManager.default.removeItem(at: url)
+                return true
+            } catch {
+                NSLog("[WithSnozzy] 清空 inbox.json 失败: \(error)")
+                return false
+            }
+        } ?? false
+    }
+
+    private static func currentUnlocked() throws -> [[String: Any]] {
+        let url = Store.url(MCPServer.inboxName)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        let data = try Data(contentsOf: url)
+        guard let items = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { throw ReadError.invalidJSON }
         return items
+    }
+
+    private static func writeUnlocked(_ items: [[String: Any]]) -> Bool {
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: items, options: [.prettyPrinted])
+            try data.write(to: Store.url(MCPServer.inboxName), options: .atomic)
+            return true
+        } catch {
+            NSLog("[WithSnozzy] inbox.json 写入失败: \(error)")
+            return false
+        }
+    }
+
+    private static func withExclusiveLock<T>(_ body: () -> T) -> T? {
+        let lockURL = Store.directory.appendingPathComponent("inbox.lock")
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else { return nil }
+        guard flock(fd, LOCK_EX) == 0 else { close(fd); return nil }
+        defer { flock(fd, LOCK_UN); close(fd) }
+        return body()
     }
 }
 
@@ -214,6 +319,9 @@ struct SnozzyState: Codable {
         if let tasks = Store.load("tasks", as: [TodoItem].self) {
             s.todos = tasks.map { Todo(title: $0.title, done: $0.done) }
         }
+        // get_state 没有查询词，不能顺手把不相关的长期记忆交给云端模型。
+        // 字段仅为兼容旧 state.json；读取时明确清空。
+        s.memories = []
         return s
     }
 
@@ -242,9 +350,6 @@ struct SnozzyState: Codable {
         lines.append(pending.isEmpty
             ? (todos.isEmpty ? "待办是空的。" : "待办全做完了。")
             : "待办还剩 \(pending.count) 件：" + pending.joined(separator: "、") + "。")
-        if !memories.isEmpty {
-            lines.append("以前记下的事：" + memories.suffix(12).joined(separator: "；") + "。")
-        }
         // 人设在这儿再说一遍。`initialize` 的 instructions 各家客户端处理不一样，
         // 而工具返回的内容一定会进上下文——这是唯一保证送达的地方。
         lines.append("\n" + Persona.forChatGPT)

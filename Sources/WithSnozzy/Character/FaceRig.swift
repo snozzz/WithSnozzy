@@ -64,7 +64,7 @@ enum FaceRig {
 
     static func expression(t: Double, playing: Bool, mood: Double,
                            drowsy: Double, working: Bool,
-                           speaking: Bool) -> FaceExpression {
+                           speaking: Bool, activity: ActivityCue? = nil) -> FaceExpression {
         var e = FaceExpression()
         let sleepy = clamp(drowsy, 0, 1)
 
@@ -87,6 +87,15 @@ enum FaceRig {
                         sleepy: sleepy, working: working)
         let w = envelope(into)
         if w > 0 { apply(beat, weight: w, to: &e) }
+
+        // 当前活动给视线一个“落点”。微表情仍然照常演，只把最终视线轻轻拉回
+        // 正在看的东西：工作屏、桌面、杯子。角色、手和场景都读同一份 ActivityCue，
+        // 才不会出现手在打字、眼睛却望着窗外的割裂。
+        if let activity {
+            let a = clamp(activity.lookWeight, 0, 1)
+            e.lookX = e.lookX * (1 - a) + activity.lookX * a
+            e.lookY = e.lookY * (1 - a) + activity.lookY * a
+        }
 
         // ── 打瞌睡压过一切 ──
         if sleepy > 0.01 {
