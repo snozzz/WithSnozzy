@@ -70,12 +70,16 @@ python3 Scripts/hand_frames.py 手部目录 --out Assets
 ```
 
 ```bash
-# 近景（托腮）：先更新 1× 兼容终态，再发布 2× 常态、8 帧、终态、耳机与手层
+# 近景（托腮）：1× 只验兼容源序列；2× 才生成发布动作资源
 blender --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm 输出目录1x
 python3 Scripts/leg_frames.py 输出目录1x --out Assets
 python3 Scripts/hand_frames.py 输出目录1x --out Assets
+python3 Scripts/chin_check.py 输出目录1x
 blender --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm 输出目录2x 2
 python3 Scripts/chin_frames.py 输出目录2x --out Assets
+blender --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm 面部目录2x 2 chin
+python3 Scripts/face_patches.py 面部目录2x --out Assets --prefix facechin2x --chin
+python3 Scripts/chin_check.py 输出目录2x --assets Assets --facechin 面部目录2x
 
 # 近景专用 2× 面部贴片
 blender --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm 面部目录 2
@@ -193,24 +197,32 @@ Blender 在 `/Applications/Blender.app/Contents/MacOS/Blender`（5.2 LTS）。
 不是两张位图淡入。运行时序列是：2× 常态 base（编号 −1）→ 8 张中间帧
 （00…07）→ 终态（08）→ 07…00 → base → 普通常态。
 
+这不是所有骨骼同一拍到位的硬切：手臂先离开键盘，手指随后成形，颈和头再
+延后轻倾，最后留一小段 settling 到下颌。这样画面读到的是手在托头，而不是
+手追着一张笔直的脸。
+
 发布素材由 `Assets/chin.json` 统一约束：普通/耳机上半身、桌面手层、2× 常态和
 终态必须全部完整，帧数、逻辑画布、裁切矩形与实际像素尺寸都匹配才启用；少一张
-就整套回退，不允许在动作中途闪回 1×。面部 2× 贴片也要求 manifest 的 13 个键、
-2× 画布、通道和每张 PNG 的真实像素尺寸全部匹配才启用。
+就只推镜头，身体和手层留在常态，不硬切旧 1×。面部不是一套贴片跨整段动作：
+`facechin2x` 为 00…08 九个姿态各自的一套、每套 13 个键（共 117 张 PNG）；
+manifest 的键、通道、2× 画布、每张 PNG 的真实像素尺寸和整套原子完整性都匹配
+才启用。
 视线也不再在 frame 00 二值跳到用户，而是跟着 00…08 的骨骼帧逐格转过去，
 退回时同列倒放。
 
 终态不是旧版“手指竖在脸侧”。当前定稿 `t_z_open` 把掌根移到下颌下、掌轴斜托，
 近端指节沿手掌局部 Z 轴展开；换成新版键盘基姿后又把 `CHIN_WRIST.x` 外移到
-0.048 m，避免掌侧网格插进脸。测得手脸最近 0.3cm，3D 投影离最近贴片还有
-6 个逻辑像素，2× 渲后像素判据仍有 15 个逻辑像素；头和脊柱不动，脸贴片与
-腰部缝线仍保持同一套坐标合同。
+0.048 m，避免掌侧网格插进脸。测得手脸最近 0.36cm，手部有 53 个顶点越过脸
+剪影、最深 14 个物理像素；眼嘴可见顶点均未被挡。脊柱不动，颈/头只在这套有
+pose-scoped facechin 贴片的动作里轻倾（实测约 6.9°），脸贴片与腰部缝线仍保持
+各自的坐标合同。
 
 这一套姿势有三条硬约束，全都不是"好不好看"而是"能不能用"：
 
-1. **头和脊柱一根都不许动。** 面部贴片存的是画布上固定矩形里的像素，
-   头一转贴片就贴到脸外面（第 7/22 条）；脊柱一动上半身和腿在缝线处对不上。
-   所以只动一条胳膊，"托腮"全靠手的位置去读。
+1. **脊柱不能动；颈/头只准在有 pose-scoped 贴片的托腮动作里轻倾。**
+   `facechin2x` 已为 00…08 每个头部姿态重渲一套 13 块贴片，所以这套动作的
+   头可以跟着手微歪；没有对应姿态贴片的其它动作仍不能动头，普通 `face2x`
+   不能拿来跨姿态硬贴。脊柱一动，上半身和腿在缝线处仍会对不上。
 2. **手不能探进任何一块贴片的矩形。** 探进去了，她一眨眼手背上就缺一块。
    旧版靠「x ≥ 828」把竖掌塞在脸侧，结果虽然不碰撞，语义却不像托腮；新版
    用真实 13 块贴片逐块测，而不是继续把一个坐标阈值当美术目标。判据两道：`measure_chin.py`
@@ -994,6 +1006,10 @@ x=599），她坐在内转角，这才读得出来。
 而这截袖子在桌面以上、桌沿以后。正解是 `isolate_arms(sides=("R",))`——
 **这一层里就不该有那条胳膊**。
 
+**托腮的新坑：** 这套动作允许颈/头跟着手轻倾，但代价是不能复用普通面部贴片。
+00…08 每个姿态都要单独渲一套 13 块 `facechin2x`；任何一张身体、手层或贴片缺失，
+运行时只能推镜头并留在常态，不能为了“凑齐动作”硬切回旧 1×。
+
 **61. 从终端直接跑 bundle 里的二进制，一碰权限就被系统打死。**
 `--voice` 第一版怎么跑都是退出码 134、一个字不输出。原因是 TCC 认的
 **责任进程是终端**，而终端的 Info.plist 里没有麦克风/语音识别的用途说明，
@@ -1168,11 +1184,14 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   中枢那一套必须**完全为零**（它的上半身就是切出来的那张），这条一错整个切图就是错的
 - **托腮终态与动作能不能直接上屏**：几何、像素、连续性三道都要过。
   `Blender/measure_chin.py` 在 3D 里查（几秒，不渲染）——手压没压到贴片、
-  人做不做得出这个姿势、肘有没有沉到桌沿以下、手够不够得着脸；
+  人做不做得出这个姿势、肘有没有沉到桌沿以下、手够不够得着脸；当前实测
+  手脸最近 0.36cm、越过脸剪影 53 个顶点、最深 14 个物理像素，眼嘴遮挡为 0；
   `Scripts/chin_check.py` 渲完在**真正上屏的像素**上再查一遍——
   头发和袖子会跟着手一起动，那些只有像素查得到。
-  `Scripts/chin_frames.py` 还要证明：动作走廊之外逐像素漂移为 0、八帧无重复、
-  相邻剪影没有尖峰，真实 2× base→00 和 07→终态都连续
+  `Scripts/chin_frames.py` 还要证明：动作走廊之外重读预乘 RGBA 漂移
+  max/total/pixels 都为 0、普通/耳机恰好八帧且无重复，2× 相邻剪影峰值比 ≤2.50，
+  真实 2× base→00 和 07→终态都连续。`chin_check.py` 的 1× 命令只验兼容源序列；
+  2× 命令才验 `chin.json` 和 9×13 `facechin2x` 的发布合同。
 - **近景的取景和顺序**：`--closeup out.png`。它按真实层序把**整个窗口**
   一档一档画出来（第 29 条：看整张，别只放大看一小块），同时算出推到头时
   画面对应画布上哪一块，逐点报发顶/下巴/托腮的手/桌沿在不在画面里。
@@ -1271,7 +1290,8 @@ resting / takingBreak 由 `FocusTimer.phase` 驱动，并联动现有手、眼�
 **建进 3D，别画成 2D 再想办法切**（第 29 条）。
 
 托腮那一套已经把「第二张上半身」这条路走通了，新动作照抄就行，
-但每一套都要重新过三道关：**不许动头和脊柱**（面部贴片和缝线的前提）、
+但每一套都要重新过三道关：**没有 pose-scoped 贴片时不许动头，脊柱始终不动**
+（面部贴片和缝线的前提）、
 **手不许压到贴片矩形**、**切多深要问桌面层要**。前两条有现成的判据
 （`measure_chin.py` / `chin_check.py`），换个动作只要改一下量的是哪只手。
 喝水那一套会比托腮难：杯子举到嘴边，**必然**压到嘴的贴片，
@@ -1646,7 +1666,7 @@ python3 Scripts/hand_frames.py /tmp/hands2x --out Assets
 # 手放得对不对（腕角/指尖高度/出界/袖口）。不渲染，几秒钟
 $B --background --factory-startup --python Blender/measure_hands.py -- Snozzy.vrm
 
-# 近景（托腮）先重出 1× 兼容终态/chinSeam，再出 2× 完整动作
+# 近景（托腮）：1× 只验兼容源序列，2× 生成并验发布合同
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup1x
 python3 Scripts/leg_frames.py /tmp/closeup1x --out Assets
 python3 Scripts/hand_frames.py /tmp/closeup1x --out Assets
@@ -1654,7 +1674,12 @@ python3 Scripts/chin_check.py /tmp/closeup1x
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup2x 2
 python3 Scripts/chin_frames.py /tmp/closeup2x --out Assets  # base/逐帧/连续性/chin.json
 
-# 近景 2× 面部贴片
+# 近景 2× 面部贴片：每个 00…08 姿态各自 13 块
+$B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/facechin2x 2 chin
+python3 Scripts/face_patches.py /tmp/facechin2x --out Assets --prefix facechin2x --chin
+python3 Scripts/chin_check.py /tmp/closeup2x --assets Assets --facechin /tmp/facechin2x
+
+# 普通 2× 面部贴片（同样固定 13 个变体）
 $B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/face2x 2
 python3 Scripts/face_patches.py /tmp/face2x --out Assets --prefix face2x
 

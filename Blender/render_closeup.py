@@ -40,7 +40,7 @@ os.makedirs(OUT, exist_ok=True)
 TRANS_STEPS = 8
 
 
-def build(amount=1.0, hands_layer=False):
+def build(amount=1.0, hands_layer=False, with_headphones=False):
     """摆好托腮的整个人。`hands_layer=True` 时只留手臂那一层。"""
     meshes = S.load(VRM)
     scene = S.setup_scene(res=W)
@@ -53,14 +53,18 @@ def build(amount=1.0, hands_layer=False):
     kbd.hide_render = not hands_layer
     S.toon_materials(); S.room_lights()
     P.settle(scene, arm)
+    # Build the headset once in the settled head's local frame.  It is bone
+    # parented and must then follow the same rigid head transform as the
+    # character; rebuilding it from a world-space face AABB for every chin
+    # amount makes the ear cups drift during the motion.
+    if with_headphones:
+        HP.build(arm, meshes)
     P.chin_rest(arm, scene, amount=amount)
     return scene, arm, meshes, kbd
 
 
 def render_torso(amount, name, with_headphones=False):
-    scene, arm, meshes, _ = build(amount=amount)
-    if with_headphones:
-        HP.build(arm, meshes)
+    scene, arm, meshes, _ = build(amount=amount, with_headphones=with_headphones)
     scene.render.filepath = os.path.join(OUT, name)
     bpy.ops.render.render(write_still=True)
     return scene, arm, meshes

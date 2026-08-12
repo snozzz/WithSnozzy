@@ -515,40 +515,51 @@ def settle(scene, arm, legs=None, lean=None, press=0.0, side_first="L",
                on_keyboard=on_keyboard)
 
 
-# 托腮：肘撑在桌上、手抵着下颌。近景切换的时候摆这一套。
+# 托腮：肘撑在桌上、掌根托住下颌、头往手那边微倾。近景切换的时候摆这一套。
 #
-# **头和脊柱一根都不许动。** 这不是偷懒，是硬约束：面部贴片（眨眼/视线/嘴）
-# 存的是画布上固定矩形里的像素，头一转贴片就贴到脸外面去了（第 7/22 条）；
-# 而缝线以下的腿图是另外渲的，脊柱一动上下半身就对不上。
-# 所以这一套姿势只动**一条胳膊**，靠手的位置去读"托腮"，不靠头的倾斜。
+# **脊柱一根都不许动**：缝线以下的腿图是另外渲的，脊柱一动上下半身就对不上。
+#
+# **头可以动，但只在这一套里**。旧版连头也锁死（面部贴片存的是画布上固定
+# 矩形里的像素，头一转贴片就贴到脸外面，第 7/22 条），结果手悬在脸侧、
+# 头笔直，读不出托腮。现在近景是独立一整套素材（2× base / 8 帧 / 终态 /
+# 耳机 / 手层），终态的面部贴片（facechin2x）在**倾斜后的头**上重渲，
+# 矩形跟着脸走；过渡帧期间运行时把贴片淡出（脸在转，贴不上）。
+# 马尾跟着头摆，但缝线（y=611）以下那一段被桌面层完全盖住（实测 alpha
+# 全 255），不会破坏缝线合同。耳机是骨骼绑在头上的，自动跟着倾。
 #
 # 用**她的左手**（画面右侧那只）。相机在她左前方，左手是近侧的那只，
 # 抬起来看得清；右手抬起来会被头挡掉一半。
 CHIN_SIDE = "L"
+# 头往手那侧歪多少（弧度）。歪头是"托腮"最重要的信号——手托着头，头就该
+# 把一部分重量交给手。8° 上下：再大脖子像折了，再小读不出来。
+# 脖子和头分摊（35/65），只歪头骨会像木偶。
+CHIN_HEAD_ROLL = 0.12
+# 微微低头凑向手。配合镜头推近，是"凑近看你"而不是"僵着被放大"。
+CHIN_HEAD_PITCH = 0.03
 # 手腕落在哪（世界坐标，相对头骨 J_Bip_C_Head 的偏移）。
 #
-# 这三个数是照**面部贴片的矩形**反推的，不是随手给的。贴片占画布
-# x 768–852、y 359–427，手只要探进去，眨眼就会画在手背上。
 # 这个机位下横向 535 像素/米、纵向 550 像素/米，头骨在画布 (818, 401)。
+# 手要贴的不再是"贴片矩形反推出来的空地"——贴片现在跟着倾斜后的头重渲，
+# 约束反过来了：先把手放到**画面上读得出接触**的位置（指节压着颊线、
+# 掌根托着下颌），再由 `measure_chin.py` 用形态键找出倾头后真实的眼嘴
+# 区域，验手没有探进去。
 #
-# 关键是**眼睛那一摞和嘴那一摞在横向上不一样宽**：眼贴片到 x=852，
-# 嘴贴片只到 x=824。于是「x ≥ 828 且 y ≥ 397」是一整块空地——
-# 正好就是下颌的侧面。托腮的手要挤进的就是这块地方。
-#
-# 旧版虽然数值过关，画面上仍是竖掌挡在耳边，掌根离下颌太远。候选联系表
-# 证明关键不是继续抬腕，而是把腕点收进下颌下方、把整只手改成斜向承托。
-# 这一版掌根抵住下颌，四指沿脸侧斜上方展开；不再像挥手，也不会遮住眼嘴。
-CHIN_WRIST = (0.048, -0.068, -0.104)
-# 指节轴沿脸侧斜上方，掌根留在下颌下方。横向分量必须明显大于旧版；太小
-# 会退回竖掌，太大则横穿嘴部。
-CHIN_HAND_DIR = (0.64, -0.08, 0.76)
+# 旧版 (0.048, -0.068, -0.104) 是"躲贴片"躲出来的：横向让到 0.048，
+# 画面上手悬在脸侧一指宽的空隙外，用户一眼看穿"根本没接触"。
+CHIN_WRIST = (0.056, -0.068, -0.112)
+# 指节轴沿脸颊斜上方。横向分量比旧版收进来，手指才躺在颊线上
+# 而不是斜着支出去。
+CHIN_HAND_DIR = (0.50, -0.08, 0.82)
 # 掌面略朝镜头，虎口和掌根都能读出来。
 CHIN_HAND_ROLL = -0.12
-# 基础弯曲配合下面的近端指节展开，避免四指并成一块直板。
-CHIN_CURL = 1.15
+# 四指由轻到重递进弯曲：食指最直、贴着颊线，小指收得最拢。
+# 单一全局 curl 出来的是"握拳抵着脸"，这种递进才是插画里的托腮手。
+CHIN_FINGER_CURL = {"Index": 0.24, "Middle": 0.48, "Ring": 0.78, "Little": 1.04}
 # VRM 的指节局部 Z 轴是这个机位里可见的横向展开轴。只转第一节，后两节
-# 继续保留 `curl` 的自然弯曲；四指因此是有层次的扇形，而不是僵直叉开。
-CHIN_FINGER_SPLAY = {"Index": .16, "Middle": .05, "Ring": -.06, "Little": -.17}
+# 继续保留弯曲；四指因此是有层次的扇形，而不是僵直叉开。
+CHIN_FINGER_SPLAY = {"Index": .20, "Middle": .05, "Ring": -.06, "Little": -.16}
+# 拇指沿下颌另一侧收进去。不收的话拇指按静置姿势直挺挺支着，像比着手枪。
+CHIN_THUMB = -0.24
 # 肘往哪拐（世界方向）。**肘要尽量往下压**，理由不是解剖而是层序：
 #
 # 桌面层画在角色**之上**（不然挡不住她的下半身），所以肘只要落到画上去的
@@ -565,12 +576,41 @@ CHIN_FINGER_SPLAY = {"Index": .16, "Middle": .05, "Ring": -.06, "Little": -.17}
 CHIN_ELBOW = (0.22, -0.16, -1.0)
 
 
-def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
-    """把一条胳膊抬起来托住下颌。**在 `settle` 之后调**。
+def _rotate_world(arm, name, axis, radians):
+    """绕世界方向的轴、以骨骼自己的头部为支点转一下。歪头用。"""
+    pb = arm.pose.bones.get(name)
+    if pb is None:
+        return
+    m = pb.matrix.copy()
+    loc = m.translation.copy()
+    m = Matrix.Rotation(radians, 4, Vector(axis).normalized()) @ m
+    m.translation = loc
+    pb.matrix = m
+    bpy.context.view_layer.update()
 
-    只动这条胳膊：肩、肘、腕、手指。脊柱、头、另一条胳膊、腿全部保持
-    `settle` 摆好的样子——上半身那张图是所有腿帧共用的，头是面部贴片的
-    基准，动了哪一样都要连带重渲一整套（第 7/22 条）。
+
+def _chin_phase(amount, start, end):
+    """A deterministic eased phase in the chin-rest timeline.
+
+    The arm leaves the keyboard first, the fingers shape while the wrist is
+    already in flight, and the head follows last.  The final two percent is
+    deliberately reserved for a short settling movement instead of letting
+    every bone arrive at the same instant (which reads like a pose switch).
+    """
+    if amount <= start:
+        return 0.0
+    if amount >= end:
+        return 1.0
+    x = (amount - start) / (end - start)
+    return x * x * (3.0 - 2.0 * x)
+
+
+def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
+    """一条胳膊抬起来托住下颌，头往手那边微倾。**在 `settle` 之后调**。
+
+    动的是这条胳膊（肩、肘、腕、手指）加脖子和头。脊柱、另一条胳膊、腿
+    保持 `settle` 摆好的样子——缝线合同还在。头为什么现在能动，
+    见 `CHIN_SIDE` 上面那段注释。
 
     肘的位置不用试：落点和臂长定死之后肘只能在一个圆上跑（第 37 条），
     而我们要的是那个圆上**最低**的点。把想要的方向投影到垂直于
@@ -580,8 +620,10 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
     # 托腮姿势，再在**骨骼的局部变换**之间插值。运行时只需播放离线渲好的
     # 中间帧，就是真动作而不是溶解。矩阵分解后对旋转做 slerp，手腕走的是
     # 自然圆弧；直接逐元素混矩阵会把骨骼缩短、手指也会发软。
+    # 头也在插值列表里，于是歪头和抬手同一条时间轴、同一个 smoothstep。
     amount = max(0.0, min(1.0, float(amount)))
     moving = [
+        "J_Bip_C_Neck", "J_Bip_C_Head",
         f"J_Bip_{side}_UpperArm", f"J_Bip_{side}_LowerArm",
         f"J_Bip_{side}_Hand",
     ] + [
@@ -591,10 +633,18 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
     ]
     moving = [arm.pose.bones[n] for n in moving if n in arm.pose.bones]
     start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    sx = 1 if side == "L" else -1
+
+    # 先歪头再摆手：手的落点是相对头骨给的，头歪完下颌才在最终位置上，
+    # 手直接追着倾斜后的脸放，不用二次补偿。
+    # 绕 +Y（她的前后轴）转，正角把头顶往 +X（她的左手边）压——正好是
+    # 抬手那一侧。脖子和头分摊，只转头骨会像木偶折颈。
+    for bone, share in (("J_Bip_C_Neck", 0.35), ("J_Bip_C_Head", 0.65)):
+        _rotate_world(arm, bone, (0, 1, 0), sx * CHIN_HEAD_ROLL * share)
+        _rotate_world(arm, bone, (1, 0, 0), CHIN_HEAD_PITCH * share)
 
     head = arm.matrix_world @ arm.pose.bones["J_Bip_C_Head"].head
-    target = head + Vector(CHIN_WRIST)
-    sx = 1 if side == "L" else -1
+    target = head + Vector((sx * CHIN_WRIST[0], CHIN_WRIST[1], CHIN_WRIST[2]))
 
     shoulder = arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_UpperArm"].head
     n = (target - shoulder).normalized()
@@ -610,29 +660,58 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
         Vector((sx * CHIN_HAND_DIR[0], CHIN_HAND_DIR[1], CHIN_HAND_DIR[2])),
         prefer="Middle")
     roll(arm, f"J_Bip_{side}_Hand", sx * CHIN_HAND_ROLL, prefer="Middle")
-    curl(arm, side, CHIN_CURL)
+    for finger, amt in CHIN_FINGER_CURL.items():
+        for i, seg in enumerate((1, 2, 3)):
+            pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}{seg}")
+            if pb is None:
+                continue
+            pb.rotation_mode = 'XYZ'
+            # 赋值不叠加：终态几何不继承打字姿势的指弯，打字参数一改
+            # 托腮的手不能跟着变（插值起点仍是上面捕获的键盘矩阵）。
+            pb.rotation_euler[0] = -amt * (0.6 + 0.25 * i)
     for finger, angle in CHIN_FINGER_SPLAY.items():
         pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}1")
         if pb is not None:
             pb.rotation_mode = 'XYZ'
-            # Terminal chin geometry must not inherit the keyboard pose's
-            # proximal-finger closure.  Assignment keeps the final hand stable
-            # when typing ergonomics change; interpolation still starts from
-            # the captured keyboard matrix above.
             pb.rotation_euler[2] = sx * angle
+    for seg, weight in ((1, 0.65), (2, 0.35)):
+        pb = arm.pose.bones.get(f"J_Bip_{side}_Thumb{seg}")
+        if pb is not None:
+            pb.rotation_mode = 'XYZ'
+            pb.rotation_euler[0] = CHIN_THUMB * weight
     bpy.context.view_layer.update()
 
-    if amount < 1.0:
-        # smoothstep 留出柔和的起落，但每一档仍是不同的真实姿势。
-        t = amount * amount * (3.0 - 2.0 * amount)
-        for pb in moving:
-            a_loc, a_rot, a_scale = start[pb.name].decompose()
-            b_loc, b_rot, b_scale = pb.matrix_basis.decompose()
-            loc = a_loc.lerp(b_loc, t)
-            rot = a_rot.slerp(b_rot, t)
-            scale = a_scale.lerp(b_scale, t)
-            pb.matrix_basis = Matrix.LocRotScale(loc, rot, scale)
-        bpy.context.view_layer.update()
+    # Save the settled target before applying the piecewise timeline.  Bones
+    # are grouped by what the viewer reads first; the head is intentionally
+    # late so the hand appears to carry the jaw instead of chasing it.
+    target = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    finger_names = {
+        f"J_Bip_{side}_{finger}{seg}"
+        for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
+        for seg in (1, 2, 3)
+    }
+    head_names = {"J_Bip_C_Neck", "J_Bip_C_Head"}
+
+    for pb in moving:
+        if pb.name in head_names:
+            # Start only after the wrist has left the keybed, but spread the
+            # 7° roll over the remaining samples so the ponytails do not make
+            # one late silhouette spike.
+            phase = _chin_phase(amount, 0.18, 0.82)
+        elif pb.name in finger_names:
+            phase = _chin_phase(amount, 0.16, 0.78)
+        else:
+            phase = _chin_phase(amount, 0.00, 0.58)
+        # Leave 2% of the travel for the final 1–2 mm settling at the jaw.
+        settle = _chin_phase(amount, 0.86, 1.00)
+        phase = min(1.0, 0.98 * phase + 0.02 * settle)
+        a_loc, a_rot, a_scale = start[pb.name].decompose()
+        b_loc, b_rot, b_scale = target[pb.name].decompose()
+        loc = a_loc.lerp(b_loc, phase)
+        rot = a_rot.slerp(b_rot, phase)
+        scale = a_scale.lerp(b_scale, phase)
+        pb.matrix_basis = Matrix.LocRotScale(loc, rot, scale)
+    bpy.context.view_layer.update()
 
     return (arm.matrix_world
             @ arm.pose.bones[f"J_Bip_{side}_LowerArm"].head).z

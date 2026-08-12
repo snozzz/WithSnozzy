@@ -108,6 +108,23 @@ struct ChinManifest: Codable {
     var isUsable: Bool { frames > 0 && bodyRect.w > 0 && bodyRect.h > 0 }
 }
 
+/// A chin motion is published as one atomic set.  Keeping the contract in a
+/// value type gives runtime views one truth to gate on instead of independently
+/// deciding whether bodies, hands, headphones, and face sets are complete.
+struct ChinAssetSet {
+    let manifest: ChinManifest
+    let bodyFrames: [NSImage]
+    let phoneFrames: [NSImage]
+    let bodyBase: NSImage
+    let phoneBase: NSImage
+    let bodyFinal: NSImage
+    let phoneFinal: NSImage
+    let handFrames: [NSImage]
+    let handFinal: NSImage
+    let faceSets: [FaceManifest]
+    let faceImages: [[String: NSImage]]
+}
+
 /// 手绘素材的加载与持有。
 ///
 /// 素材缺失时 `isAvailable` 为 false，场景自动回落到程序化绘制的房间。
@@ -148,6 +165,8 @@ final class SceneAssets {
     private(set) var chinHandFrames: [NSImage] = []
     private(set) var chinHandFinal: NSImage?
     private(set) var chin = ChinManifest()
+    private(set) var chinAssetSet: ChinAssetSet?
+    var hasCompleteChinMotion: Bool { chinAssetSet != nil }
 
     /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
     /// 单独出贴片比整张重渲便宜三个数量级。
@@ -157,6 +176,18 @@ final class SceneAssets {
     private(set) var face2x = FaceManifest()
     var hasHighResolutionFace: Bool {
         !face2x.patches.isEmpty && facePatches2x.count == face2x.patches.count
+    }
+    /// 托腮 00…08 每帧一套贴片；每套矩形跟随该帧的头部姿势。
+    private(set) var facePatchesChinFrames: [[String: NSImage]] = []
+    private(set) var faceChinFrames: [FaceManifest] = []
+    private(set) var faceChinManifest = ChinFaceManifest()
+    var hasChinFace: Bool {
+        faceChinManifest.frames == CloseUp.transitionFrames + 1
+            && faceChinFrames.count == faceChinManifest.frames
+            && facePatchesChinFrames.count == faceChinManifest.frames
+            && faceChinFrames.enumerated().allSatisfy {
+                $0.element.patches.count == facePatchesChinFrames[$0.offset].count
+            }
     }
 
     /// 渲染版角色是否可用。缺图就回落到矢量绘制。
@@ -198,7 +229,6 @@ final class SceneAssets {
                 dir.appendingPathComponent("snozzy_body_chin_headphones.png"))
             loadLegs(dir)
             loadHands(dir)
-            loadChin(dir)
 
             var found: [NSImage] = []
             for i in 0..<8 {
@@ -246,6 +276,48 @@ final class SceneAssets {
                     facePatches2x = loaded
                 }
             }
+            if let data = try? Data(contentsOf: dir.appendingPathComponent("facechin2x.json")),
+               let m = try? JSONDecoder().decode(ChinFaceManifest.self, from: data) {
+                var manifests: [FaceManifest] = []
+                var images: [[String: NSImage]] = []
+                let validCanvas = m.canvas == face2x.canvas && m.canvas == [3072, 2048]
+                let validFrames = m.frames == CloseUp.transitionFrames + 1
+                    && m.sets.count == m.frames
+                let validSetCanvases = m.sets.allSatisfy { $0.canvas == m.canvas }
+                if validCanvas && validFrames && validSetCanvases {
+                    for (i, set) in m.sets.enumerated() {
+                        let loaded = set.patches.keys.reduce(into: [String: NSImage]()) { out, key in
+                            out[key] = NSImage(contentsOf: dir.appendingPathComponent(
+                                String(format: "facechin2x_%02d_%@.png", i, key)))
+                        }
+                        let sameKeys = Set(set.patches.keys) == Set(face2x.patches.keys)
+                        let sameChannels = set.channels == face2x.channels
+                        let exactImages = set.patches.allSatisfy { key, rect in
+                            guard rect.w > 0, rect.h > 0,
+                                  rect.x >= 0, rect.y >= 0,
+                                  rect.x + rect.w <= (set.canvas.first ?? 0),
+                                  rect.y + rect.h <= (set.canvas.last ?? 0),
+                                  let image = loaded[key] else { return false }
+                            return image.representations.contains {
+                                $0.pixelsWide == rect.w && $0.pixelsHigh == rect.h
+                            }
+                        }
+                        guard sameKeys && sameChannels && exactImages else {
+                            manifests.removeAll(); images.removeAll(); break
+                        }
+                        manifests.append(set)
+                        images.append(loaded)
+                    }
+                }
+                if manifests.count == m.frames {
+                    faceChinManifest = m
+                    faceChinFrames = manifests
+                    facePatchesChinFrames = images
+                }
+            }
+            // 托腮动作在面部贴片之后加载：头现在跟着动作歪，终态必须配
+            // facechin 贴片才能眨眼说话，缺了就整套回退（loadChin 里 guard）。
+            loadChin(dir)
 
             if let data = try? Data(contentsOf: dir.appendingPathComponent("scene.json")),
                var m = try? JSONDecoder().decode(SceneManifest.self, from: data) {
@@ -328,17 +400,21 @@ final class SceneAssets {
     /// 托腮动作中间帧。三路（上半身、耳机上半身、桌面手层）必须同时完整，
     /// 少一张就整套停用，不能在动作中途让手或耳机闪一下，也不能退回旧终态硬切。
     private func loadChin(_ dir: URL) {
+        chinAssetSet = nil
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("chin.json")),
               let m = try? JSONDecoder().decode(ChinManifest.self, from: data),
               m.isUsable,
+              // 终态的头是歪的，必须有终态姿势上的贴片才能眨眼、说话；
+              // 没有就整套不启用，退回"只推镜头"，不播一个脸僵住的动作。
+              hasChinFace,
               m.frames == CloseUp.transitionFrames,
               m.canvas == legs.canvas,
               m.bodyRect.x == 0, m.bodyRect.y == 0,
               m.bodyRect.w == (legs.canvas.first ?? 1536),
-              m.bodyRect.h == legs.chinSeam,
+              m.bodyRect.h > 0, m.bodyRect.h <= (legs.canvas.count > 1 ? legs.canvas[1] : 1024),
               m.handRect.x == hands.rect.x, m.handRect.y == hands.rect.y,
               m.handRect.w == hands.rect.w, m.handRect.h == hands.rect.h,
-              m.pixelScale == hands.pixelScale else { return }
+              m.pixelScale == 2, m.pixelScale == hands.pixelScale else { return }
 
         func images(_ prefix: String) -> [NSImage] {
             (0..<m.frames).compactMap { i in
@@ -346,7 +422,7 @@ final class SceneAssets {
                     String(format: "\(prefix)_%02d.png", i)))
             }
         }
-        let hi = m.pixelScale > 1
+        let hi = true
         let bodies = images(hi ? "snozzy_body_chin2x" : "snozzy_body_chin")
         let phones = images(hi ? "snozzy_body_chin_headphones2x"
                                : "snozzy_body_chin_headphones")
@@ -388,6 +464,18 @@ final class SceneAssets {
         chinBodyPhoneFinal = phoneFinal
         chinHandFrames = hands
         chinHandFinal = final
+        chinAssetSet = ChinAssetSet(
+            manifest: m,
+            bodyFrames: bodies,
+            phoneFrames: phones,
+            bodyBase: bodyBase!,
+            phoneBase: phoneBase!,
+            bodyFinal: bodyFinal!,
+            phoneFinal: phoneFinal!,
+            handFrames: hands,
+            handFinal: final!,
+            faceSets: faceChinFrames,
+            faceImages: facePatchesChinFrames)
     }
 
     // MARK: - 布局计算

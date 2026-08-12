@@ -29,6 +29,13 @@ from PIL import Image
 
 THRESHOLD = 6
 PAD = 6
+EXPECTED_VARIANTS = {
+    "look_left": "eye", "look_right": "eye", "look_down": "eye",
+    "look_up": "eye", "eye_smile": "eye", "eye_soft": "eye",
+    "eye_wide": "eye", "eye_sad": "eye", "blink_half": "eye",
+    "blink_shut": "eye", "smile": "mouth", "mouth_open": "mouth",
+    "mouth_o": "mouth",
+}
 
 
 def diff_mask(base, variant, threshold=THRESHOLD):
@@ -97,58 +104,131 @@ def main():
     ap.add_argument("--out", default="Assets")
     ap.add_argument("--prefix", default="face",
                     help="输出文件前缀；近景 2× 素材用 face2x")
+    ap.add_argument("--chin", action="store_true",
+                    help="处理 render_face.py … chin 输出的 00…08 九套姿势")
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
-    base = Image.open(os.path.join(a.src, "_base.png")).convert("RGBA")
     chan_path = os.path.join(a.src, "channels.json")
     channels = json.load(open(chan_path)) if os.path.exists(chan_path) else {}
 
-    variants, masks = {}, {}
-    for path in sorted(glob.glob(os.path.join(a.src, "_*.png"))):
-        name = os.path.basename(path)[1:-4]
-        if name == "base":
-            continue
-        img = Image.open(path).convert("RGBA")
-        m = diff_mask(base, img)
-        if not m.any():
-            print(f"  {name}: 无变化，跳过")
-            continue
-        variants[name], masks[name] = img, m
+    def process(base_path, variant_paths, frame_prefix="", required_names=None):
+        base = Image.open(base_path).convert("RGBA")
+        variants, masks = {}, {}
+        for path in variant_paths:
+            name = os.path.basename(path)[1:-4]
+            if frame_prefix and name.startswith(frame_prefix):
+                name = name[len(frame_prefix):]
+                if name.startswith("_"):
+                    name = name[1:]
+            img = Image.open(path).convert("RGBA")
+            if img.size != base.size:
+                raise SystemExit(f"{path} 画幅 {img.size}，应为 {base.size}")
+            if name in variants:
+                raise SystemExit(f"{frame_prefix}{name} 变体重复")
+            m = diff_mask(base, img)
+            if not m.any():
+                if required_names is not None:
+                    raise SystemExit(f"{frame_prefix}{name} 无变化，不能作为完整贴片")
+                print(f"  {frame_prefix}{name}: 无变化，跳过")
+                continue
+            variants[name], masks[name] = img, m
 
-    split, cost = find_split(masks, channels)
-    if split is not None:
-        print(f"眼/嘴分界 y={split}，切掉 {cost} 个变化像素"
-              + ("（无损 ✓）" if cost == 0 else "  ← 偏大，通道分不开"))
+        if required_names is not None and set(variants) != set(required_names):
+            missing = sorted(set(required_names) - set(variants))
+            extra = sorted(set(variants) - set(required_names))
+            raise SystemExit(f"{frame_prefix}贴片变体不完整：缺 {missing}，多 {extra}")
 
-    limits = {}
-    if split is not None:
-        limits = {"eye": (0, split), "mouth": (split, base.height)}
+        split, cost = find_split(masks, channels)
+        if split is not None:
+            print(f"眼/嘴分界 y={split}，切掉 {cost} 个变化像素"
+                  + ("（无损 ✓）" if cost == 0 else "  ← 偏大，通道分不开"))
+        limits = ({"eye": (0, split), "mouth": (split, base.height)}
+                  if split is not None else {})
+        manifest = {"canvas": [base.width, base.height], "patches": {},
+                    "channels": channels}
+        for name, img in variants.items():
+            box = bbox(masks[name], limit=limits.get(channels.get(name)))
+            if box is None:
+                print(f"  {name}: 夹取之后什么都不剩，跳过")
+                continue
+            x0, y0, x1, y1 = box
+            out = os.path.join(a.out, f"{a.prefix}_{frame_prefix}{name}.png")
+            Image.fromarray(np.asarray(img)[y0:y1, x0:x1]).save(out)
+            manifest["patches"][name] = {"x": int(x0), "y": int(y0),
+                                         "w": int(x1 - x0), "h": int(y1 - y0)}
+            print(f"  {frame_prefix}{name:12s} [{channels.get(name, '?'):5s}] "
+                  f"{x1-x0:3d}×{y1-y0:<3d} @ ({x0},{y0})  "
+                  f"{os.path.getsize(out)/1024:.1f} KB")
+        bad = cross_channel_overlaps(manifest["patches"], channels)
+        if bad:
+            print("\n跨通道重叠（会互相抹掉，必须处理）：")
+            for n, ca, m, cb in bad:
+                print(f"  {n}[{ca}] × {m}[{cb}]")
+        return manifest, bad
 
-    manifest = {"canvas": [base.width, base.height], "patches": {},
-                "channels": channels}
-    for name, img in variants.items():
-        box = bbox(masks[name], limit=limits.get(channels.get(name)))
-        if box is None:
-            print(f"  {name}: 夹取之后什么都不剩，跳过")
-            continue
-        x0, y0, x1, y1 = box
-        out = os.path.join(a.out, f"{a.prefix}_{name}.png")
-        Image.fromarray(np.asarray(img)[y0:y1, x0:x1]).save(out)
-        manifest["patches"][name] = {"x": int(x0), "y": int(y0),
-                                     "w": int(x1 - x0), "h": int(y1 - y0)}
-        print(f"  {name:12s} [{channels.get(name, '?'):5s}] "
-              f"{x1-x0:3d}×{y1-y0:<3d} @ ({x0},{y0})  "
-              f"{os.path.getsize(out)/1024:.1f} KB")
+    if a.chin or a.prefix.startswith("facechin"):
+        # Nine independent sets are required: frame 00…08 each has a
+        # different head transform, so one terminal patch set cannot be
+        # faded across the motion without visibly drifting off the eyes.
+        if channels != EXPECTED_VARIANTS:
+            raise SystemExit("facechin channels.json 必须完整包含固定的 13 个变体")
+        sets = []
+        all_bad = []
+        expected_names = set(EXPECTED_VARIANTS)
+        for i in range(9):
+            tag = f"{i:02d}_"
+            base_path = os.path.join(a.src, f"_base_{i:02d}.png")
+            paths = sorted(glob.glob(os.path.join(a.src, f"_{i:02d}_*.png")))
+            expected_paths = {
+                os.path.join(a.src, f"_{i:02d}_{name}.png")
+                for name in expected_names
+            }
+            actual_paths = set(paths)
+            if not os.path.exists(base_path):
+                raise SystemExit(f"facechin 第 {i:02d} 帧缺少中性底图")
+            if actual_paths != expected_paths:
+                missing = sorted(expected_paths - actual_paths)
+                extra = sorted(actual_paths - expected_paths)
+                raise SystemExit(f"facechin 第 {i:02d} 帧变体不完整："
+                                 f"缺 {missing}，多 {extra}")
+            manifest, bad = process(base_path, paths, frame_prefix=tag,
+                                    required_names=expected_names)
+            if set(manifest["patches"]) != expected_names:
+                raise SystemExit(f"facechin 第 {i:02d} 帧输出贴片不是完整 13 块")
+            sets.append(manifest)
+            all_bad.extend(bad)
+        out_manifest = {"canvas": sets[0]["canvas"], "frames": len(sets),
+                        "sets": sets}
+        json.dump(out_manifest,
+                  open(os.path.join(a.out, f"{a.prefix}.json"), "w"), indent=2)
+        total = sum(os.path.getsize(p) for p in glob.glob(
+            os.path.join(a.out, f"{a.prefix}_??_*.png")))
+        print(f"FACE 托腮 {len(sets)} 帧 × {len(sets[0]['patches'])} 块贴片，"
+              f"{total / 1024:.0f} KB")
+        if all_bad:
+            raise SystemExit(1)
+        return
 
-    bad = cross_channel_overlaps(manifest["patches"], channels)
-    if bad:
-        print("\n跨通道重叠（会互相抹掉，必须处理）：")
-        for n, ca, m, cb in bad:
-            print(f"  {n}[{ca}] × {m}[{cb}]")
-    else:
-        print("\n跨通道无重叠 ✓ 眼和嘴可以独立叠加")
-
+    base = os.path.join(a.src, "_base.png")
+    paths = sorted(p for p in glob.glob(os.path.join(a.src, "_*.png"))
+                   if os.path.basename(p) != "_base.png")
+    expected_names = set(EXPECTED_VARIANTS)
+    if channels != EXPECTED_VARIANTS:
+        raise SystemExit("face channels.json 必须完整包含固定的 13 个变体")
+    expected_paths = {
+        os.path.join(a.src, f"_{name}.png") for name in expected_names
+    }
+    actual_paths = set(paths)
+    if not os.path.exists(base):
+        raise SystemExit("face 缺少中性底图 _base.png")
+    if actual_paths != expected_paths:
+        missing = sorted(expected_paths - actual_paths)
+        extra = sorted(actual_paths - expected_paths)
+        raise SystemExit(f"face 贴片变体不完整：缺 {missing}，多 {extra}")
+    manifest, bad = process(base, paths, required_names=expected_names)
+    if set(manifest["patches"]) != expected_names:
+        raise SystemExit("face 输出贴片不是完整 13 块")
     json.dump(manifest, open(os.path.join(a.out, f"{a.prefix}.json"), "w"), indent=2)
     total = sum(os.path.getsize(os.path.join(a.out, f"{a.prefix}_{n}.png"))
                 for n in manifest["patches"])

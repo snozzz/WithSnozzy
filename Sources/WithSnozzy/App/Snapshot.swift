@@ -303,7 +303,7 @@ enum Snapshot {
             print("⚠️ 没有托腮那张上半身（legs.json 里 chinSeam=\(assets.legs.chinSeam)），"
                   + "只推镜头不换姿势。先跑 Blender/render_closeup.py")
         }
-        let chinResourcesOK = assets.chin.isUsable
+        let chinResourcesOK = assets.hasCompleteChinMotion
             && assets.chinBodyFrames.count == CloseUp.transitionFrames
             && assets.chinBodyPhoneFrames.count == CloseUp.transitionFrames
             && assets.chinHandFrames.count == CloseUp.transitionFrames
@@ -312,11 +312,20 @@ enum Snapshot {
             && assets.chinHandFinal != nil && assets.hasHighResolutionFace
         if !chinResourcesOK {
             print("⚠️ 托腮逐帧资源不完整或清单不匹配；需要 2× 常态、00…07、"
-                  + "终态、同构手层和 13 张面部贴片全部齐全，"
-                  + "先跑 Scripts/chin_frames.py 与 Scripts/face_patches.py")
+                  + "终态、同构手层、13 张常态 2× 贴片和 13 张终态 facechin 贴片"
+                  + "全部齐全，先跑 Scripts/chin_frames.py 与 Scripts/face_patches.py")
+            print("  facechin: \(assets.faceChinFrames.count) 帧、"
+                  + "\(assets.facePatchesChinFrames.reduce(0) { $0 + $1.count }) 张图")
         }
 
-        let renderer = ImageRenderer(content: CloseUpStrip(assets: assets))
+        // Render both source branches from the same production layer stack.  The
+        // headset branch is not a decorative thumbnail: its rigid, head-parented
+        // cups are part of the close-up contract and must stay aligned through
+        // every chin frame as well.
+        let renderer = ImageRenderer(content: VStack(spacing: 8) {
+            CloseUpStrip(assets: assets, headphones: false)
+            CloseUpStrip(assets: assets, headphones: true)
+        })
         renderer.scale = 1
         guard let image = renderer.nsImage,
               let tiff = image.tiffRepresentation,
@@ -636,6 +645,7 @@ private struct ActivityStrip: View {
 /// 恰恰是取景，裁过就看不出头顶切没切掉了。
 private struct CloseUpStrip: View {
     let assets: SceneAssets
+    let headphones: Bool
 
     /// 每格画多宽。窗口是 3:2，按这个宽度反推高度。
     private static let cellW: CGFloat = 330
@@ -692,7 +702,7 @@ private struct CloseUpStrip: View {
             ZStack(alignment: .topLeading) {
                 PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: t)
                 RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
-                               headphones: false, chinFrame: chinFrame, t: t)
+                               headphones: headphones, chinFrame: chinFrame, t: t)
                 PaintedRoomForeground(assets: assets, palette: .day)
                 PaintedRoomActivityOverlay(
                     assets: assets,

@@ -55,9 +55,13 @@ struct RenderedSnozzy: View, Equatable {
                     // 和房间共用一套时段染色，否则她永远是正午的亮度
                     .colorMultiply(PaintedRoom.ambient(palette).color)
                 // 眨眼、视线、眼型、嘴。贴片和底图共用同一台相机，直接盖上即可。
+                // 托腮期间贴片跟着档位换：抬手那几帧脸在转，淡出；
+                // 终态换成在终态姿势上渲的 facechin 贴片（头歪、手贴脸）。
+                let overlay = faceOverlayState
                 FaceOverlay(assets: assets, pose: pose, face: face,
                             palette: palette,
                             highResolution: assets.hasHighResolutionFace,
+                            chinFrame: overlay.frame, strength: overlay.strength,
                             width: w, height: h)
             }
             .frame(width: w, height: h, alignment: .topLeading)
@@ -90,38 +94,50 @@ struct RenderedSnozzy: View, Equatable {
         }
     }
 
+    /// 面部贴片此刻该用哪一套、以多大强度贴。
+    ///
+    /// 每个骨骼姿态都选对应的 facechin set；不再淡出常态贴片再硬切终态。
+    /// 缺任何一项时返回常态贴片，并由 `torsoLayer` 保持常态姿势。
+    private var faceOverlayState: (frame: Int?, strength: Double) {
+        guard assets.hasCompleteChinMotion, let frame = chinFrame, frame >= 0,
+              assets.faceChinFrames.indices.contains(frame) else {
+            return (nil, 1)
+        }
+        return (frame, 1)
+    }
+
     /// 该画哪一张上半身，以及它贴在哪。
     ///
     /// 四种组合（托腮×耳机）逐级回退，缺哪一张都不会让人消失：
     /// 托腮戴耳机 → 托腮 → 常态戴耳机 → 常态。少了托腮那两张就只推镜头
     /// 不换姿势，功能仍然可用——和素材缺失时回落到程序化房间同一个原则。
     private var torsoLayer: (NSImage, LegManifest.Rect)? {
-        if assets.chin.isUsable, assets.legs.hasChin {
-            if let frame = chinFrame, assets.chinBodyFrames.indices.contains(frame) {
+        // `nil` is the ordinary scene state.  It must never inherit the 2×
+        // close-up base merely because the optional chin bundle is loaded;
+        // only an explicit close-up frame selects close-up assets.  `-1` is
+        // the published 2× base at the start of the close-up timeline.
+        if assets.hasCompleteChinMotion, let frame = chinFrame {
+            if frame >= 0 && assets.chinBodyFrames.indices.contains(frame) {
                 let frames = headphones ? assets.chinBodyPhoneFrames : assets.chinBodyFrames
                 if frames.indices.contains(frame) {
                     return (frames[frame], assets.chin.bodyRect)
                 }
             }
-            if let frame = chinFrame, frame >= assets.chin.frames,
+            if frame >= assets.chin.frames,
                assets.chin.pixelScale > 1,
                let img = (headphones ? assets.chinBodyPhoneFinal : nil)
                 ?? assets.chinBodyFinal {
                 return (img, assets.chin.bodyRect)
             }
-            // Use the published 2× base even outside close-up.  It is the exact
-            // source used to build frame 0, so focus cannot swap 1×→2× at the
-            // same moment the arm starts moving.
-            if let img = (headphones ? assets.chinBodyPhoneBase : nil)
+            if frame < 0,
+               let img = (headphones ? assets.chinBodyPhoneBase : nil)
                 ?? assets.chinBodyBase {
                 return (img, assets.chin.bodyRect)
             }
         }
-        if chinFrame != nil, assets.legs.hasChin,
-           let img = (headphones ? assets.snozzyBodyChinPhones : nil)
-            ?? assets.snozzyBodyChin {
-            return (img, assets.legs.chinRect)
-        }
+        // Incomplete motion assets deliberately do not fall back to the old
+        // 1× terminal torso: keep the normal body and both keyboard hands and
+        // only let the camera animation run.
         guard let img = (headphones ? assets.snozzyBodyPhones : nil)
             ?? assets.snozzyBody else { return nil }
         return (img, assets.legs.bodyRect)

@@ -15,34 +15,8 @@ import os
 
 import numpy as np
 from PIL import Image
-
-
-def shifted(mask, dy, dx):
-    """平移布尔图，空出来的边缘填 False；不能用 roll，后者会从另一边绕回。"""
-    out = np.zeros_like(mask)
-    sy0, sy1 = max(0, -dy), min(mask.shape[0], mask.shape[0] - dy)
-    sx0, sx1 = max(0, -dx), min(mask.shape[1], mask.shape[1] - dx)
-    if sy1 > sy0 and sx1 > sx0:
-        out[sy0 + dy:sy1 + dy, sx0 + dx:sx1 + dx] = mask[sy0:sy1, sx0:sx1]
-    return out
-
-
-def erode(mask):
-    out = np.ones_like(mask)
-    for dy in (-1, 0, 1):
-        for dx in (-1, 0, 1):
-            out &= shifted(mask, dy, dx)
-    return out
-
-
-def dilate(mask, rounds=4):
-    out = mask.copy()
-    for _ in range(rounds):
-        src = out.copy()
-        for dy in (-1, 0, 1):
-            for dx in (-1, 0, 1):
-                out |= shifted(src, dy, dx)
-    return out
+from chin_metrics import (alpha_mask, dilate, erode, shifted, structural_diff,
+                          xor_report)
 
 
 def load(path, size=None, height=None):
@@ -65,28 +39,99 @@ def base_canvas(path, canvas, height):
     return np.asarray(out)
 
 
-def structural_mask(base):
-    """固定的 L 形动作走廊：避开面部贴片，又完整容纳整条胳膊。
+def premultiplied_rgba(image):
+    """Return PNG-stable premultiplied RGBA values for pixel comparisons.
+
+    The motion corridor is the only part allowed to differ from the published
+    base.  Comparing straight RGB would count invisible RGB garbage in fully
+    transparent pixels as drift; premultiplying makes the check describe what
+    is actually composited on screen while retaining alpha as its own channel.
+    Integer arithmetic keeps the check exact after the output is read back
+    from the PNG we just wrote.
+    """
+    rgba = np.asarray(image, dtype=np.uint16)
+    alpha = rgba[:, :, 3:4]
+    rgb = (rgba[:, :, :3] * alpha + 127) // 255
+    return np.concatenate((rgb, alpha), axis=2).astype(np.int32)
+
+
+def measured_body_height(images, desk_path, scale):
+    """Measure the chin body clip from the source images and desk alpha.
+
+    The motion images are full seated renders, so their alpha continues below
+    the intended upper-body cut.  The desk is the occluder that makes that cut
+    safe: find the first row that is fully opaque across the measured moving
+    x-range.  No leg manifest value participates in this calculation.
+    """
+    if not images:
+        raise SystemExit("没有可量 bodyRect 的近景图")
+    canvas = images[0].shape[:2][::-1]
+    alpha_union = np.zeros(images[0].shape[:2], bool)
+    for image in images:
+        alpha_union |= alpha_mask(image)
+    xs = np.where(alpha_union.any(axis=0))[0]
+    if len(xs) == 0:
+        raise SystemExit("近景图没有 alpha，无法量 bodyRect")
+
+    desk = Image.open(desk_path).convert("RGBA")
+    if desk.size != canvas:
+        desk = desk.resize(canvas, Image.Resampling.BILINEAR)
+    da = np.asarray(desk)[:, :, 3]
+    x0, x1 = int(xs.min()), int(xs.max()) + 1
+    opaque = np.where((da[:, x0:x1] >= 254).all(axis=1))[0]
+    if len(opaque) == 0:
+        raise SystemExit(f"桌面在量出的 x {x0}…{x1} 没有全不透明行")
+    # The first fully opaque desk row is exactly where the desk layer can
+    # hide the remainder of the seated render.
+    cut = int(opaque[0])
+    if cut <= 0 or cut >= canvas[1]:
+        raise SystemExit(f"量出的 bodyRect 高度异常: {cut}")
+    return cut
+
+
+def structural_mask(base, frames=(), alternate_base=None,
+                    alternate_frames=()):
+    """动作走廊：从普通/耳机全序列差异并集实测。
 
     不能只拿像素差做稀疏 mask。粉色手臂经过粉色衣身时，两边颜色很接近，
-    差分会在掌心和袖子里打出洞，合成后变成漂浮碎片。稳定矩形会多更新一点
-    静止衣料，但换来完整轮廓；397…430 行只开放贴片右侧的安全凹角。
+    差分会在掌心和袖子里打出洞，合成后变成漂浮碎片。手臂用稳定矩形，
+    多更新一点静止衣料，换来完整轮廓。
+
+    每帧对对应 base 的差先按阈值二值化再 3×3 腐蚀（去掉 DITHERED 的
+    孤立噪点），普通和耳机两套的并集再膨胀填缝。动作走廊的边界因此来自
+    输出文件，而不是脚本里的画布常量；静止区可以被逐像素锁回 base。
     """
-    scale = max(1, base.shape[1] // 1536)
-    yy, xx = np.ogrid[:base.shape[0], :base.shape[1]]
-    cheek = ((yy >= 397 * scale) & (yy < 430 * scale)
-             & (xx >= 824 * scale) & (xx < 975 * scale))
-    arm = ((yy >= 430 * scale) & (yy < base.shape[0])
-           & (xx >= 690 * scale) & (xx < 990 * scale))
-    roi = cheek | arm
+    moved = np.zeros(base.shape[:2], bool)
+    for raw in frames:
+        moved |= structural_diff(base, raw)
+    if alternate_base is not None:
+        for raw in alternate_frames:
+            moved |= structural_diff(alternate_base, raw)
+    if not moved.any():
+        return moved
 
-    return roi
+    # A difference at a sleeve/finger edge is enough to locate the component,
+    # but not enough to keep its similarly-coloured interior.  The measured
+    # union bbox is the stable corridor that fills those interior holes.
+    measured = dilate(moved, rounds=6)
+    ys, xs = np.where(measured)
+    pad = max(2, base.shape[1] // 1536 * 6)
+    x0, x1 = max(0, xs.min() - pad), min(base.shape[1], xs.max() + pad + 1)
+    y0, y1 = max(0, ys.min() - pad), min(base.shape[0], ys.max() + pad + 1)
+    corridor = np.zeros_like(moved)
+    corridor[y0:y1, x0:x1] = True
+    return corridor
 
 
-def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, height):
+def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, height,
+                alternate_base_path=None, alternate_raw_paths=()):
     paths = raw_paths + [final_path]
     base = base_canvas(base_path, canvas, height)
-    mask = structural_mask(base)
+    raws = [load(p, canvas, height=height) for p in paths]
+    alternate_base = (base_canvas(alternate_base_path, canvas, height)
+                      if alternate_base_path else None)
+    alternate = [load(p, canvas, height=height) for p in alternate_raw_paths]
+    mask = structural_mask(base, raws, alternate_base, alternate)
     if not mask.any():
         raise SystemExit(f"{prefix} 没量到抬手差异")
 
@@ -96,30 +141,58 @@ def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, heigh
 
     prev_alpha = base[:, :, 3] > 4
     changes = []
-    for i, path in enumerate(paths):
-        raw = load(path, canvas, height=height)
+    written_paths = []
+    for i, raw in enumerate(raws):
         out = base.copy()
         out[mask] = raw[mask]
         name = f"{prefix}_{i:02d}.png" if i < len(raw_paths) else f"{prefix}.png"
-        Image.fromarray(out).save(os.path.join(out_dir, name), compress_level=6)
+        written = os.path.join(out_dir, name)
+        Image.fromarray(out).save(written, compress_level=6)
+        written_paths.append(written)
         current_alpha = out[:, :, 3] > 4
         changes.append(int((prev_alpha ^ current_alpha).sum()))
         prev_alpha = current_alpha
 
-    # 区域外必须逐像素固定；这是锚点不漂的可执行合同，不靠肉眼。
-    # 上面的赋值在构造上保证区域外来自 base；这里仍报数，方便日志固定合同。
-    drift = 0
-    print(f"  固定区最大像素漂移 {drift}（应为 0）")
-    if drift != 0:
-        raise SystemExit("固定区发生漂移")
+    # 区域外必须逐像素固定；不要只验证内存里的 `out`，而是重新读回
+    # 每张 PNG。这样压缩、色彩模式或后续切图若改变了静止区，判据会真的
+    # 抓到，而不是被"赋值本来就是 base"这件事掩盖。
+    base_pm = premultiplied_rgba(base)
+    static = ~mask
+    max_drift = 0
+    total_drift = 0
+    changed_pixels = 0
+    for written in written_paths:
+        reread = load(written, (canvas[0], height))
+        delta = np.abs(premultiplied_rgba(reread) - base_pm)
+        static_delta = delta[static]
+        frame_max = int(static_delta.max()) if static_delta.size else 0
+        frame_total = int(static_delta.sum()) if static_delta.size else 0
+        frame_changed = int(np.any(static_delta != 0, axis=1).sum()) \
+            if static_delta.size else 0
+        max_drift = max(max_drift, frame_max)
+        total_drift += frame_total
+        changed_pixels += frame_changed
+    print(f"  固定区重读预乘 RGBA 漂移 max={max_drift} total={total_drift}"
+          f" pixels={changed_pixels}（均应为 0）")
+    if max_drift or total_drift or changed_pixels:
+        raise SystemExit("固定区发生实际像素漂移")
 
     # 连续性看相邻姿势真正变化了多少。0 是重复帧；单个尖峰是跳帧。
     print(f"  相邻剪影变化 {changes}")
     if any(v == 0 for v in changes):
         raise SystemExit("托腮过渡里有重复帧")
-    median = float(np.median(changes))
-    if max(changes) > max(1, median) * 3.5:
-        raise SystemExit("托腮过渡有明显跳变（最大/中位数 > 3.5）")
+    pixel_scale = max(1, canvas[0] // 1536)
+    report = xor_report([base] + raws, scale=pixel_scale)
+    if pixel_scale == 2:
+        print(f"  相邻 XOR 峰值比 {report['peakRatio']:.2f}（上限 2.50）")
+        if not report["ok"]:
+            raise SystemExit("托腮过渡有重复帧或相邻 XOR 峰值比超过 2.5")
+    else:
+        # The old 1× compatibility render has coarser alpha quantization;
+        # retain the duplicate-frame guard without applying the release-only
+        # 2× peak-ratio gate.
+        print(f"  1× 兼容序列相邻 XOR 峰值比 {report['peakRatio']:.2f}"
+              "（不套用 2× 上限）")
     return mask, changes
 
 
@@ -127,45 +200,50 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src", help="Blender/render_closeup.py 的输出目录")
     ap.add_argument("--out", default="Assets")
+    ap.add_argument("--desk", default="Assets/desk.png")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
-    legs_path = os.path.join(a.out, "legs.json")
     hands_path = os.path.join(a.out, "hands.json")
-    legs = json.load(open(legs_path))
     hands = json.load(open(hands_path))
-    logical_canvas = tuple(legs.get("canvas", [1536, 1024]))
-    logical_height = int(legs.get("chinSeam", 0))
-    if logical_height <= int(legs.get("seam", 600)):
-        raise SystemExit("legs.json 没有有效 chinSeam；先生成一次托腮终态")
 
     raw = sorted(glob.glob(os.path.join(a.src, "trans_chin_[0-9][0-9].png")))
     phones = sorted(glob.glob(os.path.join(a.src,
                                            "trans_chin_headphones_[0-9][0-9].png")))
-    if not raw or len(raw) != len(phones):
-        raise SystemExit(f"中间帧不完整：普通 {len(raw)}，耳机 {len(phones)}")
+    if len(raw) != 8 or len(phones) != 8:
+        raise SystemExit(f"中间帧必须正好 8 张：普通 {len(raw)}，耳机 {len(phones)}")
 
     raw_size = Image.open(raw[0]).size
+    logical_canvas = (1536, 1024)
     scale = raw_size[0] // logical_canvas[0]
     if scale < 1 or raw_size != (logical_canvas[0] * scale, logical_canvas[1] * scale):
         raise SystemExit(f"近景画幅 {raw_size} 不是逻辑画布 {logical_canvas} 的整数倍")
     canvas = raw_size
+    base = os.path.join(a.src, "torso_chin_base.png")
+    base_phones = os.path.join(a.src, "torso_chin_base_headphones.png")
+    if not os.path.exists(base) or not os.path.exists(base_phones):
+        raise SystemExit("缺少普通/耳机常态近景基准图")
+    source_paths = [base, base_phones]
+    source_paths += raw
+    source_paths += phones
+    source_paths += [os.path.join(a.src, "torso_chin.png"),
+                     os.path.join(a.src, "torso_chin_headphones.png")]
+    source_images = [load(p, canvas) for p in source_paths
+                     if os.path.exists(p)]
+    cut_physical = measured_body_height(source_images, a.desk, scale)
+    logical_height = (cut_physical + scale - 1) // scale
     height = logical_height * scale
     body_prefix = "snozzy_body_chin2x" if scale == 2 else "snozzy_body_chin"
     phone_prefix = ("snozzy_body_chin_headphones2x" if scale == 2
                     else "snozzy_body_chin_headphones")
-    base = os.path.join(a.src, "torso_chin_base.png")
-    base_phones = os.path.join(a.src, "torso_chin_base_headphones.png")
-    if not os.path.exists(base):
-        base = os.path.join(a.out, "snozzy_body.png")
-        base_phones = os.path.join(a.out, "snozzy_body_headphones.png")
-
     compose_set(base, raw,
                 os.path.join(a.src, "torso_chin.png"), a.out,
-                body_prefix, canvas, height)
+                body_prefix, canvas, height,
+                alternate_base_path=base_phones, alternate_raw_paths=phones)
     compose_set(base_phones, phones,
                 os.path.join(a.src, "torso_chin_headphones.png"), a.out,
-                phone_prefix, canvas, height)
+                phone_prefix, canvas, height,
+                alternate_base_path=base, alternate_raw_paths=raw)
 
     # Publish the exact bases used by `compose_set`.  Runtime must start from
     # these at the instant close-up begins; otherwise it jumps from the old 1×
@@ -205,7 +283,8 @@ def main():
     with open(os.path.join(a.out, "chin.json"), "w") as f:
         json.dump(manifest, f, indent=2)
     print(f"CHIN MOTION {len(raw)} 张中间帧，{scale}× 像素密度，终态手 {final_name}")
-    print("  真实端点：常态 2× base → frame 00；frame 07 → 2× final（变化量见上）")
+    print(f"  真实端点：常态 {scale}× base → frame 00；"
+          f"frame 07 → {scale}× final（变化量见上）")
 
 
 if __name__ == "__main__":

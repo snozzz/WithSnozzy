@@ -3,26 +3,26 @@
     blender --background --factory-startup --python Blender/measure_chin.py -- Snozzy.vrm
 
 和 `measure_hands.py` 同一个路子：**在 3D 里量比在像素上量准**，而且不用
-等三分钟渲一张图再放大看。这里量四件事，按重要性排：
+等三分钟渲一张图再放大看。
 
-1. **手有没有探进面部贴片的矩形**——这是唯一一条会让功能彻底作废的。
-   眨眼/视线/嘴的贴片存的是画布上固定矩形里的**全部**像素（第 22 条），
-   手只要占了那块地方，眨一次眼就把手背抹掉一块。所以这一条不是"好不好看"，
-   是"能不能用"。量法是把手和手指的顶点投到画布上，看有没有落进贴片矩形。
-2. **人做不做得出这个姿势**（第 42 条）。大臂偏离垂直多少度、肘比肩低多少。
-   托腮的时候大臂是往外张的，比打字那一档松，但肘不能高过肩。
-3. **肘有没有沉到画上去的桌沿以下**。托腮的支点是肘，露在桌面上方就成了
-   "举着手"。注意量的是**胳膊最低那一行像素**而不是肘那根骨头的高度：
-   骨头是中心线，胳膊本身还有小半个巴掌粗，差十几像素。
-   而且判据是**画布行**不是世界坐标 z——肘根本够不到 z=0.725
-   （肩离桌面 0.256 米、大臂只有 0.224），能不能读成"撑在桌上"
-   取决于它在画面上有没有被桌子盖住，那是层序的事，不是解剖的事。
-4. **手指够不够得着脸**。差太远读不出是托腮，穿进去就是手插进脸里。
-   量的是「离最近的脸部顶点多远」，不是「离下巴尖多远」——托腮托的是
-   下颌侧面，不是正中那一点，拿中线量会恒报"太远"。
+头现在会歪（`pose.CHIN_HEAD_ROLL`），面部贴片跟着倾斜后的头在托腮终态上
+重渲（`render_face.py … chin`），所以旧的「手不许探进 face.json 矩形」
+不再是约束——贴片和终态底图同一个姿势，手在矩形里的像素两边一致，
+盖上去等于没盖。真正要量的变成这五件事：
+
+1. **手有没有挡住眼睛或嘴**。贴片虽然贴得上，嘴被手盖着人就没法看她说话
+   了。眼嘴区域用形态键现算（`Fcl_EYE_Close` / `Fcl_MTH_*` 动到的顶点，
+   eps=0.001 时和 face_patches 的像素 bbox 校准到 ±6 像素以内），
+   再按**深度**只数真正露在脸前面的手部顶点——指尖绕到脸侧后面的不算。
+2. **画面上读不读得出"接触"**。这是上一版真正的败因：3D 间隙 0.3cm 全绿，
+   画面上手悬在脸旁一指宽。量法是手的投影点越过脸剪影逐行右缘多少像素——
+   要有一撮点、越过 8px 以上，指节才算压在颊线上。
+3. **人做不做得出来**（第 42 条）。大臂角度、肘不高过肩，外加歪头 ≤ 12°。
+4. **肘沉到画上去的桌沿以下**（层序读成"撑在桌上"）。
+5. **手指贴着脸**：手网格到脸网格最近 0.05…1.5cm——比旧版更紧，
+   因为现在要的就是接触。
 """
 import bpy
-import json
 import math
 import os
 import sys
@@ -34,45 +34,71 @@ from bpy_extras.object_utils import world_to_camera_view  # noqa: E402
 
 VRM = sys.argv[-1]
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FACE_JSON = os.path.join(REPO, "Assets", "face.json")
 DESK_PNG = os.path.join(REPO, "Assets", "desk.png")
-# 桌子从哪一行开始盖住她。量不到素材时的退路，和 `hand_frames.py` 量出来的
-# 一致（那边取的是"开始有值"那行，不是"满值"那行——桌沿是一道由虚到实的窄带）。
-DESK_TOP_FALLBACK = 594
 
 
-def desk_alpha_top(threshold=8):
-    """桌面层从哪一行开始有像素。**从素材里量，不写死**——换一张重绘图
-    桌沿就变了，写死的话判据会悄悄地量错东西（第 45 条）。
+def desk_alpha_top(x0, x1, threshold=8):
+    """量胳膊投影横向范围内桌面层的 alpha 起始行。
 
-    Blender 自带的 `bpy.data.images` 就能读 PNG，不用 numpy/PIL——
-    这个脚本跑在 Blender 里，那两个包不一定装得上。
+    桌图还有窗外、墙和其它透明区域；扫全画布会把这些区域的首个像素
+    误当成桌沿。托腮真正需要的是**胳膊所在 x 区间**里的局部遮挡边界。
     """
     if not os.path.exists(DESK_PNG):
-        print(f"  （没有 {DESK_PNG}，桌沿按 {DESK_TOP_FALLBACK} 算）")
-        return DESK_TOP_FALLBACK
+        print(f"  ✗ 没有桌面素材 {DESK_PNG}")
+        return None
     img = bpy.data.images.load(DESK_PNG)
     w, h = img.size
-    px = img.pixels[:]                       # 一次取出来，逐个索引慢一百倍
+    x0 = max(0, min(w, int(x0)))
+    x1 = max(0, min(w, int(x1)))
+    if x1 <= x0:
+        bpy.data.images.remove(img)
+        print(f"  ✗ 桌沿测量 x 范围无效：{x0}…{x1}")
+        return None
+    px = img.pixels[:]
     for row in range(h):
-        # Blender 的像素是从下往上排的，画布行号要翻过来
         base = (h - 1 - row) * w * 4
-        if max(px[base + 3:base + w * 4:4]) >= threshold / 255:
+        start = base + x0 * 4 + 3
+        end = base + x1 * 4
+        if max(px[start:end:4], default=0.0) >= threshold / 255:
             bpy.data.images.remove(img)
             return row
     bpy.data.images.remove(img)
-    return DESK_TOP_FALLBACK
+    print(f"  ✗ 桌面素材在 x {x0}…{x1} 没有 alpha")
+    return None
 
 
 def main():
     meshes = S.load(VRM)
+    if not meshes:
+        print("✗ 没有可测量的角色网格")
+        return 1
     scene = S.setup_scene(res=1536)
     scene.render.resolution_x, scene.render.resolution_y = 1536, 1024
-    arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
+    arm = next((o for o in bpy.data.objects if o.type == 'ARMATURE'), None)
+    if arm is None:
+        print("✗ VRM 缺少 ARMATURE")
+        return 1
+    side = P.CHIN_SIDE
+    required_bones = [
+        f"J_Bip_{side}_{name}" for name in
+        ("UpperArm", "LowerArm", "Hand", "Thumb1", "Thumb2", "Thumb3",
+         "Index1", "Index2", "Index3", "Middle1", "Middle2", "Middle3",
+         "Ring1", "Ring2", "Ring3", "Little1", "Little2", "Little3")
+    ] + ["J_Bip_C_Neck", "J_Bip_C_Head"]
+    missing_bones = [name for name in required_bones if name not in arm.pose.bones]
+    if missing_bones:
+        print("✗ VRM 缺少托腮所需骨骼：" + ", ".join(missing_bones))
+        return 1
+    required_groups = {f"J_Bip_{side}_{name}" for name in S.ARM_BONES}
+    available_groups = {g.name for o in meshes for g in o.vertex_groups}
+    missing_groups = sorted(required_groups - available_groups)
+    if missing_groups:
+        print("✗ VRM 缺少托腮所需顶点组：" + ", ".join(missing_groups))
+        return 1
     S.scene_camera(scene)
     P.settle(scene, arm)
     elbow_z = P.chin_rest(arm, scene)
-    side = P.CHIN_SIDE
+    cam = scene.camera.matrix_world.translation
 
     def bone(name):
         return arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_{name}"].head
@@ -82,13 +108,9 @@ def main():
         return v.x * 1536, (1 - v.y) * 1024
 
     ok = True
-
-    # --- 1. 手有没有压到面部贴片 ---------------------------------------
-    # 手的顶点，而不是骨骼位置：骨骼是一个点，手掌是一片，压没压到要看那一片。
     dg = bpy.context.evaluated_depsgraph_get()
 
     def verts_of(bones):
-        """按蒙皮权重挑出属于这几根骨头的顶点，返回世界坐标。"""
         names = {f"J_Bip_{side}_{b}" for b in bones}
         out = []
         for o in meshes:
@@ -108,102 +130,168 @@ def main():
         return out
 
     hand_world = verts_of([b for b in S.ARM_BONES if b != "LowerArm"])
-    pts = [canvas(p) for p in hand_world]
-
+    pts = [(canvas(p), p) for p in hand_world]
     if not pts:
         print("✗ 一个手部顶点都没找到——骨骼名对吗？")
         return 1
-
-    hx0 = min(p[0] for p in pts); hx1 = max(p[0] for p in pts)
-    hy0 = min(p[1] for p in pts); hy1 = max(p[1] for p in pts)
+    hx0 = min(p[0][0] for p in pts); hx1 = max(p[0][0] for p in pts)
+    hy0 = min(p[0][1] for p in pts); hy1 = max(p[0][1] for p in pts)
     print(f"手在画布上占 x {hx0:.0f}…{hx1:.0f}  y {hy0:.0f}…{hy1:.0f}"
           f"（{len(pts)} 个顶点）")
 
-    try:
-        with open(FACE_JSON) as f:
-            patches = json.load(f)["patches"]
-    except OSError:
-        print(f"  找不到 {FACE_JSON}，跳过贴片检查（先渲一次面部贴片）")
-        patches = {}
+    # 脸网格：剪影和深度都要用。缺 Face 网格不能把眼嘴检查当成可选项。
+    face_meshes = [o for o in meshes
+                   if any(ms.material and "Face" in ms.material.name
+                          for ms in o.material_slots)]
+    if not face_meshes:
+        print("✗ VRM 缺少 Face 材质网格，无法测接触/深度")
+        return 1
+    face_world = []
+    for o in face_meshes:
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        face_world.extend(ev.matrix_world @ v.co for v in me.vertices)
+        ev.to_mesh_clear()
+    if not face_world:
+        print("✗ Face 网格没有顶点")
+        return 1
+    face_px = [(canvas(p), p) for p in face_world]
 
-    worst = None
-    for name, r in patches.items():
-        inside = [p for p in pts
-                  if r["x"] <= p[0] <= r["x"] + r["w"]
-                  and r["y"] <= p[1] <= r["y"] + r["h"]]
-        if inside:
-            ok = False
-            print(f"  ✗ 压到贴片 {name} "
-                  f"({r['x']},{r['y']},{r['w']}×{r['h']})：{len(inside)} 个顶点")
-        else:
-            # 离得多近。留够余量才经得起下一版素材的微小改动
-            gap = min(max(r["x"] - p[0], p[0] - (r["x"] + r["w"]),
-                          r["y"] - p[1], p[1] - (r["y"] + r["h"])) for p in pts)
-            if worst is None or gap < worst[1]:
-                worst = (name, gap)
-    if patches and ok:
-        print(f"  ✓ 没碰到任何贴片，最紧的是 {worst[0]}，还差 {worst[1]:.0f} 像素")
+    required_shapes = {"Fcl_EYE_Close", "Fcl_MTH_A", "Fcl_MTH_O", "Fcl_MTH_Joy"}
+    available_shapes = {
+        kb.name
+        for o in meshes if o.data.shape_keys
+        for kb in o.data.shape_keys.key_blocks
+    }
+    missing_shapes = sorted(required_shapes - available_shapes)
+    if missing_shapes:
+        print("✗ VRM 缺少眼嘴形态键：" + ", ".join(missing_shapes))
+        return 1
 
-    # --- 2. 人做不做得出来（第 42 条，硬约束）---------------------------
-    sh, el, wr = bone("UpperArm"), bone("LowerArm"), bone("Hand")
+    # --- 1. 手有没有挡住眼睛或嘴 ---------------------------------------
+    def shape_region(key_names, eps=0.001):
+        pts_r = []
+        for o in meshes:
+            keys = o.data.shape_keys
+            if not keys:
+                continue
+            hit = [kb for kb in keys.key_blocks if kb.name in key_names]
+            if not hit:
+                continue
+            basis = keys.key_blocks[0]
+            idx = set()
+            for kb in hit:
+                for i in range(len(kb.data)):
+                    if (kb.data[i].co - basis.data[i].co).length > eps:
+                        idx.add(i)
+            ev = o.evaluated_get(dg)
+            me = ev.to_mesh()
+            pts_r.extend(canvas(ev.matrix_world @ me.vertices[i].co)
+                         for i in idx if i < len(me.vertices))
+            ev.to_mesh_clear()
+        if not pts_r:
+            return None
+        xs = [p[0] for p in pts_r]; ys = [p[1] for p in pts_r]
+        return dict(x=min(xs), y=min(ys), w=max(xs) - min(xs), h=max(ys) - min(ys))
+
+    def visible_cover(rect, label):
+        """真正露在脸前面、又落进区域里的手部顶点数。
+        指尖绕到脸颊侧后方的顶点投影也会落进来，但它们被脸挡着、
+        画面上根本看不见——按深度和邻近的脸顶点比一下就滤掉了。"""
+        nonlocal ok
+        if rect is None:
+            print(f"  （没找到 {label} 的形态键，跳过）")
+            return
+        covering = 0
+        for (x, y), p in pts:
+            if not (rect["x"] <= x <= rect["x"] + rect["w"]
+                    and rect["y"] <= y <= rect["y"] + rect["h"]):
+                continue
+            near = [fp for (fx, fy), fp in face_px
+                    if abs(fx - x) < 3 and abs(fy - y) < 3]
+            if not near:
+                continue
+            if (p - cam).length < min((fp - cam).length for fp in near) - 0.003:
+                covering += 1
+        good = covering == 0
+        ok &= good
+        print(f"  {label}区被手挡住的可见顶点 {covering} 个  "
+              + ("✓" if good else f"✗ 手把{label}挡住了"))
+
+    eye_rect = shape_region({"Fcl_EYE_Close"})
+    mouth_rect = shape_region({"Fcl_MTH_A", "Fcl_MTH_O", "Fcl_MTH_Joy"})
+    if eye_rect is None or mouth_rect is None:
+        print("✗ 眼嘴形态键存在但没有可测的变形顶点")
+        return 1
+    print("眼嘴挡没挡（贴片本身跟着终态渲，不再是约束；挡住才是问题）：")
+    visible_cover(eye_rect, "眼")
+    visible_cover(mouth_rect, "嘴")
+
+    # --- 2. 画面上读不读得出接触 ---------------------------------------
+    row_edge = {}
+    for (x, y), _ in face_px:
+        r = int(y)
+        if r not in row_edge or x > row_edge[r]:
+            row_edge[r] = x
+    overlap_pts = 0
+    max_pen = 0.0
+    for (x, y), _ in pts:
+        edge = row_edge.get(int(y))
+        if edge is not None and x < edge:
+            overlap_pts += 1
+            max_pen = max(max_pen, edge - x)
+    contact_reads = overlap_pts >= 20 and max_pen >= 8
+    ok &= contact_reads
+    print(f"手的投影越过脸剪影 {overlap_pts} 个顶点、最深 {max_pen:.0f} 像素  "
+          + ("✓ 指节压在颊线上" if contact_reads
+             else "✗ 画面上读不出接触（上一版就是这么露馅的）"))
+
+    # --- 3. 人做不做得出来（第 42 条，硬约束）---------------------------
+    sh, el = bone("UpperArm"), bone("LowerArm")
     upper = el - sh
     from_vertical = math.degrees(upper.angle(Vector((0, 0, -1))))
     drop = sh.z - el.z
-    hard = from_vertical <= 62 and drop > 0
+    roll_deg = math.degrees(P.CHIN_HEAD_ROLL)
+    hard = from_vertical <= 62 and drop > 0 and roll_deg <= 12
     ok &= hard
-    print(f"大臂偏离垂直 {from_vertical:.0f}°、肘比肩低 {drop * 100:.0f} 厘米  "
-          + ("✓" if hard else "✗ 人做不出这个姿势（肘不能高过肩）"))
+    print(f"大臂偏离垂直 {from_vertical:.0f}°、肘比肩低 {drop * 100:.0f} 厘米、"
+          f"歪头 {roll_deg:.1f}°  "
+          + ("✓" if hard else "✗ 人做不出这个姿势"))
 
-    # --- 3. 肘沉到画上去的桌沿以下了吗 ---------------------------------
-    # 量的是**整条胳膊最低那一行像素**，不是肘那根骨头：骨头是中心线，
-    # 胳膊本身还有小半个巴掌粗，两者差十几像素，而这十几像素正好是
-    # "压在桌沿下面"和"悬在桌沿上面"的分界。
-    arm_pts = pts + [canvas(p) for p in verts_of(["UpperArm", "LowerArm"])]
+    # --- 4. 肘沉到画上去的桌沿以下了吗 ---------------------------------
+    arm_pts = [c for c, _ in pts] + [canvas(p) for p in
+                                      verts_of(["UpperArm", "LowerArm"])]
     low = max(p[1] for p in arm_pts)
-    desk_top = desk_alpha_top()
-    covered = low >= desk_top
+    arm_x0 = math.floor(min(p[0] for p in arm_pts))
+    arm_x1 = math.ceil(max(p[0] for p in arm_pts)) + 1
+    desk_top = desk_alpha_top(arm_x0, arm_x1)
+    covered = desk_top is not None and low >= desk_top
     ok &= covered
-    print(f"肘 z={elbow_z:.3f}（桌面 {K.DESK_Z}，够不到是几何决定的）、进深 y={el.y:.3f}")
-    print(f"胳膊最低到画布第 {low:.0f} 行，桌子从第 {desk_top} 行开始盖  "
+    print(f"肘 z={elbow_z:.3f}（桌面 {K.DESK_Z}，够不到是几何决定的）")
+    print(f"胳膊投影 x {arm_x0}…{arm_x1}，最低到画布第 {low:.0f} 行，"
+          f"桌子局部从第 {desk_top if desk_top is not None else '??'} 行开始盖  "
           + ("✓ 肘被桌子挡住，读成撑在桌上"
-             if covered else f"✗ 露在桌沿上方 {desk_top - low:.0f} 像素，像举着手"))
+             if covered else "✗ 桌沿局部测量失败或胳膊露在桌沿上方，像举着手"))
 
-    # --- 4. 够不够得着脸 -----------------------------------------------
-    # 量的是**两块网格之间的最近距离**（手的所有顶点 × 脸的所有顶点），
-    # 不是某根指骨到脸的距离。两处都不能取代表点：
-    #
-    # - 拿下巴尖（脸网格最低点）当靶子是错的——托腮托的是下颌**侧面**，
-    #   手离中线本来就隔着小半张脸，那样量会恒报"太远"，
-    #   照着它调只会把手一路推到脸中间去（第一版就是这么跑偏的）
-    # - 拿 `Middle3` 当手的代表点也是错的——那是第三节指骨的**根部**，
-    #   手指一弯它就转到背面去了，实测比真正贴着脸的那块指节远 2 厘米
-    face_pts = []
-    for o in meshes:
-        if not any(ms.material and "Face" in ms.material.name
-                   for ms in o.material_slots):
-            continue
-        ev = o.evaluated_get(dg)
-        me = ev.to_mesh()
-        face_pts = [ev.matrix_world @ v.co for v in me.vertices]
-        ev.to_mesh_clear()
-        break
-
-    if face_pts and hand_world:
-        # 先按包围盒粗筛脸的顶点：整张脸四千来个点 × 七百个手部顶点是
-        # 三百万次距离计算，Python 里要跑好几秒。手只可能碰到下颌那一带。
+    # --- 5. 手指贴着脸 --------------------------------------------------
+    if face_world and hand_world:
         lo = Vector((min(p.x for p in hand_world), min(p.y for p in hand_world),
                      min(p.z for p in hand_world)))
         hi = Vector((max(p.x for p in hand_world), max(p.y for p in hand_world),
                      max(p.z for p in hand_world)))
-        near_face = [p for p in face_pts
+        near_face = [p for p in face_world
                      if all(lo[i] - 0.08 < p[i] < hi[i] + 0.08 for i in range(3))]
         gap = min((h - f).length for h in hand_world for f in near_face) \
             if near_face else 9.9
-        near = 0.002 < gap < 0.030
+        near = 0.0005 < gap < 0.015
         ok &= near
-        print(f"手离脸最近 {gap * 100:.1f} 厘米（脸上参与比对的顶点 {len(near_face)} 个）  "
-              + ("✓ 抵着下颌" if near
-                 else "✗ 太远读不出托腮" if gap >= 0.030 else "✗ 手插进脸里"))
+        print(f"手离脸最近 {gap * 100:.2f} 厘米  "
+              + ("✓ 贴着下颌" if near
+                 else "✗ 离得太远" if gap >= 0.015 else "✗ 手插进脸里"))
+
+    else:
+        print("✗ 没有脸/手网格，无法测接触间隙")
+        ok = False
 
     print("CHIN " + ("全部通过" if ok else "有不合格项，改 pose.py 的 CHIN_* 再跑一遍"))
     return 0 if ok else 1

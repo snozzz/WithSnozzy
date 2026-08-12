@@ -10,6 +10,16 @@ struct FaceManifest: Codable {
     var channels: [String: String] = [:]
 }
 
+/// Per-frame face sets for the chin-rest motion.  A single terminal set is
+/// not safe to fade across a rotating head: the eyes and mouth would visibly
+/// slide off their base image.  The generator emits one ordinary
+/// `FaceManifest` for each of frames 00…08.
+struct ChinFaceManifest: Codable {
+    var canvas: [Int] = [3072, 2048]
+    var frames: Int = 0
+    var sets: [FaceManifest] = []
+}
+
 /// 盖在渲染角色脸上的小贴片。
 ///
 /// 一个不眨眼的角色看起来是死的——这是"呆"最主要的来源，比动作幅度重要得多。
@@ -34,6 +44,12 @@ struct FaceOverlay: View {
     let palette: Palette
     /// 高密度角色底图启用时用同机位 2× 贴片；逻辑坐标不变，只增加源像素密度。
     var highResolution = false
+    /// 托腮动作当前帧；每一帧都有与底图同姿势的 facechin 贴片。
+    /// nil / -1 使用常态 2× 贴片。
+    var chinFrame: Int? = nil
+    /// 保留一个总强度旋钮给调试快照；生产动作始终传 1，不靠淡出掩盖
+    /// 贴片错位。
+    var strength: Double = 1
     /// 画布尺寸由调用方传进来。
     ///
     /// 不要在这里再套一层 `GeometryReader`：它嵌在 ZStack 里拿到的提议尺寸
@@ -48,8 +64,15 @@ struct FaceOverlay: View {
         // 底图按 (sx, sy) 各自拉伸满幅，贴片却按同一个比例摆，纵向就错开了。
         // 表现是**眼睛上方浮着两块方片**，越拉越远（用户拉窗口时发现的）。
         // 这类"两处各算一遍同一件事"的错在这个项目里犯过好几次了（第 7 条）。
-        let use2x = highResolution && !assets.facePatches2x.isEmpty
-        let manifest = use2x ? assets.face2x : assets.face
+        let chinIndex = chinFrame.flatMap { frame in
+            assets.faceChinFrames.indices.contains(frame) ? frame : nil
+        }
+        let useChin = chinIndex != nil
+        let use2x = !useChin && highResolution && !assets.facePatches2x.isEmpty
+        let manifest = useChin ? assets.faceChinFrames[chinIndex!]
+            : use2x ? assets.face2x : assets.face
+        let images = useChin ? assets.facePatchesChinFrames[chinIndex!]
+            : use2x ? assets.facePatches2x : assets.facePatches
         let sx = width / CGFloat(manifest.canvas.first ?? 1536)
         let sy = height / CGFloat(manifest.canvas.last ?? 1024)
         let blink = clamp(pose.blink * face.blinkScale, 0, 1)
@@ -57,35 +80,43 @@ struct FaceOverlay: View {
             // ── 1. 视线（最底层）──
             let lw = face.lookWeight
             patch("look_left", opacity: max(0, -face.lookX) * lw, sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
             patch("look_right", opacity: max(0, face.lookX) * lw, sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
             patch("look_down", opacity: max(0, -face.lookY) * 0.9 * lw, sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
             patch("look_up", opacity: max(0, face.lookY) * 0.9 * lw, sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
 
             // ── 2. 眼型（压在视线上）──
-            patch("eye_soft", opacity: face.eyeSoft, sx: sx, sy: sy, hires: use2x)
-            patch("eye_sad", opacity: face.eyeSad, sx: sx, sy: sy, hires: use2x)
-            patch("eye_wide", opacity: face.eyeWide, sx: sx, sy: sy, hires: use2x)
-            patch("eye_smile", opacity: face.eyeSmile, sx: sx, sy: sy, hires: use2x)
+            patch("eye_soft", opacity: face.eyeSoft, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
+            patch("eye_sad", opacity: face.eyeSad, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
+            patch("eye_wide", opacity: face.eyeWide, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
+            patch("eye_smile", opacity: face.eyeSmile, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
 
             // ── 3. 眨眼（最上层，眼皮在最前面）──
             // 半闭和全闭两级，靠 blink 的连续值在两者之间过渡——
             // 只有全闭一级的话，快速眨眼会变成"闪一下"。
             patch("blink_half", opacity: ramp(blink, 0.10, 0.55), sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
             patch("blink_shut", opacity: ramp(blink, 0.45, 0.85), sx: sx, sy: sy,
-                  hires: use2x)
+                  images: images, manifest: manifest)
 
             // ── 嘴（独立通道，和眼那一块不相交）──
-            patch("smile", opacity: face.mouthSmile, sx: sx, sy: sy, hires: use2x)
-            patch("mouth_o", opacity: face.mouthO, sx: sx, sy: sy, hires: use2x)
-            patch("mouth_open", opacity: face.mouthOpen, sx: sx, sy: sy, hires: use2x)
+            patch("smile", opacity: face.mouthSmile, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
+            patch("mouth_o", opacity: face.mouthO, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
+            patch("mouth_open", opacity: face.mouthOpen, sx: sx, sy: sy,
+                  images: images, manifest: manifest)
         }
         .frame(width: width, height: height, alignment: .topLeading)
         .colorMultiply(PaintedRoom.ambient(palette).color)
+        .opacity(strength)
         .allowsHitTesting(false)
     }
 
@@ -96,9 +127,9 @@ struct FaceOverlay: View {
 
     @ViewBuilder
     private func patch(_ name: String, opacity: Double,
-                       sx: CGFloat, sy: CGFloat, hires: Bool) -> some View {
-        let images = hires ? assets.facePatches2x : assets.facePatches
-        let manifest = hires ? assets.face2x : assets.face
+                       sx: CGFloat, sy: CGFloat,
+                       images: [String: NSImage],
+                       manifest: FaceManifest) -> some View {
         if opacity > 0.004, let image = images[name],
            let rect = manifest.patches[name] {
             Image(nsImage: image)

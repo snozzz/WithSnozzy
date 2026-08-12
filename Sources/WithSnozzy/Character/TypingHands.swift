@@ -25,16 +25,18 @@ struct TypingHands: View, Equatable {
     var body: some View {
         GeometryReader { geo in
             let m = assets.hands
-            let moving = chinFrame.flatMap {
+            let motionReady = assets.hasCompleteChinMotion
+            let moving = motionReady ? chinFrame.flatMap {
                 assets.chinHandFrames.indices.contains($0) ? assets.chinHandFrames[$0] : nil
-            }
-            let final = (chinFrame ?? -1) >= assets.chin.frames
+            } : nil
+            let final = motionReady && (chinFrame ?? -1) >= assets.chin.frames
                 ? assets.chinHandFinal : nil
             // -1 只换成近景的高清底图，手仍保留启动那一刻的真实
             // 打字帧。若在这里强制归到 frame 0，镜头还没开始动，手指
             // 就会先硬切一次；第一张真骨骼帧自然负责收手动作。
-            let still = assets.handFrames.indices.contains(frame)
-                ? assets.handFrames[frame] : nil
+            let stillFrame = motionReady ? frame : min(max(frame, 0), max(0, m.frames - 1))
+            let still = assets.handFrames.indices.contains(stillFrame)
+                ? assets.handFrames[stillFrame] : nil
             if let image = moving ?? final ?? still,
                m.isUsable, let w = m.canvas.first, w > 0,
                m.canvas.count > 1, m.canvas[1] > 0 {
