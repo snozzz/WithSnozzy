@@ -119,6 +119,17 @@ enum Snapshot {
         arg("--activitystrip")
     }
 
+    /// 番茄钟自然完成的短表情与侧屏反馈。五个时间点共用同一个生产时间，
+    /// 只改变 `lastCelebration` 相对它的年龄，因此 before/after 可以做逐像素
+    /// 基线比较；同时覆盖昼/夜、说话、困倦和托腮注意力样本。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --celebrationstrip out.png
+    /// ```
+    static var celebrationStripPath: String? {
+        arg("--celebrationstrip")
+    }
+
     /// 面部贴片在**非 3:2 窗口**下贴得准不准。
     ///
     /// ```
@@ -515,6 +526,33 @@ enum Snapshot {
             try png.write(to: URL(fileURLWithPath: path))
             print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
             exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
+    static func runCelebrationStrip(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.isAvailable, assets.hasRenderedCharacter else {
+            print("房间或角色素材没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        let renderer = ImageRenderer(content: CelebrationStrip(assets: assets))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            print("庆祝快照渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(rep.pixelsWide)×\(rep.pixelsHigh))")
+            let report = CelebrationStripReport(assets: assets, rep: rep)
+            exit(report.printAndEvaluate() ? 0 : 1)
         } catch {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
@@ -1124,6 +1162,533 @@ private struct ActivityStrip: View {
         }
         .frame(width: w, height: h)
         .clipped()
+    }
+}
+
+/// 专注段完成反馈的真实生产层平铺。每一行固定同一条时间线，只改变
+/// `lastCelebration` 的相对年龄，所以表情和侧屏以外的像素不会因为墙钟漂移。
+private struct CelebrationStrip: View {
+    enum Phase: Int, CaseIterable, Identifiable {
+        case before, rise, peak, fall, after
+
+        var id: Int { rawValue }
+
+        /// 相对完成时刻的年龄；before/after 都在短包络之外。
+        var age: Double {
+            switch self {
+            case .before: -0.05
+            case .rise: 0.15
+            case .peak: 0.72
+            case .fall: 1.35
+            case .after: 2.10
+            }
+        }
+
+        var label: String {
+            switch self {
+            case .before: "BEFORE"
+            case .rise: "RISE"
+            case .peak: "PEAK"
+            case .fall: "FALL"
+            case .after: "AFTER"
+            }
+        }
+    }
+
+    struct Sample: Identifiable {
+        let id: String
+        let label: String
+        let palette: Palette
+        let activity: SnozzyActivity
+        let playing: Bool
+        let mood: Double
+        let drowsy: Double
+        let working: Bool
+        let speaking: Bool
+        let closeup: Bool
+    }
+
+    let assets: SceneAssets
+
+    static let samples: [Sample] = [
+        Sample(id: "day", label: "DAY · NORMAL", palette: .day,
+               activity: .typing, playing: false, mood: 0.58, drowsy: 0,
+               working: true, speaking: false, closeup: false),
+        Sample(id: "night-drowsy", label: "NIGHT · DROWSY", palette: .night,
+               activity: .resting, playing: false, mood: 0.50, drowsy: 0.90,
+               working: false, speaking: false, closeup: false),
+        Sample(id: "day-speaking", label: "DAY · SPEAKING", palette: .day,
+               activity: .planning, playing: false, mood: 0.58, drowsy: 0,
+               working: true, speaking: true, closeup: false),
+        Sample(id: "night-closeup", label: "NIGHT · CLOSE-UP", palette: .night,
+               activity: .resting, playing: false, mood: 0.50, drowsy: 0,
+               working: false, speaking: false, closeup: true),
+    ]
+
+    static let cellW: CGFloat = 360
+    static let cellH: CGFloat = cellW / 1.5
+    static let gap: CGFloat = 3
+    static let padding: CGFloat = 4
+
+    var body: some View {
+        VStack(spacing: Self.gap) {
+            HStack(spacing: Self.gap) {
+                ForEach(Self.Phase.allCases) { phase in
+                    Text(phase.label)
+                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.74))
+                        .frame(width: Self.cellW, height: 18)
+                }
+            }
+            ForEach(Self.samples) { sample in
+                HStack(spacing: Self.gap) {
+                    ForEach(Self.Phase.allCases) { phase in
+                        CelebrationCell(assets: assets, sample: sample, phase: phase)
+                    }
+                }
+            }
+        }
+        .padding(Self.padding)
+        .background(Color(white: 0.10))
+    }
+}
+
+/// 一个单元格直接复用生产角色、房间、桌面、活动层和手层的顺序。
+private struct CelebrationCell: View {
+    let assets: SceneAssets
+    let sample: CelebrationStrip.Sample
+    let phase: CelebrationStrip.Phase
+    var celebrationOffset: CGSize = .zero
+    var celebrationClipDisabled = false
+
+    private let t = 43.0
+
+    private var amount: Double {
+        // 所有格子的墙钟固定为同一个 t；只有完成时刻相对它的位置变化。
+        AppState.celebrationAmount(since: t - phase.age, at: t)
+    }
+
+    var body: some View {
+        let cue = ActivityRig.preview(sample.activity, playing: sample.playing)
+        let faceActivity = sample.closeup
+            ? ActivityRig.attentionCue(from: cue, amount: 1)
+            : cue
+        let face = FaceRig.expression(
+            t: t, playing: sample.playing, mood: sample.mood,
+            drowsy: sample.drowsy, working: sample.working,
+            speaking: sample.speaking, activity: faceActivity,
+            celebration: amount)
+        let pose = SnozzyRig.pose(time: t, kick: 0,
+                                  playing: sample.playing, mood: sample.mood,
+                                  drowsy: sample.drowsy)
+        let chinFrame: Int? = sample.closeup && assets.hasCompleteChinMotion
+            ? CloseUp.transitionFrames : nil
+        let zoom: CGFloat = sample.closeup ? SceneCamera.zoom : 1
+
+        return ZStack(alignment: .topLeading) {
+            ZStack(alignment: .topLeading) {
+                PaintedRoomBackdrop(assets: assets, palette: sample.palette,
+                                    weather: .clear, t: t)
+                RenderedSnozzy(assets: assets, palette: sample.palette,
+                               pose: pose, face: face, headphones: false,
+                               chinFrame: chinFrame, t: t)
+                PaintedRoomForeground(assets: assets, palette: sample.palette)
+                PaintedRoomActivityOverlay(
+                    assets: assets, cue: cue, palette: sample.palette,
+                    playing: sample.playing, t: t, celebration: amount,
+                    celebrationClipDisabled: celebrationClipDisabled,
+                    celebrationOffset: celebrationOffset)
+                if assets.hands.isUsable {
+                    TypingHands(assets: assets, palette: sample.palette,
+                                frame: TypingRig.frame(
+                                    at: t, working: sample.working,
+                                    frames: assets.hands.frames,
+                                    chin: chinFrame == nil ? nil : assets.hands.chin,
+                                    activity: cue),
+                                chinFrame: chinFrame)
+                }
+            }
+            .frame(width: CelebrationStrip.cellW, height: CelebrationStrip.cellH)
+            .scaleEffect(zoom, anchor: SceneCamera.unitAnchor)
+
+            Text(sample.label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.84))
+                .padding(.horizontal, 6).padding(.vertical, 4)
+                .background(.black.opacity(0.34), in: Capsule())
+                .padding(6)
+        }
+        .frame(width: CelebrationStrip.cellW, height: CelebrationStrip.cellH)
+        .clipped()
+    }
+}
+
+/// `--celebrationstrip` 的像素判据。它对 before/after 做逐字节基线比较，
+/// 对峰值只允许脸贴片和真实侧屏 polygon 变化；另跑三个真实函数/视图负向探针。
+@MainActor
+private struct CelebrationStripReport {
+    let assets: SceneAssets
+    let rep: NSBitmapImageRep
+
+    private struct Metrics {
+        var changed = 0
+        var outsideAllowed = 0
+        var outsideScreen = 0
+        var facePixels = 0
+        var screenPixels = 0
+        var box: CGRect?
+    }
+
+    func printAndEvaluate() -> Bool {
+        print("CELEBRATIONSTRIP 像素报告（包络 1.80s；峰值只允许脸贴片+侧屏；显著差异 >6/255）")
+        var passed = true
+        let phases = CelebrationStrip.Phase.allCases
+        let normalRows = CelebrationStrip.samples.enumerated()
+            .filter { !$0.element.closeup }
+
+        for (row, sample) in CelebrationStrip.samples.enumerated() {
+            let amounts = phases.map { phase in
+                AppState.celebrationAmount(since: 43.0 - phase.age, at: 43.0)
+            }
+            print(String(format: "  %@ amounts %@",
+                         sample.label,
+                         amounts.map { String(format: "%.3f", $0) }
+                             .joined(separator: "/")))
+
+            let base = byteDifference(row: row, phase: .before,
+                                      otherRow: row, otherPhase: .after)
+            let baseOK = base.changed == 0
+            print("    before=after pixels=\(base.changed) max=\(base.maxDelta) "
+                  + (baseOK ? "✓" : "✗"))
+            passed = passed && baseOK
+
+            if !sample.closeup {
+                let dynamic = dynamicDifference(row: row, phase: .before,
+                                                otherRow: row, otherPhase: .peak,
+                                                sample: sample)
+                let active = dynamic.changed > 0
+                let bounded = dynamic.outsideAllowed == 0
+                let screenSafe = dynamic.outsideScreen == 0
+                print(String(format: "    peak−before pixels=%d face=%d screen=%d "
+                             + "outsideAllowed=%d outsideScreen=%d bbox %@ %@",
+                             dynamic.changed, dynamic.facePixels, dynamic.screenPixels,
+                             dynamic.outsideAllowed, dynamic.outsideScreen,
+                             boxDescription(dynamic.box),
+                             (active && bounded && screenSafe) ? "✓" : "✗"))
+                passed = passed && active && bounded && screenSafe
+            }
+        }
+
+        let speakingOK = speakingProbe()
+        print("  speaking 口型仍由 speaking 驱动、笑嘴让位："
+              + (speakingOK ? "✓" : "✗"))
+        passed = passed && speakingOK
+
+        let expressionPriorityOK = expressionPriorityProbe()
+        print("  庆祝眼型优先级（drowsy overlap + w0 逐字段等价）："
+              + (expressionPriorityOK ? "✓" : "✗"))
+        passed = passed && expressionPriorityOK
+
+        let envelopeOK = envelopeProbe()
+        print("  常亮/无触发负向 probe（0→peak 有限、peak→after 收回）："
+              + (envelopeOK ? "✓" : "✗"))
+        passed = passed && envelopeOK
+
+        let clockSafetyOK = clockSafetyProbe()
+        print("  时钟回拨安全（future lastCelebration 的 mood/视觉 boost=0）："
+              + (clockSafetyOK ? "✓" : "✗"))
+        passed = passed && clockSafetyOK
+
+        let focusRoutingOK = focusRoutingProbe()
+        print("  FocusTimer skip(work→break→work) 无完成回调："
+              + (focusRoutingOK ? "✓" : "✗"))
+        passed = passed && focusRoutingOK
+
+        let leakOK = clipNegativeProbe(sample: CelebrationStrip.samples[0])
+        print("  屏幕越界负向 probe（故意关闭 clip 后必须被抓）："
+              + (leakOK ? "✓" : "✗"))
+        passed = passed && leakOK
+
+        // 这行让编译器保留 normalRows 的生产行索引，同时在报告里明确
+        // close-up 也走了 before/after 基线检查。
+        print("  普通/昼夜/冲突样本覆盖：\(normalRows.count) 个普通行 + "
+              + "\(CelebrationStrip.samples.count - normalRows.count) 个近景行")
+        print("CELEBRATIONSTRIP " + (passed ? "PASS" : "FAIL"))
+        return passed
+    }
+
+    private func envelopeProbe() -> Bool {
+        let before = AppState.celebrationAmount(since: 43.05, at: 43.0)
+        let rise = AppState.celebrationAmount(since: 42.85, at: 43.0)
+        let peak = AppState.celebrationAmount(since: 42.28, at: 43.0)
+        let after = AppState.celebrationAmount(since: 40.90, at: 43.0)
+        // before/after 必须是零，rise 必须处于上升段，peak 必须完整但不超过 1。
+        return before == 0 && after == 0 && rise > 0 && rise < 1
+            && peak == 1 && AppState.celebrationDuration >= 1.6
+            && AppState.celebrationDuration <= 2.0
+    }
+
+    private func clockSafetyProbe() -> Bool {
+        let visualFuture = AppState.celebrationAmount(since: 43.05, at: 43.0)
+        let moodFuture = AppState.celebrationMoodBoost(since: 43.05, at: 43.0)
+        let visualActive = AppState.celebrationAmount(since: 42.95, at: 43.0)
+        let moodActive = AppState.celebrationMoodBoost(since: 42.0, at: 43.0)
+        return visualFuture == 0 && moodFuture == 0
+            && visualActive > 0 && moodActive > 0
+    }
+
+    private func focusRoutingProbe() -> Bool {
+        let focus = FocusTimer()
+        var callbacks: [FocusPhase] = []
+        focus.onPhaseFinished = { callbacks.append($0) }
+        focus.start()
+        let startedWork = focus.phase == .work
+        focus.skip()
+        let skippedWork = focus.phase.isBreak
+        let phaseAfterWorkSkip = focus.phase
+        focus.skip()
+        let skippedBreak = focus.phase == .work
+        let ok = startedWork && skippedWork && skippedBreak && callbacks.isEmpty
+        print("    routing states started=\(startedWork) workSkip=\(skippedWork) "
+              + "breakSkip=\(skippedBreak) phase=\(phaseAfterWorkSkip) "
+              + "callbacks=\(callbacks.count)")
+        return ok
+    }
+
+    private func speakingProbe() -> Bool {
+        // 选出生产 speaking 口型的高开合时刻，避免把“恰好换气”的低谷
+        // 当成笑嘴覆盖；所有数值来自 FaceRig，而不是手写一张假脸。
+        var bestT = 43.0
+        var bestOpen = 0.0
+        for i in 0...240 {
+            let t = 43.0 + Double(i) * 0.01
+            let face = FaceRig.expression(t: t, playing: false, mood: 0.58,
+                                          drowsy: 0, working: true, speaking: true,
+                                          activity: ActivityRig.preview(.planning,
+                                                                        playing: false),
+                                          celebration: 1)
+            if face.mouthOpen > bestOpen {
+                bestOpen = face.mouthOpen
+                bestT = t
+            }
+        }
+        let noCelebration = FaceRig.expression(
+            t: bestT, playing: false, mood: 0.58, drowsy: 0,
+            working: true, speaking: true,
+            activity: ActivityRig.preview(.planning, playing: false), celebration: 0)
+        let celebrating = FaceRig.expression(
+            t: bestT, playing: false, mood: 0.58, drowsy: 0,
+            working: true, speaking: true,
+            activity: ActivityRig.preview(.planning, playing: false), celebration: 1)
+        let driven = celebrating.mouthOpen > 0.45
+            && abs(celebrating.mouthOpen - noCelebration.mouthOpen) < 1e-12
+        let smileRises = celebrating.mouthSmile > noCelebration.mouthSmile
+        let smileYields = celebrating.mouthSmile < celebrating.mouthOpen
+        print(String(format: "    speaking values mouthSmile %.3f→%.3f "
+                     + "mouthOpen %.3f→%.3f",
+                     noCelebration.mouthSmile, celebrating.mouthSmile,
+                     noCelebration.mouthOpen, celebrating.mouthOpen))
+        return driven && smileRises && smileYields
+    }
+
+    private func expressionPriorityProbe() -> Bool {
+        let commonActivity = ActivityRig.preview(.resting, playing: false)
+        let old = FaceRig.expression(t: 43, playing: false, mood: 0.5,
+                                     drowsy: 0.2, working: false, speaking: false,
+                                     activity: commonActivity)
+        let zero = FaceRig.expression(t: 43, playing: false, mood: 0.5,
+                                      drowsy: 0.2, working: false, speaking: false,
+                                      activity: commonActivity, celebration: 0)
+        let drowsyPeak = FaceRig.expression(t: 43, playing: false, mood: 0.5,
+                                            drowsy: 0.9, working: false,
+                                            speaking: false, activity: commonActivity,
+                                            celebration: 1)
+        let zeroEquivalent = old == zero
+        let eyeExclusive = drowsyPeak.eyeSmile > 0.5
+            && drowsyPeak.eyeSmile > drowsyPeak.eyeSoft
+            && drowsyPeak.eyeSmile > drowsyPeak.eyeWide
+            && drowsyPeak.eyeSmile > drowsyPeak.eyeSad
+        let mouthPresent = drowsyPeak.mouthSmile > 0.2
+        print(String(format: "    drowsy peak eyeSmile %.3f eyeSad %.3f "
+                     + "eyeSoft %.3f mouthSmile %.3f; w0=%@",
+                     drowsyPeak.eyeSmile, drowsyPeak.eyeSad,
+                     drowsyPeak.eyeSoft, drowsyPeak.mouthSmile,
+                     zeroEquivalent ? "equal" : "DIFF"))
+        return zeroEquivalent && eyeExclusive && mouthPresent
+    }
+
+    private func clipNegativeProbe(sample: CelebrationStrip.Sample) -> Bool {
+        let before = render(sample: sample, phase: .before)
+        let leaked = render(sample: sample, phase: .peak,
+                            celebrationClipDisabled: true,
+                            celebrationOffset: CGSize(width: 120, height: 0))
+        guard let before, let leaked else { return false }
+        let metrics = dynamicDifference(before, leaked, sample: sample)
+        // clip 关闭时真实屏幕模式本身和勾形都会漏到 polygon 外；报告必须看到。
+        return metrics.outsideScreen > 0
+    }
+
+    private func render(sample: CelebrationStrip.Sample,
+                        phase: CelebrationStrip.Phase,
+                        celebrationClipDisabled: Bool = false,
+                        celebrationOffset: CGSize = .zero) -> NSBitmapImageRep? {
+        let renderer = ImageRenderer(content:
+            CelebrationCell(assets: assets, sample: sample, phase: phase,
+                            celebrationOffset: celebrationOffset,
+                            celebrationClipDisabled: celebrationClipDisabled)
+                .frame(width: CelebrationStrip.cellW, height: CelebrationStrip.cellH))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation else { return nil }
+        return NSBitmapImageRep(data: tiff)
+    }
+
+    private func byteDifference(row: Int, phase: CelebrationStrip.Phase,
+                                otherRow: Int,
+                                otherPhase: CelebrationStrip.Phase)
+        -> (changed: Int, maxDelta: Int) {
+        let a = cellOrigin(row: row, phase: phase)
+        let b = cellOrigin(row: otherRow, phase: otherPhase)
+        var changed = 0
+        var maxDelta = 0
+        for y in 0..<Int(CelebrationStrip.cellH) {
+            for x in 0..<Int(CelebrationStrip.cellW) {
+                let p = rgba(rep, x: a.x + x, y: a.y + y)
+                let q = rgba(rep, x: b.x + x, y: b.y + y)
+                let delta = max(abs(p.r - q.r), max(abs(p.g - q.g),
+                                  max(abs(p.b - q.b), abs(p.a - q.a))))
+                // SwiftUI 的 Canvas 在不同 HStack x 原点会有约 ±6/255 的
+                // 重采样量化差；报告把它记进 max，但显著像素从 >6 开始。
+                if delta > 6 { changed += 1 }
+                maxDelta = max(maxDelta, delta)
+            }
+        }
+        return (changed, maxDelta)
+    }
+
+    private func dynamicDifference(row: Int,
+                                   phase: CelebrationStrip.Phase,
+                                   otherRow: Int,
+                                   otherPhase: CelebrationStrip.Phase,
+                                   sample: CelebrationStrip.Sample) -> Metrics {
+        let a = cellOrigin(row: row, phase: phase)
+        let b = cellOrigin(row: otherRow, phase: otherPhase)
+        var result = Metrics()
+        for y in 0..<Int(CelebrationStrip.cellH) {
+            for x in 0..<Int(CelebrationStrip.cellW) {
+                let p = rgba(rep, x: a.x + x, y: a.y + y)
+                let q = rgba(rep, x: b.x + x, y: b.y + y)
+                let delta = max(abs(p.r - q.r), max(abs(p.g - q.g),
+                                  max(abs(p.b - q.b), abs(p.a - q.a))))
+                guard delta > 6 else { continue }
+                result.changed += 1
+                let point = CGPoint(x: x, y: y)
+                result.box = result.box.map { $0.union(CGRect(origin: point,
+                                                               size: CGSize(width: 1,
+                                                                            height: 1))) }
+                    ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
+                let logical = CGPoint(x: CGFloat(x), y: CGFloat(y))
+                let face = faceContains(logical, closeup: sample.closeup)
+                let screen = screenContains(logical)
+                if face { result.facePixels += 1 }
+                if screen { result.screenPixels += 1 }
+                if !face && !screen { result.outsideAllowed += 1 }
+                // 脸的合法变化自然落在屏幕 polygon 外；这里只统计既不是
+                // 脸贴片又不在屏幕内的反馈泄漏。
+                if !screen && !face { result.outsideScreen += 1 }
+            }
+        }
+        return result
+    }
+
+    private func dynamicDifference(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep,
+                                   sample: CelebrationStrip.Sample) -> Metrics {
+        let width = min(a.pixelsWide, b.pixelsWide)
+        let height = min(a.pixelsHigh, b.pixelsHigh)
+        var result = Metrics()
+        for y in 0..<height {
+            for x in 0..<width {
+                let p = rgba(a, x: x, y: y)
+                let q = rgba(b, x: x, y: y)
+                let delta = max(abs(p.r - q.r), max(abs(p.g - q.g),
+                                  max(abs(p.b - q.b), abs(p.a - q.a))))
+                guard delta > 6 else { continue }
+                result.changed += 1
+                let point = CGPoint(x: x, y: y)
+                result.box = result.box.map { $0.union(CGRect(origin: point,
+                                                               size: CGSize(width: 1,
+                                                                            height: 1))) }
+                    ?? CGRect(origin: point, size: CGSize(width: 1, height: 1))
+                let face = faceContains(point, closeup: sample.closeup)
+                let screen = screenContains(point)
+                if face { result.facePixels += 1 }
+                if screen { result.screenPixels += 1 }
+                if !face && !screen { result.outsideAllowed += 1 }
+                if !screen && !face { result.outsideScreen += 1 }
+            }
+        }
+        return result
+    }
+
+    private func faceContains(_ point: CGPoint, closeup: Bool) -> Bool {
+        guard !closeup else { return false }
+        let logical = CGPoint(x: point.x * 1536 / CelebrationStrip.cellW,
+                              y: point.y * 1024 / CelebrationStrip.cellH)
+        let manifest = assets.hasHighResolutionFace ? assets.face2x : assets.face
+        let scale = assets.hasHighResolutionFace ? 0.5 : 1.0
+        return manifest.patches.values.contains { patch in
+            let rect = CGRect(x: CGFloat(patch.x) * scale,
+                              y: CGFloat(patch.y) * scale,
+                              width: CGFloat(patch.w) * scale,
+                              height: CGFloat(patch.h) * scale)
+            return rect.insetBy(dx: -8, dy: -8).contains(logical)
+        }
+    }
+
+    private func screenContains(_ point: CGPoint) -> Bool {
+        let u = point.x / CelebrationStrip.cellW
+        let v = point.y / CelebrationStrip.cellH
+        let polygon = [(0.165, 0.346), (0.251, 0.349),
+                       (0.251, 0.525), (0.166, 0.540)]
+        var inside = false
+        var j = polygon.count - 1
+        for i in polygon.indices {
+            let a = polygon[i], b = polygon[j]
+            let crosses = ((a.1 > v) != (b.1 > v))
+                && u < (b.0 - a.0) * (v - a.1) / max(b.1 - a.1, 1e-9) + a.0
+            if crosses { inside.toggle() }
+            j = i
+        }
+        return inside
+    }
+
+    private func cellOrigin(row: Int, phase: CelebrationStrip.Phase)
+        -> (x: Int, y: Int) {
+        let x = Int(CelebrationStrip.padding
+                    + CGFloat(phase.rawValue) * (CelebrationStrip.cellW
+                                                  + CelebrationStrip.gap))
+        // Header is 18px plus the first vertical gap.
+        let y = Int(CelebrationStrip.padding + 18 + CelebrationStrip.gap
+                    + CGFloat(row) * (CelebrationStrip.cellH + CelebrationStrip.gap))
+        return (x, y)
+    }
+
+    private func rgba(_ rep: NSBitmapImageRep, x: Int, y: Int)
+        -> (r: Int, g: Int, b: Int, a: Int) {
+        guard x >= 0, y >= 0, x < rep.pixelsWide, y < rep.pixelsHigh,
+              let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
+            return (0, 0, 0, 0)
+        }
+        return (Int((color.redComponent * 255).rounded()),
+                Int((color.greenComponent * 255).rounded()),
+                Int((color.blueComponent * 255).rounded()),
+                Int((color.alphaComponent * 255).rounded()))
+    }
+
+    private func boxDescription(_ box: CGRect?) -> String {
+        guard let box else { return "none" }
+        return String(format: "(%.0f,%.0f)-(%.0f,%.0f)",
+                      box.minX, box.minY, box.maxX, box.maxY)
     }
 }
 

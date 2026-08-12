@@ -1141,6 +1141,11 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   **一段时间里她的脸出现过多少种不同的样子**——把每档的表情压成一句描述
   再统计。现在 600 档里有 16 种，最高频的一种占 21.7%。
   统计要多采几百档，28 格那张图样本太少，换个墙钟结论就晃
+- **专注完成反馈**：`--celebrationstrip out.png`。五列是 before/rise/peak/fall/after，
+  行覆盖 day/night、drowsy、speaking、close-up；报告要求 amount=0 的 before/after
+  显著像素差为 0（跨列 Canvas 量化噪声 ≤6/255）、峰值变化只落在脸贴片和真实侧屏
+  polygon，outsideAllowed/outsideScreen 都为 0，并跑 speaking 口型、1.80 秒包络和
+  故意关闭 clip 的越界负向 probe。
 - **键盘和手对不对**：`--handstrip out.png`。它**连房间和桌子一起画**，
   因为这一层的意义就是"盖在桌面层上面"，只画一层手看不出层序对没对。
   同时报"手在动的时间占比"（专注 55%、平时 10%）。
@@ -1241,6 +1246,10 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   每档切换用 2.4 秒 smoothstep，屏幕内容交叉过渡；任意时刻切番茄阶段或音乐
   播放状态会先冻结屏幕此刻的完整混合 cue 再过渡。2.4 秒内连续 skip/
   toggle 也不会回跳到某个离散枚举状态；判据同时覆盖 58 秒槽内切换和连续二次切换
+- **专注完成短反馈**：`FocusTimer` 只有自然结束 `work` 才调用现有
+  `AppState.lastCelebration`；`celebrationAmount(at:)` 用共享时间线做 1.80 秒纯包络，
+  在普通/困倦/托腮注意力之上叠克制笑眼笑嘴，真实说话口型随后接管嘴部；侧屏勾形
+  严格画在既有屏幕 clip 内，amount=0 不画。skip、手动切换和短休息结束不触发。
 - 场景里的键盘是 **3D 建的**（`Blender/keyboard.py`），斜着放；
   重绘图里画的那块已抹掉。桌板也在 3D 里，只当遮挡用
 - 底部控制条鼠标靠近才浮出
@@ -1717,6 +1726,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip-negative
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitystrip /tmp/activity.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --celebrationstrip /tmp/celebration.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --memorycheck
 
 # 对话接得通不通（报耗时，并卡"装不装得进气泡"）

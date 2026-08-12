@@ -64,7 +64,8 @@ enum FaceRig {
 
     static func expression(t: Double, playing: Bool, mood: Double,
                            drowsy: Double, working: Bool,
-                           speaking: Bool, activity: ActivityCue? = nil) -> FaceExpression {
+                           speaking: Bool, activity: ActivityCue? = nil,
+                           celebration: Double = 0) -> FaceExpression {
         var e = FaceExpression()
         let sleepy = clamp(drowsy, 0, 1)
 
@@ -105,6 +106,23 @@ enum FaceRig {
             e.mouthSmile *= (1 - sleepy * 0.7)
             e.lookX *= (1 - sleepy)
             e.lookY *= (1 - sleepy)
+        }
+
+        // ── 专注完成的短反馈 ──
+        //
+        // 这是一次很轻的“我看见你做完了”的表情，不是把 mood 变成另一张
+        // 常驻脸。它放在困倦之后，所以完成瞬间即使她原本有点困也能读到；
+        // 说话口型紧接着在下面叠加，嘴笑会让位给真实的开合。庆祝是
+        // 眼型优先级的主角：其它眼型保留一小段连续的残影，但绝不会盖过
+        // eyeSmile；峰值时它们为零，避免“困眼+笑眼”两张贴片互相打架。
+        let celebrationWeight = clamp(celebration, 0, 1)
+        if celebrationWeight > 0 {
+            e.eyeSmile = max(e.eyeSmile, 0.58 * celebrationWeight)
+            let competingLimit = e.eyeSmile * (1 - 0.58 * celebrationWeight)
+            e.eyeSoft = min(e.eyeSoft * (1 - celebrationWeight), competingLimit)
+            e.eyeWide = min(e.eyeWide * (1 - celebrationWeight), competingLimit)
+            e.eyeSad = min(e.eyeSad * (1 - celebrationWeight), competingLimit)
+            e.mouthSmile = max(e.mouthSmile, 0.38 * celebrationWeight)
         }
 
         // ── 说话时嘴动起来 ──

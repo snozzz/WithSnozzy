@@ -62,6 +62,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runActivityStrip(path: path)
             return
         }
+        if let path = Snapshot.celebrationStripPath {
+            Snapshot.runCelebrationStrip(path: path)
+            return
+        }
         if MemoryStore.selfTestRequested {
             exit(MemoryStore.selfCheck() ? 0 : 1)
         }

@@ -110,19 +110,58 @@ final class AppState {
     /// 刚完成一段专注的时刻。Snozzy 的心情会短暂地高涨一阵。
     private var lastCelebration: Date?
 
+    /// 完成反馈的短视觉包络。它和下面 mood 的 100 秒提升是两条不同的时间线：
+    /// 心情慢慢退，画面只在刚完成时轻轻亮一下。
+    static let celebrationDuration: TimeInterval = 1.8
+    private static let celebrationRise: TimeInterval = 0.30
+    private static let celebrationDwell: TimeInterval = 0.48
+
+    /// 由完成时刻推导短反馈，不持有新的定时器或动画状态。
+    /// `t` 必须是共享 `TimelineView` 的 reference-date 时间戳。
+    func celebrationAmount(at t: TimeInterval) -> Double {
+        Self.celebrationAmount(since: lastCelebration?.timeIntervalSinceReferenceDate,
+                               at: t)
+    }
+
+    /// 同一套纯计算也供离线生产快照使用；快照传入的起点仍代表真实
+    /// `lastCelebration`，没有另造一套视觉动画。
+    static func celebrationAmount(since start: TimeInterval?, at t: TimeInterval) -> Double {
+        guard let start else { return 0 }
+        let elapsed = t - start
+        guard elapsed >= 0, elapsed < celebrationDuration else { return 0 }
+        if elapsed < celebrationRise {
+            return smoothstep(elapsed / celebrationRise)
+        }
+        let fallStart = celebrationRise + celebrationDwell
+        guard elapsed < fallStart else {
+            return 1 - smoothstep((elapsed - fallStart)
+                                   / (celebrationDuration - fallStart))
+        }
+        return 1
+    }
+
+    /// Mood boost keeps its original 100-second lifetime, but a clock moving
+    /// backwards must not turn a future celebration into a fresh full boost.
+    static func celebrationMoodBoost(since start: TimeInterval?, at t: TimeInterval) -> Double {
+        guard let start else { return 0 }
+        let elapsed = t - start
+        guard elapsed >= 0, elapsed < 100 else { return 0 }
+        return 1 - elapsed / 100
+    }
+
     /// Snozzy 的心情 0…1。
     ///
     /// 由「今天专注了多久」打底，完成一段番茄钟后叠加一段会衰减的兴奋值。
     /// 这个值每帧都会被读到，所以刻意做成纯计算——不需要额外的定时器去驱动衰减。
     var mood: Double {
         let base = 0.40 + min(Double(focus.todayMinutes) / 180.0, 0.26)
-        guard let t = lastCelebration else { return base }
-        let elapsed = Date().timeIntervalSince(t)
-        let boost = elapsed < 100 ? (1 - elapsed / 100) : 0
+        let boost = Self.celebrationMoodBoost(
+            since: lastCelebration?.timeIntervalSinceReferenceDate,
+            at: Date().timeIntervalSinceReferenceDate)
         return min(1.0, base + boost * 0.42)
     }
 
-    func celebrate() { lastCelebration = Date() }
+    func celebrate(at date: Date = Date()) { lastCelebration = date }
 
     /// 换 Live2D 模型。路径必须是绝对的。
     func setLive2DModel(path: String) {

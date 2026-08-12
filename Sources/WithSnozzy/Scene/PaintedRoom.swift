@@ -116,6 +116,12 @@ struct PaintedRoomActivityOverlay: View {
     /// 保留快照调用接口；播放器实际动画强度只读 cue.playerMotion。
     let playing: Bool
     let t: Double
+    /// 专注段自然完成的短反馈；0 时不创建任何额外笔画。
+    var celebration: Double = 0
+    /// 快照负向探针：故意绕过屏幕 clip，证明报告能抓到越界。
+    var celebrationClipDisabled = false
+    /// 快照负向探针：把反馈平移到错误位置；生产始终为零。
+    var celebrationOffset: CGSize = .zero
 
     var body: some View {
         GeometryReader { geo in
@@ -143,7 +149,9 @@ struct PaintedRoomActivityOverlay: View {
         guard level > 0.01 else { return }
 
         ctx.drawLayer { layer in
-            layer.clip(to: screen)
+            if !celebrationClipDisabled {
+                layer.clip(to: screen)
+            }
             layer.blendMode = .plusLighter
             // 一张捕获自半途过渡的 cue 可能同时带着三种以上内容；逐项按权重
             // 叠加，连续 skip/toggle 才不会退回单一枚举画面。
@@ -157,7 +165,42 @@ struct PaintedRoomActivityOverlay: View {
             let scan = 0.370 + (t * 0.009).truncatingRemainder(dividingBy: 0.145)
             layer.fill(Path(rect(0.166, scan, 0.085, 0.002, size)),
                        with: .color(.white.opacity(0.055 * level)))
+
+            // 反馈必须留在真实屏幕 clip 内；amount=0 时严格不绘制，
+            // 因而完成前后和旧 Activity 画面逐像素相同。
+            drawCelebration(&layer, size)
         }
+    }
+
+    private func drawCelebration(_ ctx: inout GraphicsContext, _ size: CGSize) {
+        let amount = clamp(celebration, 0, 1)
+        guard amount > 0 else { return }
+
+        let center = CGPoint(x: 0.210 * size.width + celebrationOffset.width,
+                             y: 0.437 * size.height + celebrationOffset.height)
+        let radius = min(size.width, size.height) * 0.026
+        let ringRect = CGRect(x: center.x - radius, y: center.y - radius,
+                              width: radius * 2, height: radius * 2)
+        var ring = Path()
+        ring.addEllipse(in: ringRect)
+        ctx.stroke(ring,
+                   with: .color(Palette.neonWarm.lighter(0.45)
+                       .color(0.36 * amount)),
+                   style: .init(lineWidth: max(1, size.width * 0.0018),
+                                lineCap: .round))
+
+        // 小勾只占屏幕中部的一小块，不覆盖原画的边框和 Snozzy 的视线落点。
+        var check = Path()
+        check.move(to: CGPoint(x: center.x - radius * 0.48,
+                               y: center.y + radius * 0.02))
+        check.addLine(to: CGPoint(x: center.x - radius * 0.08,
+                                  y: center.y + radius * 0.42))
+        check.addLine(to: CGPoint(x: center.x + radius * 0.62,
+                                  y: center.y - radius * 0.42))
+        ctx.stroke(check,
+                   with: .color(.white.opacity(0.60 * amount)),
+                   style: .init(lineWidth: max(1, size.width * 0.0022),
+                                lineCap: .round, lineJoin: .round))
     }
 
     private func drawScreenMode(_ activity: SnozzyActivity,

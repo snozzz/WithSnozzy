@@ -155,6 +155,7 @@ private struct SceneStack: View {
                 // 所以能合并的动画层一定要合并——这比优化绘制本身有效得多。
                 TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in
                     let t = tl.date.timeIntervalSinceReferenceDate
+                    let celebration = state.celebrationAmount(at: t)
                     let activity = ActivityRig.cue(
                         at: t, phase: state.focus.phase, playing: state.isPlaying,
                         transitionFrom: state.activityTransitionFrom,
@@ -180,7 +181,8 @@ private struct SceneStack: View {
                                                drowsy: state.drowsy,
                                                working: state.focus.phase == .work,
                                                speaking: state.sheIsTalking,
-                                               activity: faceActivity),
+                                               activity: faceActivity,
+                                               celebration: celebration),
                                            headphones: state.isPlaying,
                                            chinFrame: state.closeUp.chinFrame,
                                            t: t)
@@ -212,7 +214,8 @@ private struct SceneStack: View {
                         if state.sceneAssets.isAvailable {
                             PaintedRoomActivityOverlay(assets: state.sceneAssets,
                                                        cue: activity, palette: palette,
-                                                       playing: state.isPlaying, t: t)
+                                                       playing: state.isPlaying, t: t,
+                                                       celebration: celebration)
                         }
 
                         // 3.5 敲键盘的手。**必须画在桌面层之后**——
