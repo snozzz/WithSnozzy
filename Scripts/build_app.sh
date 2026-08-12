@@ -20,6 +20,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+# PkgInfo 的前四字节是旧式 bundle 类型标记，保留 macOS 应用包的约定格式。
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # release 构建剥掉本地符号，能省掉一大截体积。
