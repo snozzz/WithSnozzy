@@ -35,6 +35,31 @@ if [ -d "$ROOT/Assets" ] && [ -n "$(ls -A "$ROOT/Assets" 2>/dev/null)" ]; then
   echo "▸ 已打包手绘素材 ($(ls "$ROOT/Assets" | wc -l | tr -d ' ') 个文件)"
 fi
 
+# Three.js Phase 0 is a self-contained local WKWebView bundle. Keep its HTML,
+# fixed vendor modules, GLB, and manifest together so the harness never needs
+# a server or a CDN at runtime. The author .blend remains a repository asset,
+# not a runtime dependency.
+PHASE0_RES="$APP/Contents/Resources/ThreePhase0"
+if [ -f "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.html" ] \
+  && [ -f "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.js" ] \
+  && [ -f "$ROOT/Assets/Realtime3D/Phase0Runtime.glb" ] \
+  && [ -f "$ROOT/Assets/Realtime3D/Phase0Manifest.json" ]; then
+  mkdir -p "$PHASE0_RES/vendor/examples/jsm/loaders" "$PHASE0_RES/vendor/examples/jsm/utils"
+  cp "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.html" "$PHASE0_RES/phase0.html"
+  cp "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.js" "$PHASE0_RES/phase0.js"
+  cp "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.bundle.js" "$PHASE0_RES/phase0.bundle.js"
+  cp "$ROOT/Vendor/ThreeJS/three.module.min.js" "$PHASE0_RES/vendor/three.module.min.js"
+  cp "$ROOT/Vendor/ThreeJS/three.core.min.js" "$PHASE0_RES/vendor/three.core.min.js"
+  cp "$ROOT/Vendor/ThreeJS/examples/jsm/loaders/GLTFLoader.js" \
+     "$PHASE0_RES/vendor/examples/jsm/loaders/GLTFLoader.js"
+  cp "$ROOT/Vendor/ThreeJS/examples/jsm/utils/BufferGeometryUtils.js" \
+     "$PHASE0_RES/vendor/examples/jsm/utils/BufferGeometryUtils.js"
+  cp "$ROOT/Vendor/ThreeJS/LICENSE" "$ROOT/Vendor/ThreeJS/VERSION.json" "$PHASE0_RES/vendor/"
+  cp "$ROOT/Assets/Realtime3D/Phase0Runtime.glb" "$PHASE0_RES/Phase0Runtime.glb"
+  cp "$ROOT/Assets/Realtime3D/Phase0Manifest.json" "$PHASE0_RES/Phase0Manifest.json"
+  echo "▸ Three.js Phase 0 资源已打包"
+fi
+
 # 图标。
 #
 # 由刚编出来的二进制自己画：`--icon` 会用和游戏里同一套渲染代码输出全套尺寸。

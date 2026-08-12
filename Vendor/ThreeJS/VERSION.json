@@ -1,0 +1,21 @@
+{
+  "library": "three",
+  "version": "0.179.1",
+  "source": "https://registry.npmjs.org/three/-/three-0.179.1.tgz",
+  "license": "MIT",
+  "files": [
+    "three.module.min.js",
+    "three.core.min.js",
+    "examples/jsm/loaders/GLTFLoader.js",
+    "examples/jsm/utils/BufferGeometryUtils.js",
+    "LICENSE",
+    "VERSION.json"
+  ],
+  "sha256": {
+    "three.module.min.js": "06552c54e4071fbc7305117aafe6765d92c5d2a2a83507d4f05b9bf4f3d4d463",
+    "three.core.min.js": "79f2b4f58d3e99a9948a4d3b7f6d5c2daf705bdefe9fb82ebec715623966551c",
+    "examples/jsm/loaders/GLTFLoader.js": "caba6c51cfd8c7d5313bd7705a54b76bc0a7199d9822ecc497c5311eaffe8e5e",
+    "examples/jsm/utils/BufferGeometryUtils.js": "cbcfe1864abedcc0122cb893373918fe14469491717a34ca6efcc38551805765",
+    "LICENSE": "bfe119ea4fd413f5f7ca3fcd63adb0c4a073ed39daa2fe7d3e6b769e21272601"
+  }
+}

@@ -125,7 +125,7 @@ def envelope(arm, side, meshes, stations, frame, tag, inner=True):
     return env
 
 
-def build(arm, side, material=None, meshes=None):
+def build(arm, side, material=None, meshes=None, hand_bind=False):
     """在静置姿势下建好这一侧的小臂袖，并绑到骨架上。
 
     **建在静置姿势、靠蒙皮跟着走**，不是摆完姿势再照着摆好的胳膊建。
@@ -155,6 +155,14 @@ def build(arm, side, material=None, meshes=None):
     skin = envelope(arm, side, meshes, stations, frame, "_SKIN", inner=False)
 
     verts, faces, weights, angles = [], [], [], []
+    # `centre` and the radial basis are measured in world space so the sleeve
+    # can be fitted against the evaluated VRoid mesh.  The armature modifier,
+    # however, consumes bind vertices in armature-object space.  The imported
+    # armature is usually identity-transformed, which used to hide this
+    # distinction; a later scene translation then exposed it as a large sleeve
+    # offset.  Convert once at the authoring boundary instead of compensating
+    # in a renderer.
+    armature_from_world = arm.matrix_world.inverted()
     for si, (t, r) in enumerate(stations):
         centre = sh + axis * (t * span)
         for j in range(SEGS):
@@ -172,10 +180,16 @@ def build(arm, side, material=None, meshes=None):
                 meat = [skin[k] for k in keys if k in skin]
                 if meat:
                     rr = max(rr, max(meat) + SKIN_GAP)
-            verts.append(centre + (u * math.cos(a) + v * math.sin(a)) * rr)
+            world_point = centre + (u * math.cos(a) + v * math.sin(a)) * rr
+            verts.append(armature_from_world @ world_point)
             angles.append(a)
             # 起点那头由大臂和小臂各分一半，往前一小段之内过渡完
-            weights.append(_smooth((t - T0) / 0.10))
+            lower_w = _smooth((t - T0) / 0.10)
+            hand_w = _smooth((t - 0.92) / 0.12) if hand_bind else 0.0
+            hand_w = min(hand_w, lower_w)
+            lower_w *= 1.0 - hand_w
+            upper_w = max(0.0, 1.0 - lower_w - hand_w)
+            weights.append((upper_w, lower_w, hand_w))
 
     for i in range(len(stations) - 1):
         for j in range(SEGS):
@@ -210,23 +224,29 @@ def build(arm, side, material=None, meshes=None):
 
     lower = obj.vertex_groups.new(name=f"J_Bip_{side}_LowerArm")
     upper = obj.vertex_groups.new(name=f"J_Bip_{side}_UpperArm")
-    for i, w in enumerate(weights):
-        lower.add([i], w, 'REPLACE')
-        upper.add([i], 1 - w, 'REPLACE')
+    hand = obj.vertex_groups.new(name=f"J_Bip_{side}_Hand") if hand_bind else None
+    for i, (upper_w, lower_w, hand_w) in enumerate(weights):
+        lower.add([i], lower_w, 'REPLACE')
+        upper.add([i], upper_w, 'REPLACE')
+        if hand is not None:
+            hand.add([i], hand_w, 'REPLACE')
+    # Keep the generated object under the armature.  Its vertices are now in
+    # the armature's bind space, so object/armature transforms remain coherent
+    # when the scene later moves the armature under Phase0Root.
     obj.parent = arm
     m = obj.modifiers.new("Armature", 'ARMATURE')
     m.object = arm
     return obj
 
 
-def build_both(arm, meshes=None):
+def build_both(arm, meshes=None, hand_bind=False):
     """两侧一起建。
 
     **要在 `slim_sleeves` 之后调**：内袖的半径是照着收完之后的广袖内壁量的。
     UV 那一份不受影响——取样区间在上臂（肩→腕轴 32%…44%），
     `slim_sleeves` 只动肘以下。
     """
-    return [build(arm, side, sleeve_ring(arm, meshes, side), meshes)
+    return [build(arm, side, sleeve_ring(arm, meshes, side), meshes, hand_bind=hand_bind)
             for side in ("L", "R")]
 
 

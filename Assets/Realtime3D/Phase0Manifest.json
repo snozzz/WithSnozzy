@@ -1,0 +1,878 @@
+{
+  "schema": "withsnozzy.realtime3d.phase0",
+  "schemaVersion": 1,
+  "generator": {
+    "blenderVersion": "5.2.0 LTS",
+    "script": "Blender/phase0_export.py",
+    "fps": 24
+  },
+  "coordinateSystem": {
+    "root": "Phase0Root",
+    "upAxis": "Z",
+    "forwardAxis": "-Y",
+    "metersPerUnit": 1.0,
+    "rootScale": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "spaceContract": {
+    "sleeves": "armature-local-bind",
+    "runtimeRootTranslation": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "runtimeRootScale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "forbidRendererOffsets": true
+  },
+  "source": {
+    "path": "Snozzy.vrm",
+    "sha256": "1bbb462493e9c300de41a9403ada0f02694bc2b2c4532a56a92ad0bc457c1f3f"
+  },
+  "assets": {
+    "glb": {
+      "path": "Assets/Realtime3D/Phase0Runtime.glb",
+      "bytes": 7523580,
+      "sha256": "63be42f23e437364f5f732a777aa933b6ef7cd1ffa6133f04c66093da69eb4a7",
+      "format": "glTF 2.0 binary"
+    },
+    "authorBlend": {
+      "path": "Assets/Realtime3D/Phase0Author.blend",
+      "bytes": 5347237,
+      "sha256": "79a37bebc196cb5fd3345e0aa0e2a7bb78fda9813bbba8497e2fab9898172e6a"
+    }
+  },
+  "counts": {
+    "boneCount": 222,
+    "runtimeBoneCount": 222,
+    "characterMeshCount": 5,
+    "meshCount": 12,
+    "meshes": [
+      {
+        "name": "Body",
+        "vertices": 11200,
+        "polygons": 17609,
+        "triangles": 17609,
+        "materials": 11,
+        "morphs": 0
+      },
+      {
+        "name": "Face",
+        "vertices": 4264,
+        "polygons": 7369,
+        "triangles": 7369,
+        "materials": 8,
+        "morphs": 57
+      },
+      {
+        "name": "Hair",
+        "vertices": 22254,
+        "polygons": 27898,
+        "triangles": 27898,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Keyboard",
+        "vertices": 576,
+        "polygons": 432,
+        "triangles": 864,
+        "materials": 3,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_ChairBack",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_ChairSeat",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskLeg_0",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskLeg_1",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskOcclusionSlab",
+        "vertices": 4,
+        "polygons": 1,
+        "triangles": 2,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskTop",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Sleeve_L",
+        "vertices": 360,
+        "polygons": 336,
+        "triangles": 672,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Sleeve_R",
+        "vertices": 360,
+        "polygons": 336,
+        "triangles": 672,
+        "materials": 1,
+        "morphs": 0
+      }
+    ],
+    "characterMaterialCount": 20,
+    "materialCount": 26,
+    "characterTriangleCount": 54220,
+    "triangleCount": 55146,
+    "morphTargetCount": 57,
+    "alphaMaterialCount": 5
+  },
+  "materials": [
+    {
+      "name": "Accessory_FoxTail_01_CLOTH (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "KbdBase",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    },
+    {
+      "name": "KbdKey",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    },
+    {
+      "name": "N00_000_00_Body_00_SKIN (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_EyeHighlight_00_EYE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_EyeIris_00_EYE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_EyeWhite_00_EYE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_Face_00_SKIN (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_FaceBrow_00_FACE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": true,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_FaceEyelash_00_FACE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": true,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_FaceEyeline_00_FACE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": true,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_FaceMouth_00_FACE (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_00_HairBack_00_HAIR (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": true,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_000_Hair_00_HAIR (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": true,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_002_03_Tops_01_CLOTH_01 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_002_03_Tops_01_CLOTH_02 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_002_03_Tops_01_CLOTH_03 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_007_01_Tops_01_CLOTH_01 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_007_01_Tops_01_CLOTH_02 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_007_01_Tops_01_CLOTH_03 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_008_01_Shoes_01_CLOTH_01 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "N00_008_01_Shoes_01_CLOTH_02 (Instance)",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "image_color",
+      "alphaBinding": "image_alpha"
+    },
+    {
+      "name": "Outline",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    },
+    {
+      "name": "Phase0Chair",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    },
+    {
+      "name": "Phase0DeskEdge",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    },
+    {
+      "name": "Phase0DeskWarm",
+      "alphaMode": "DITHERED",
+      "isHairOrEyelash": false,
+      "toonReady": true,
+      "gltfMaterial": true,
+      "diffuseBinding": "constant",
+      "alphaBinding": "constant"
+    }
+  ],
+  "textures": [
+    {
+      "name": "_12",
+      "sourceWidth": 512,
+      "sourceHeight": 512,
+      "exportWidth": 512,
+      "exportHeight": 512,
+      "limit": 1024,
+      "sourceHash": "4184d1eeb363d6cb57ce94d5ed0c1e58409dedb8c199622e3aca1798dfd6afed",
+      "exportHash": "4184d1eeb363d6cb57ce94d5ed0c1e58409dedb8c199622e3aca1798dfd6afed"
+    },
+    {
+      "name": "_10",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "7d7b25c8645250867f6431ca7da28e640498718ca287ce1b557fb53e7c14dea3",
+      "exportHash": "a93aca0bc6ee20907e045c7c39317522a0060f59fe37d3ad4cdd8e6ae5ab71f4"
+    },
+    {
+      "name": "_03",
+      "sourceWidth": 1024,
+      "sourceHeight": 512,
+      "exportWidth": 1024,
+      "exportHeight": 512,
+      "limit": 2048,
+      "sourceHash": "b2d0d8dafb9b00348baa1e2ebcfdd0bf958d0694e99901dcf1ba6b6137265a4f",
+      "exportHash": "b2d0d8dafb9b00348baa1e2ebcfdd0bf958d0694e99901dcf1ba6b6137265a4f"
+    },
+    {
+      "name": "_02",
+      "sourceWidth": 1024,
+      "sourceHeight": 512,
+      "exportWidth": 1024,
+      "exportHeight": 512,
+      "limit": 2048,
+      "sourceHash": "0a7a3a1b35a1c1f0dea8569bfffb14ea522783f55958610c279d407049123f4b",
+      "exportHash": "0a7a3a1b35a1c1f0dea8569bfffb14ea522783f55958610c279d407049123f4b"
+    },
+    {
+      "name": "_06",
+      "sourceWidth": 1024,
+      "sourceHeight": 512,
+      "exportWidth": 1024,
+      "exportHeight": 512,
+      "limit": 2048,
+      "sourceHash": "f6e36c61ae471d22d744af8fc9c8894d879ce3608b1eebc1f6a4a6c79458f8dd",
+      "exportHash": "f6e36c61ae471d22d744af8fc9c8894d879ce3608b1eebc1f6a4a6c79458f8dd"
+    },
+    {
+      "name": "_04",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 2048,
+      "sourceHash": "2fab179a9437dd68b163abea7f8f7770ee413b148d4383f78137d19305b2f9e8",
+      "exportHash": "2fab179a9437dd68b163abea7f8f7770ee413b148d4383f78137d19305b2f9e8"
+    },
+    {
+      "name": "_07",
+      "sourceWidth": 1024,
+      "sourceHeight": 256,
+      "exportWidth": 1024,
+      "exportHeight": 256,
+      "limit": 2048,
+      "sourceHash": "a78bc8af57b0717256777b26483e706ea3a198e919d0ee56e36d535a8d64398e",
+      "exportHash": "a78bc8af57b0717256777b26483e706ea3a198e919d0ee56e36d535a8d64398e"
+    },
+    {
+      "name": "_08",
+      "sourceWidth": 1024,
+      "sourceHeight": 256,
+      "exportWidth": 1024,
+      "exportHeight": 256,
+      "limit": 2048,
+      "sourceHash": "1b096a746b0eb9d3e4cf8e23d732d207cac80b83ece782df0908518f1c3b4382",
+      "exportHash": "1b096a746b0eb9d3e4cf8e23d732d207cac80b83ece782df0908518f1c3b4382"
+    },
+    {
+      "name": "_09",
+      "sourceWidth": 1024,
+      "sourceHeight": 256,
+      "exportWidth": 1024,
+      "exportHeight": 256,
+      "limit": 2048,
+      "sourceHash": "b8389cfee14348ecce3c375f15579d1b052d1e58b57f5f519e83f15da2b1bafb",
+      "exportHash": "b8389cfee14348ecce3c375f15579d1b052d1e58b57f5f519e83f15da2b1bafb"
+    },
+    {
+      "name": "_01",
+      "sourceWidth": 512,
+      "sourceHeight": 512,
+      "exportWidth": 512,
+      "exportHeight": 512,
+      "limit": 2048,
+      "sourceHash": "272ea4e6ea9b6e24acb61b4614f8f33d1ad97f59083dd24514c70ad88901bb6c",
+      "exportHash": "272ea4e6ea9b6e24acb61b4614f8f33d1ad97f59083dd24514c70ad88901bb6c"
+    },
+    {
+      "name": "_13",
+      "sourceWidth": 1024,
+      "sourceHeight": 1024,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 2048,
+      "sourceHash": "68c1a1a54724e48c31ebf5d3292591336f0479b26c8f845bf2a543e4b84ac2c5",
+      "exportHash": "68c1a1a54724e48c31ebf5d3292591336f0479b26c8f845bf2a543e4b84ac2c5"
+    },
+    {
+      "name": "_22",
+      "sourceWidth": 512,
+      "sourceHeight": 1024,
+      "exportWidth": 512,
+      "exportHeight": 1024,
+      "limit": 2048,
+      "sourceHash": "ce934a7bd48565494da47c0143a01ad4eb548cc0ec3c93436c509f70ca24c3cd",
+      "exportHash": "ce934a7bd48565494da47c0143a01ad4eb548cc0ec3c93436c509f70ca24c3cd"
+    },
+    {
+      "name": "_17",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "602fe5a137507bc2fbe72dc3125f19751fd9f506a7c700026a0043b5b4fde98e",
+      "exportHash": "8f0796679e0ae6219a2eb4407b8f02a4c2afb90d667eb74b16bf3421c933b7bf"
+    },
+    {
+      "name": "_18",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "fd57a26481c49433aa127f47c7d1c18b9cd6d7f8789d7404af80a1981db15359",
+      "exportHash": "67caf2520f7d8662919ede423c5e77950d75d81488f8b89f2f4c28046b0affb7"
+    },
+    {
+      "name": "_19",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "f88e10ff677c4c8f6c149396f847a3675c1823023d8b000dd699ca88bd121f4d",
+      "exportHash": "99307cd4dbf3160bde6577936fd1a753895ff5b77f70c1d6e62293e69b2f9d7d"
+    },
+    {
+      "name": "_14",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "a40b932155e5592d158e294e77525b34ab386a7f9f26e5d6a3c7f69011390d78",
+      "exportHash": "5dbe8f1477204810fad5069c82c1473c58ae7cf581d8f02264d4b9f59d2127ff"
+    },
+    {
+      "name": "_15",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "ddd89912a29ae061cfbb89b19218a23c6b8eed5a5bec5b618133187d7715c533",
+      "exportHash": "6eb22d3889dca59d5fbb8d28540dca2f637cee0e1a90d7c4e75e1ca6f266f94a"
+    },
+    {
+      "name": "_16",
+      "sourceWidth": 2048,
+      "sourceHeight": 2048,
+      "exportWidth": 1024,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "e0e0de928568f17c5f6e8fe792f9d70cfcc6204c63faa338c30fcd398c95ea7d",
+      "exportHash": "b702e8f74c53b1c2ca46a25000459483fcf3f9a6965f6b085603a4142320efe0"
+    },
+    {
+      "name": "_20",
+      "sourceWidth": 512,
+      "sourceHeight": 1024,
+      "exportWidth": 512,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "2c1fde5a8bf8c14c448d5cc944c2e173741f6bcf39d1ce60145c94dfd554f1c8",
+      "exportHash": "2c1fde5a8bf8c14c448d5cc944c2e173741f6bcf39d1ce60145c94dfd554f1c8"
+    },
+    {
+      "name": "_21",
+      "sourceWidth": 512,
+      "sourceHeight": 1024,
+      "exportWidth": 512,
+      "exportHeight": 1024,
+      "limit": 1024,
+      "sourceHash": "2d744b22b87e86980689b3bf2df3b9703b6c96f8a507c57b496bc5b0fe3efe80",
+      "exportHash": "2d744b22b87e86980689b3bf2df3b9703b6c96f8a507c57b496bc5b0fe3efe80"
+    }
+  ],
+  "bounds": {
+    "min": [
+      -1.6,
+      -0.84,
+      -0.143799
+    ],
+    "max": [
+      1.6,
+      0.719734,
+      1.167102
+    ],
+    "size": [
+      3.2,
+      1.559734,
+      1.310901
+    ],
+    "rootHeightMeters": 1.310901,
+    "character": {
+      "min": [
+        -0.245429,
+        -0.504622,
+        -0.143799
+      ],
+      "max": [
+        0.245429,
+        0.719734,
+        1.167102
+      ],
+      "size": [
+        0.490858,
+        1.224355,
+        1.310901
+      ]
+    },
+    "glbAccessor": {
+      "min": [
+        -1.6,
+        -0.84,
+        -1.095451
+      ],
+      "max": [
+        1.6,
+        0.719734,
+        1.13
+      ],
+      "size": [
+        3.2,
+        1.559734,
+        2.225451
+      ],
+      "space": "gltf-node-world-before-skin"
+    }
+  },
+  "clips": [
+    {
+      "name": "idle_seated_loop",
+      "startFrame": 0,
+      "endFrame": 48,
+      "rangeSemantics": "inclusive-sample-frame",
+      "runtimeTrimFrames": [
+        0,
+        49
+      ],
+      "sampleRate": 24,
+      "durationSeconds": 2.0,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3"
+      ],
+      "loopPoseMaxError": 2.980232238769531e-07,
+      "features": [
+        "breathing",
+        "head_micro_motion",
+        "seated_pose"
+      ]
+    },
+    {
+      "name": "typing_loop",
+      "startFrame": 48,
+      "endFrame": 96,
+      "rangeSemantics": "inclusive-sample-frame",
+      "runtimeTrimFrames": [
+        48,
+        97
+      ],
+      "sampleRate": 24,
+      "durationSeconds": 2.0,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3"
+      ],
+      "loopPoseMaxError": 0.0,
+      "features": [
+        "alternating_arms",
+        "finger_curl",
+        "breathing",
+        "head_micro_motion"
+      ],
+      "fingerTipsKeyboardLocalAtStart": {
+        "L": [
+          [
+            0.079744,
+            -0.00671,
+            0.01477
+          ],
+          [
+            0.097906,
+            -0.017722,
+            0.017443
+          ],
+          [
+            0.106506,
+            -0.016888,
+            0.029849
+          ],
+          [
+            0.116236,
+            -0.011627,
+            0.042871
+          ]
+        ],
+        "R": [
+          [
+            -0.040828,
+            0.004763,
+            0.013618
+          ],
+          [
+            -0.049178,
+            -0.01365,
+            0.020654
+          ],
+          [
+            -0.053884,
+            -0.015878,
+            0.034847
+          ],
+          [
+            -0.061739,
+            -0.014873,
+            0.049987
+          ]
+        ]
+      }
+    }
+  ],
+  "crossfade": {
+    "durationSeconds": 0.3,
+    "contract": "trimmed AnimationView resources overlap at frame 48; blendFactor 0→1",
+    "overlapFrame": 48,
+    "requiresLoopingResources": true
+  },
+  "blocking": {
+    "deskSurfaceZ": 0.725,
+    "deskBackY": -0.168,
+    "deskFrontY": -0.794,
+    "keyboardWidth": 0.36,
+    "keyboardDepth": 0.135,
+    "chairSeatHeight": 0.48
+  },
+  "validation": {
+    "requiredNodeNames": [
+      "Phase0Root",
+      "Armature",
+      "Keyboard",
+      "Phase0_DeskTop",
+      "Phase0_ChairSeat"
+    ],
+    "requiredClipNames": [
+      "idle_seated_loop",
+      "typing_loop"
+    ],
+    "requiredMorphTargetCount": 57,
+    "requiredBoneCount": 222,
+    "requiredCharacterMaterialCount": 20,
+    "requiredAlphaMaterialTokens": [
+      "hair",
+      "eyelash",
+      "eyeline"
+    ],
+    "requiredScale": [
+      1.0,
+      1.0,
+      1.0
+    ],
+    "requiredSleeveBindSpace": "armature-local",
+    "maxAssetBytes": 1073741824
+  },
+  "diagnostics": {
+    "probeCommand": "dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --3dphase0 Assets/Realtime3D/Phase0Runtime.glb",
+    "probeScreenshot": "Assets/Realtime3D/phase0_three_idle.png",
+    "probeReport": "Assets/Realtime3D/phase0_three_report.json"
+  }
+}

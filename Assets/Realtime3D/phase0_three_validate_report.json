@@ -1,0 +1,1094 @@
+{
+  "status": "PASS",
+  "glb": "/Users/snoz/earn_sth/relax/Assets/Realtime3D/Phase0Runtime.glb",
+  "counts": {
+    "nodeCount": 289,
+    "meshCount": 12,
+    "triangleCount": 55146,
+    "boneCount": 222,
+    "skinCount": 1,
+    "morphTargetCount": 57,
+    "morphTargetNames": [
+      "Fcl_ALL_Angry",
+      "Fcl_ALL_Fun",
+      "Fcl_ALL_Joy",
+      "Fcl_ALL_Neutral",
+      "Fcl_ALL_Sorrow",
+      "Fcl_ALL_Surprised",
+      "Fcl_BRW_Angry",
+      "Fcl_BRW_Fun",
+      "Fcl_BRW_Joy",
+      "Fcl_BRW_Sorrow",
+      "Fcl_BRW_Surprised",
+      "Fcl_EYE_Angry",
+      "Fcl_EYE_Close",
+      "Fcl_EYE_Close_L",
+      "Fcl_EYE_Close_R",
+      "Fcl_EYE_Fun",
+      "Fcl_EYE_Highlight_Hide",
+      "Fcl_EYE_Iris_Hide",
+      "Fcl_EYE_Joy",
+      "Fcl_EYE_Joy_L",
+      "Fcl_EYE_Joy_R",
+      "Fcl_EYE_Natural",
+      "Fcl_EYE_Sorrow",
+      "Fcl_EYE_Spread",
+      "Fcl_EYE_Surprised",
+      "Fcl_HA_Fung1",
+      "Fcl_HA_Fung1_Low",
+      "Fcl_HA_Fung1_Up",
+      "Fcl_HA_Fung2",
+      "Fcl_HA_Fung2_Low",
+      "Fcl_HA_Fung2_Up",
+      "Fcl_HA_Fung3",
+      "Fcl_HA_Fung3_Low",
+      "Fcl_HA_Fung3_Up",
+      "Fcl_HA_Hide",
+      "Fcl_HA_Short",
+      "Fcl_HA_Short_Low",
+      "Fcl_HA_Short_Up",
+      "Fcl_MTH_A",
+      "Fcl_MTH_Angry",
+      "Fcl_MTH_Close",
+      "Fcl_MTH_Down",
+      "Fcl_MTH_E",
+      "Fcl_MTH_Fun",
+      "Fcl_MTH_I",
+      "Fcl_MTH_Joy",
+      "Fcl_MTH_Large",
+      "Fcl_MTH_Neutral",
+      "Fcl_MTH_O",
+      "Fcl_MTH_SkinFung",
+      "Fcl_MTH_SkinFung_L",
+      "Fcl_MTH_SkinFung_R",
+      "Fcl_MTH_Small",
+      "Fcl_MTH_Sorrow",
+      "Fcl_MTH_Surprised",
+      "Fcl_MTH_U",
+      "Fcl_MTH_Up"
+    ],
+    "materialCount": 25,
+    "alphaMaterialCount": 20,
+    "alphaMaterials": [
+      {
+        "name": "N00_000_00_Body_00_SKIN (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "Accessory_FoxTail_01_CLOTH (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_HairBack_00_HAIR (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_007_01_Tops_01_CLOTH_01 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_007_01_Tops_01_CLOTH_02 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_007_01_Tops_01_CLOTH_03 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_002_03_Tops_01_CLOTH_01 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_002_03_Tops_01_CLOTH_02 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_002_03_Tops_01_CLOTH_03 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_008_01_Shoes_01_CLOTH_01 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_008_01_Shoes_01_CLOTH_02 (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_FaceMouth_00_FACE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_EyeIris_00_EYE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_EyeHighlight_00_EYE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_Face_00_SKIN (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_EyeWhite_00_EYE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_FaceBrow_00_FACE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_FaceEyelash_00_FACE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_00_FaceEyeline_00_FACE (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      },
+      {
+        "name": "N00_000_Hair_00_HAIR (Instance)",
+        "alphaMode": "BLEND",
+        "alphaCutoff": null
+      }
+    ],
+    "meshRecords": [
+      {
+        "name": "Body (merged)",
+        "triangles": 17609,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Face (merged)",
+        "triangles": 7369,
+        "morphTargetCount": 57
+      },
+      {
+        "name": "Hair001 (merged)",
+        "triangles": 27898,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Sleeve_L",
+        "triangles": 672,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Sleeve_R",
+        "triangles": 672,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube.005",
+        "triangles": 864,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube.004",
+        "triangles": 12,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube.003",
+        "triangles": 12,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube.001",
+        "triangles": 12,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube.002",
+        "triangles": 12,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "DeskSlab",
+        "triangles": 2,
+        "morphTargetCount": 0
+      },
+      {
+        "name": "Cube",
+        "triangles": 12,
+        "morphTargetCount": 0
+      }
+    ],
+    "animations": [
+      {
+        "name": "Phase0_RuntimeMaster",
+        "durationSeconds": 4.0,
+        "trackCount": 666,
+        "boneTrackCount": 666
+      }
+    ],
+    "nodeNames": [
+      "Armature",
+      "Body",
+      "Face",
+      "Hair",
+      "J_Adj_L_FaceEye",
+      "J_Adj_R_FaceEye",
+      "J_Bip_C_Chest",
+      "J_Bip_C_Head",
+      "J_Bip_C_Hips",
+      "J_Bip_C_Neck",
+      "J_Bip_C_Spine",
+      "J_Bip_C_UpperChest",
+      "J_Bip_L_Foot",
+      "J_Bip_L_Hand",
+      "J_Bip_L_Index1",
+      "J_Bip_L_Index2",
+      "J_Bip_L_Index3",
+      "J_Bip_L_Little1",
+      "J_Bip_L_Little2",
+      "J_Bip_L_Little3",
+      "J_Bip_L_LowerArm",
+      "J_Bip_L_LowerLeg",
+      "J_Bip_L_Middle1",
+      "J_Bip_L_Middle2",
+      "J_Bip_L_Middle3",
+      "J_Bip_L_Ring1",
+      "J_Bip_L_Ring2",
+      "J_Bip_L_Ring3",
+      "J_Bip_L_Shoulder",
+      "J_Bip_L_Thumb1",
+      "J_Bip_L_Thumb2",
+      "J_Bip_L_Thumb3",
+      "J_Bip_L_ToeBase",
+      "J_Bip_L_UpperArm",
+      "J_Bip_L_UpperLeg",
+      "J_Bip_R_Foot",
+      "J_Bip_R_Hand",
+      "J_Bip_R_Index1",
+      "J_Bip_R_Index2",
+      "J_Bip_R_Index3",
+      "J_Bip_R_Little1",
+      "J_Bip_R_Little2",
+      "J_Bip_R_Little3",
+      "J_Bip_R_LowerArm",
+      "J_Bip_R_LowerLeg",
+      "J_Bip_R_Middle1",
+      "J_Bip_R_Middle2",
+      "J_Bip_R_Middle3",
+      "J_Bip_R_Ring1",
+      "J_Bip_R_Ring2",
+      "J_Bip_R_Ring3",
+      "J_Bip_R_Shoulder",
+      "J_Bip_R_Thumb1",
+      "J_Bip_R_Thumb2",
+      "J_Bip_R_Thumb3",
+      "J_Bip_R_ToeBase",
+      "J_Bip_R_UpperArm",
+      "J_Bip_R_UpperLeg",
+      "J_Opt_C_FoxTail1_01",
+      "J_Opt_C_FoxTail2_01",
+      "J_Opt_C_FoxTail3_01",
+      "J_Opt_C_FoxTail4_01",
+      "J_Opt_C_FoxTail5_01",
+      "J_Opt_C_FoxTail5_end_01",
+      "J_Opt_C_FoxTail5_end_01_end",
+      "J_Sec_Hair1_01",
+      "J_Sec_Hair1_02",
+      "J_Sec_Hair1_03",
+      "J_Sec_Hair1_04",
+      "J_Sec_Hair1_05",
+      "J_Sec_Hair1_06",
+      "J_Sec_Hair1_07",
+      "J_Sec_Hair1_08",
+      "J_Sec_Hair1_09",
+      "J_Sec_Hair1_10",
+      "J_Sec_Hair1_11",
+      "J_Sec_Hair1_12",
+      "J_Sec_Hair1_13",
+      "J_Sec_Hair1_14",
+      "J_Sec_Hair2_01",
+      "J_Sec_Hair2_02",
+      "J_Sec_Hair2_03",
+      "J_Sec_Hair2_04",
+      "J_Sec_Hair2_05",
+      "J_Sec_Hair2_06",
+      "J_Sec_Hair2_07",
+      "J_Sec_Hair2_07_end",
+      "J_Sec_Hair2_08",
+      "J_Sec_Hair2_09",
+      "J_Sec_Hair2_10",
+      "J_Sec_Hair2_10_end",
+      "J_Sec_Hair2_11",
+      "J_Sec_Hair2_12",
+      "J_Sec_Hair2_13",
+      "J_Sec_Hair2_14",
+      "J_Sec_Hair3_01",
+      "J_Sec_Hair3_01_end",
+      "J_Sec_Hair3_02",
+      "J_Sec_Hair3_02_end",
+      "J_Sec_Hair3_03",
+      "J_Sec_Hair3_03_end",
+      "J_Sec_Hair3_04",
+      "J_Sec_Hair3_04_end",
+      "J_Sec_Hair3_05",
+      "J_Sec_Hair3_05_end",
+      "J_Sec_Hair3_06",
+      "J_Sec_Hair3_06_end",
+      "J_Sec_Hair3_08",
+      "J_Sec_Hair3_08_end",
+      "J_Sec_Hair3_09",
+      "J_Sec_Hair3_09_end",
+      "J_Sec_Hair3_11",
+      "J_Sec_Hair3_11_end",
+      "J_Sec_Hair3_12",
+      "J_Sec_Hair3_12_end",
+      "J_Sec_Hair3_13",
+      "J_Sec_Hair3_14",
+      "J_Sec_Hair4_13",
+      "J_Sec_Hair4_13_end",
+      "J_Sec_Hair4_14",
+      "J_Sec_Hair5_14",
+      "J_Sec_Hair5_14_end",
+      "J_Sec_L_Bust1",
+      "J_Sec_L_Bust2",
+      "J_Sec_L_Bust2_end",
+      "J_Sec_L_CoatSkirtBack_01",
+      "J_Sec_L_CoatSkirtBack_02",
+      "J_Sec_L_CoatSkirtBack_03",
+      "J_Sec_L_CoatSkirtBack_end_01",
+      "J_Sec_L_CoatSkirtBack_end_01_end",
+      "J_Sec_L_CoatSkirtBack_end_02",
+      "J_Sec_L_CoatSkirtBack_end_02_end",
+      "J_Sec_L_CoatSkirtBack_end_03",
+      "J_Sec_L_CoatSkirtBack_end_03_end",
+      "J_Sec_L_CoatSkirtFront_01",
+      "J_Sec_L_CoatSkirtFront_02",
+      "J_Sec_L_CoatSkirtFront_03",
+      "J_Sec_L_CoatSkirtFront_end_01",
+      "J_Sec_L_CoatSkirtFront_end_01_end",
+      "J_Sec_L_CoatSkirtFront_end_02",
+      "J_Sec_L_CoatSkirtFront_end_02_end",
+      "J_Sec_L_CoatSkirtFront_end_03",
+      "J_Sec_L_CoatSkirtFront_end_03_end",
+      "J_Sec_L_CoatSkirtSide1_01",
+      "J_Sec_L_CoatSkirtSide1_02",
+      "J_Sec_L_CoatSkirtSide1_03",
+      "J_Sec_L_CoatSkirtSide2_01",
+      "J_Sec_L_CoatSkirtSide2_02",
+      "J_Sec_L_CoatSkirtSide2_03",
+      "J_Sec_L_CoatSkirtSide2_end_01",
+      "J_Sec_L_CoatSkirtSide2_end_01_end",
+      "J_Sec_L_CoatSkirtSide2_end_02",
+      "J_Sec_L_CoatSkirtSide2_end_02_end",
+      "J_Sec_L_CoatSkirtSide2_end_03",
+      "J_Sec_L_CoatSkirtSide2_end_03_end",
+      "J_Sec_L_SkirtBack0_01",
+      "J_Sec_L_SkirtBack0_02",
+      "J_Sec_L_SkirtBack0_03",
+      "J_Sec_L_SkirtBack1_01",
+      "J_Sec_L_SkirtBack1_02",
+      "J_Sec_L_SkirtBack1_03",
+      "J_Sec_L_SkirtBack2_01",
+      "J_Sec_L_SkirtBack2_02",
+      "J_Sec_L_SkirtBack2_03",
+      "J_Sec_L_SkirtBack2_end_01",
+      "J_Sec_L_SkirtBack2_end_01_end",
+      "J_Sec_L_SkirtBack2_end_02",
+      "J_Sec_L_SkirtBack2_end_02_end",
+      "J_Sec_L_SkirtBack2_end_03",
+      "J_Sec_L_SkirtBack2_end_03_end",
+      "J_Sec_L_SkirtFront0_01",
+      "J_Sec_L_SkirtFront0_02",
+      "J_Sec_L_SkirtFront0_03",
+      "J_Sec_L_SkirtFront1_01",
+      "J_Sec_L_SkirtFront1_02",
+      "J_Sec_L_SkirtFront1_03",
+      "J_Sec_L_SkirtFront2_01",
+      "J_Sec_L_SkirtFront2_02",
+      "J_Sec_L_SkirtFront2_03",
+      "J_Sec_L_SkirtFront2_end_01",
+      "J_Sec_L_SkirtFront2_end_01_end",
+      "J_Sec_L_SkirtFront2_end_02",
+      "J_Sec_L_SkirtFront2_end_02_end",
+      "J_Sec_L_SkirtFront2_end_03",
+      "J_Sec_L_SkirtFront2_end_03_end",
+      "J_Sec_L_SkirtSide0_01",
+      "J_Sec_L_SkirtSide0_02",
+      "J_Sec_L_SkirtSide0_03",
+      "J_Sec_L_SkirtSide1_01",
+      "J_Sec_L_SkirtSide1_02",
+      "J_Sec_L_SkirtSide1_03",
+      "J_Sec_L_SkirtSide2_01",
+      "J_Sec_L_SkirtSide2_02",
+      "J_Sec_L_SkirtSide2_03",
+      "J_Sec_L_SkirtSide2_end_01",
+      "J_Sec_L_SkirtSide2_end_01_end",
+      "J_Sec_L_SkirtSide2_end_02",
+      "J_Sec_L_SkirtSide2_end_02_end",
+      "J_Sec_L_SkirtSide2_end_03",
+      "J_Sec_L_SkirtSide2_end_03_end",
+      "J_Sec_R_Bust1",
+      "J_Sec_R_Bust2",
+      "J_Sec_R_Bust2_end",
+      "J_Sec_R_CoatSkirtBack_01",
+      "J_Sec_R_CoatSkirtBack_02",
+      "J_Sec_R_CoatSkirtBack_03",
+      "J_Sec_R_CoatSkirtBack_end_01",
+      "J_Sec_R_CoatSkirtBack_end_01_end",
+      "J_Sec_R_CoatSkirtBack_end_02",
+      "J_Sec_R_CoatSkirtBack_end_02_end",
+      "J_Sec_R_CoatSkirtBack_end_03",
+      "J_Sec_R_CoatSkirtBack_end_03_end",
+      "J_Sec_R_CoatSkirtFront_01",
+      "J_Sec_R_CoatSkirtFront_02",
+      "J_Sec_R_CoatSkirtFront_03",
+      "J_Sec_R_CoatSkirtFront_end_01",
+      "J_Sec_R_CoatSkirtFront_end_01_end",
+      "J_Sec_R_CoatSkirtFront_end_02",
+      "J_Sec_R_CoatSkirtFront_end_02_end",
+      "J_Sec_R_CoatSkirtFront_end_03",
+      "J_Sec_R_CoatSkirtFront_end_03_end",
+      "J_Sec_R_CoatSkirtSide1_01",
+      "J_Sec_R_CoatSkirtSide1_02",
+      "J_Sec_R_CoatSkirtSide1_03",
+      "J_Sec_R_CoatSkirtSide2_01",
+      "J_Sec_R_CoatSkirtSide2_02",
+      "J_Sec_R_CoatSkirtSide2_03",
+      "J_Sec_R_CoatSkirtSide2_end_01",
+      "J_Sec_R_CoatSkirtSide2_end_01_end",
+      "J_Sec_R_CoatSkirtSide2_end_02",
+      "J_Sec_R_CoatSkirtSide2_end_02_end",
+      "J_Sec_R_CoatSkirtSide2_end_03",
+      "J_Sec_R_CoatSkirtSide2_end_03_end",
+      "J_Sec_R_SkirtBack0_01",
+      "J_Sec_R_SkirtBack0_02",
+      "J_Sec_R_SkirtBack0_03",
+      "J_Sec_R_SkirtBack1_01",
+      "J_Sec_R_SkirtBack1_02",
+      "J_Sec_R_SkirtBack1_03",
+      "J_Sec_R_SkirtBack2_01",
+      "J_Sec_R_SkirtBack2_02",
+      "J_Sec_R_SkirtBack2_03",
+      "J_Sec_R_SkirtBack2_end_01",
+      "J_Sec_R_SkirtBack2_end_01_end",
+      "J_Sec_R_SkirtBack2_end_02",
+      "J_Sec_R_SkirtBack2_end_02_end",
+      "J_Sec_R_SkirtBack2_end_03",
+      "J_Sec_R_SkirtBack2_end_03_end",
+      "J_Sec_R_SkirtFront0_01",
+      "J_Sec_R_SkirtFront0_02",
+      "J_Sec_R_SkirtFront0_03",
+      "J_Sec_R_SkirtFront1_01",
+      "J_Sec_R_SkirtFront1_02",
+      "J_Sec_R_SkirtFront1_03",
+      "J_Sec_R_SkirtFront2_01",
+      "J_Sec_R_SkirtFront2_02",
+      "J_Sec_R_SkirtFront2_03",
+      "J_Sec_R_SkirtFront2_end_01",
+      "J_Sec_R_SkirtFront2_end_01_end",
+      "J_Sec_R_SkirtFront2_end_02",
+      "J_Sec_R_SkirtFront2_end_02_end",
+      "J_Sec_R_SkirtFront2_end_03",
+      "J_Sec_R_SkirtFront2_end_03_end",
+      "J_Sec_R_SkirtSide0_01",
+      "J_Sec_R_SkirtSide0_02",
+      "J_Sec_R_SkirtSide0_03",
+      "J_Sec_R_SkirtSide1_01",
+      "J_Sec_R_SkirtSide1_02",
+      "J_Sec_R_SkirtSide1_03",
+      "J_Sec_R_SkirtSide2_01",
+      "J_Sec_R_SkirtSide2_02",
+      "J_Sec_R_SkirtSide2_03",
+      "J_Sec_R_SkirtSide2_end_01",
+      "J_Sec_R_SkirtSide2_end_01_end",
+      "J_Sec_R_SkirtSide2_end_02",
+      "J_Sec_R_SkirtSide2_end_02_end",
+      "J_Sec_R_SkirtSide2_end_03",
+      "J_Sec_R_SkirtSide2_end_03_end",
+      "Keyboard",
+      "Phase0Root",
+      "Phase0_ChairBack",
+      "Phase0_ChairSeat",
+      "Phase0_DeskLeg_0",
+      "Phase0_DeskLeg_1",
+      "Phase0_DeskOcclusionSlab",
+      "Phase0_DeskTop",
+      "Root",
+      "Sleeve_L",
+      "Sleeve_R"
+    ],
+    "bounds": {
+      "min": [
+        -1.600000023841858,
+        -0.8400000035762787,
+        -1.0954508185386658
+      ],
+      "max": [
+        1.600000023841858,
+        0.7197337746620178,
+        1.1300000250339508
+      ],
+      "size": [
+        3.200000047683716,
+        1.5597337782382965,
+        2.2254508435726166
+      ]
+    }
+  },
+  "manifestCounts": {
+    "boneCount": 222,
+    "runtimeBoneCount": 222,
+    "characterMeshCount": 5,
+    "meshCount": 12,
+    "meshes": [
+      {
+        "name": "Body",
+        "vertices": 11200,
+        "polygons": 17609,
+        "triangles": 17609,
+        "materials": 11,
+        "morphs": 0
+      },
+      {
+        "name": "Face",
+        "vertices": 4264,
+        "polygons": 7369,
+        "triangles": 7369,
+        "materials": 8,
+        "morphs": 57
+      },
+      {
+        "name": "Hair",
+        "vertices": 22254,
+        "polygons": 27898,
+        "triangles": 27898,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Keyboard",
+        "vertices": 576,
+        "polygons": 432,
+        "triangles": 864,
+        "materials": 3,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_ChairBack",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_ChairSeat",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskLeg_0",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskLeg_1",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskOcclusionSlab",
+        "vertices": 4,
+        "polygons": 1,
+        "triangles": 2,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Phase0_DeskTop",
+        "vertices": 8,
+        "polygons": 6,
+        "triangles": 12,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Sleeve_L",
+        "vertices": 360,
+        "polygons": 336,
+        "triangles": 672,
+        "materials": 1,
+        "morphs": 0
+      },
+      {
+        "name": "Sleeve_R",
+        "vertices": 360,
+        "polygons": 336,
+        "triangles": 672,
+        "materials": 1,
+        "morphs": 0
+      }
+    ],
+    "characterMaterialCount": 20,
+    "materialCount": 26,
+    "characterTriangleCount": 54220,
+    "triangleCount": 55146,
+    "morphTargetCount": 57,
+    "alphaMaterialCount": 5
+  },
+  "bounds": {
+    "min": [
+      -1.600000023841858,
+      -0.8400000035762787,
+      -1.0954508185386658
+    ],
+    "max": [
+      1.600000023841858,
+      0.7197337746620178,
+      1.1300000250339508
+    ],
+    "size": [
+      3.200000047683716,
+      1.5597337782382965,
+      2.2254508435726166
+    ]
+  },
+  "clips": [
+    {
+      "name": "idle_seated_loop",
+      "startFrame": 0,
+      "endFrame": 48,
+      "rangeSemantics": "inclusive-sample-frame",
+      "runtimeTrimFrames": [
+        0,
+        49
+      ],
+      "sampleRate": 24,
+      "durationSeconds": 2.0,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3"
+      ],
+      "loopPoseMaxError": 2.980232238769531e-07,
+      "features": [
+        "breathing",
+        "head_micro_motion",
+        "seated_pose"
+      ]
+    },
+    {
+      "name": "typing_loop",
+      "startFrame": 48,
+      "endFrame": 96,
+      "rangeSemantics": "inclusive-sample-frame",
+      "runtimeTrimFrames": [
+        48,
+        97
+      ],
+      "sampleRate": 24,
+      "durationSeconds": 2.0,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3"
+      ],
+      "loopPoseMaxError": 0.0,
+      "features": [
+        "alternating_arms",
+        "finger_curl",
+        "breathing",
+        "head_micro_motion"
+      ],
+      "fingerTipsKeyboardLocalAtStart": {
+        "L": [
+          [
+            0.079744,
+            -0.00671,
+            0.01477
+          ],
+          [
+            0.097906,
+            -0.017722,
+            0.017443
+          ],
+          [
+            0.106506,
+            -0.016888,
+            0.029849
+          ],
+          [
+            0.116236,
+            -0.011627,
+            0.042871
+          ]
+        ],
+        "R": [
+          [
+            -0.040828,
+            0.004763,
+            0.013618
+          ],
+          [
+            -0.049178,
+            -0.01365,
+            0.020654
+          ],
+          [
+            -0.053884,
+            -0.015878,
+            0.034847
+          ],
+          [
+            -0.061739,
+            -0.014873,
+            0.049987
+          ]
+        ]
+      }
+    }
+  ],
+  "crossfade": {
+    "durationSeconds": 0.3,
+    "contract": "trimmed AnimationView resources overlap at frame 48; blendFactor 0→1",
+    "overlapFrame": 48,
+    "requiresLoopingResources": true
+  },
+  "textureChecks": {
+    "imageCount": 20,
+    "embeddedImageCount": 20,
+    "textureCount": 40,
+    "characterMaterialCount": 20,
+    "requiredCharacterMaterialCount": 20,
+    "baseColorBindings": [
+      {
+        "material": "Accessory_FoxTail_01_CLOTH (Instance)",
+        "texture": 3,
+        "image": 1,
+        "imageName": "_12"
+      },
+      {
+        "material": "N00_000_00_Body_00_SKIN (Instance)",
+        "texture": 1,
+        "image": 0,
+        "imageName": "_10"
+      },
+      {
+        "material": "N00_000_00_EyeHighlight_00_EYE (Instance)",
+        "texture": 27,
+        "image": 13,
+        "imageName": "_03"
+      },
+      {
+        "material": "N00_000_00_EyeIris_00_EYE (Instance)",
+        "texture": 25,
+        "image": 12,
+        "imageName": "_02"
+      },
+      {
+        "material": "N00_000_00_EyeWhite_00_EYE (Instance)",
+        "texture": 31,
+        "image": 15,
+        "imageName": "_06"
+      },
+      {
+        "material": "N00_000_00_Face_00_SKIN (Instance)",
+        "texture": 29,
+        "image": 14,
+        "imageName": "_04"
+      },
+      {
+        "material": "N00_000_00_FaceBrow_00_FACE (Instance)",
+        "texture": 33,
+        "image": 16,
+        "imageName": "_07"
+      },
+      {
+        "material": "N00_000_00_FaceEyelash_00_FACE (Instance)",
+        "texture": 35,
+        "image": 17,
+        "imageName": "_08"
+      },
+      {
+        "material": "N00_000_00_FaceEyeline_00_FACE (Instance)",
+        "texture": 37,
+        "image": 18,
+        "imageName": "_09"
+      },
+      {
+        "material": "N00_000_00_FaceMouth_00_FACE (Instance)",
+        "texture": 23,
+        "image": 11,
+        "imageName": "_01"
+      },
+      {
+        "material": "N00_000_00_HairBack_00_HAIR (Instance)",
+        "texture": 5,
+        "image": 2,
+        "imageName": "_13"
+      },
+      {
+        "material": "N00_000_Hair_00_HAIR (Instance)",
+        "texture": 39,
+        "image": 19,
+        "imageName": "_22"
+      },
+      {
+        "material": "N00_002_03_Tops_01_CLOTH_01 (Instance)",
+        "texture": 13,
+        "image": 6,
+        "imageName": "_17"
+      },
+      {
+        "material": "N00_002_03_Tops_01_CLOTH_02 (Instance)",
+        "texture": 15,
+        "image": 7,
+        "imageName": "_18"
+      },
+      {
+        "material": "N00_002_03_Tops_01_CLOTH_03 (Instance)",
+        "texture": 17,
+        "image": 8,
+        "imageName": "_19"
+      },
+      {
+        "material": "N00_007_01_Tops_01_CLOTH_01 (Instance)",
+        "texture": 7,
+        "image": 3,
+        "imageName": "_14"
+      },
+      {
+        "material": "N00_007_01_Tops_01_CLOTH_02 (Instance)",
+        "texture": 9,
+        "image": 4,
+        "imageName": "_15"
+      },
+      {
+        "material": "N00_007_01_Tops_01_CLOTH_03 (Instance)",
+        "texture": 11,
+        "image": 5,
+        "imageName": "_16"
+      },
+      {
+        "material": "N00_008_01_Shoes_01_CLOTH_01 (Instance)",
+        "texture": 19,
+        "image": 9,
+        "imageName": "_20"
+      },
+      {
+        "material": "N00_008_01_Shoes_01_CLOTH_02 (Instance)",
+        "texture": 21,
+        "image": 10,
+        "imageName": "_21"
+      }
+    ],
+    "alphaTokens": [
+      "hair",
+      "eyelash",
+      "eyeline"
+    ]
+  },
+  "skinChecks": {
+    "skinCount": 1,
+    "jointCount": 222,
+    "checkedVertices": 38455,
+    "ibmIdentityRMS": 6.254672402996162e-07,
+    "ibmIdentityMaxError": 7.4147279067195635e-06,
+    "maxWeightSumError": 1.2014061212539673e-07,
+    "maxJointIndex": 219
+  },
+  "sleeveChecks": {
+    "armatureNode": 280,
+    "sleeves": [
+      {
+        "name": "Sleeve_L",
+        "node": 278,
+        "parent": "Armature",
+        "bindSpace": "armature-local",
+        "transformMaxError": 0.0
+      },
+      {
+        "name": "Sleeve_R",
+        "node": 279,
+        "parent": "Armature",
+        "bindSpace": "armature-local",
+        "transformMaxError": 0.0
+      }
+    ]
+  },
+  "rootTransform": {
+    "translation": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "scale": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "negativeSuite": {
+    "status": "PASS",
+    "cases": [
+      {
+        "name": "missing-glb",
+        "status": "EXPECTED_FAIL",
+        "message": "missing GLB: /Users/snoz/earn_sth/relax/Assets/Realtime3D/missing-phase0.glb"
+      },
+      {
+        "name": "bad-glb-hash",
+        "status": "EXPECTED_FAIL",
+        "message": "GLB hash mismatch"
+      },
+      {
+        "name": "missing-node",
+        "status": "EXPECTED_FAIL",
+        "message": "required node missing: Phase0_MissingNode"
+      },
+      {
+        "name": "missing-clip",
+        "status": "EXPECTED_FAIL",
+        "message": "required clip missing from manifest"
+      },
+      {
+        "name": "missing-alpha",
+        "status": "EXPECTED_FAIL",
+        "message": "required hair/eyelash alpha material missing"
+      },
+      {
+        "name": "missing-texture",
+        "status": "EXPECTED_FAIL",
+        "message": "character material has no baseColorTexture: N00_000_00_Body_00_SKIN (Instance)"
+      },
+      {
+        "name": "bad-axis",
+        "status": "EXPECTED_FAIL",
+        "message": "coordinate system mismatch"
+      },
+      {
+        "name": "bad-bounds",
+        "status": "EXPECTED_FAIL",
+        "message": "GLB accessor/root-transform bounds size[0] differ: 3.20000005 != 3.45"
+      },
+      {
+        "name": "bad-count",
+        "status": "EXPECTED_FAIL",
+        "message": "bone count mismatch"
+      },
+      {
+        "name": "bad-space-contract",
+        "status": "EXPECTED_FAIL",
+        "message": "sleeve space contract missing"
+      }
+    ]
+  }
+}

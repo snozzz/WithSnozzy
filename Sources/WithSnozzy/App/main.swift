@@ -19,5 +19,14 @@ if MCPServer.isRequested {
     MCPServer.run()
 }
 
-// 别的都要 UI（或者至少要 AppKit 的运行循环），交给 SwiftUI。
-WithSnozzyApp.main()
+// Three.js Phase 0 owns a dedicated AppKit window and WKWebView. Keep it out
+// of the production SwiftUI scene so the renderer and screenshot gate cannot
+// be hidden by menu-bar/window lifecycle state.
+if let path = ThreePhase0Diagnostics.requestedPath {
+    MainActor.assumeIsolated {
+        ThreePhase0Diagnostics.runStandalone(path: path)
+    }
+} else {
+    // 别的都要 UI（或者至少要 AppKit 的运行循环），交给 SwiftUI。
+    WithSnozzyApp.main()
+}

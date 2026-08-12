@@ -27,7 +27,7 @@ GROUPS = {
 }
 
 
-def load(path):
+def load(path, realtime3d=False):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=path)
     # VRM 会塞进来一堆辅助空物体和碰撞球，没有材质槽的网格一律删掉
@@ -47,7 +47,11 @@ def load(path):
         #
         # **顺序不能反**：内袖是照着收完之后的广袖内壁量出来的。
         import sleeve
-        meshes += sleeve.build_both(arm, meshes)
+        # The realtime GLB needs the lining's wrist cap to follow the hand
+        # bone after the forearm bends. Keep the historical two-dimensional
+        # render path unchanged; only the explicitly requested 3D authoring
+        # path uses the terminal hand bind weights.
+        meshes += sleeve.build_both(arm, meshes, hand_bind=realtime3d)
     return meshes
 
 
