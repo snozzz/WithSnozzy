@@ -1263,7 +1263,13 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
 
 **已知未做完的**：
 
-- 白天档的窗外城市只能算及格（`CyberCity.airy` 加了但没细调）
+- 窗外城市已完成白天层次调整：`CyberCity` 按远/中/近层分别控制天空色混合、明度、
+  透明度和窗灯/霓虹强度；白天减少黄灰雾，黄昏/夜晚/雨天保留各自的色彩与灯光。
+  用 `--citystrip` 生成 dawn/day/day+rain/dusk/night 对照图，并输出平均明度、饱和度、
+  远近边缘能量和过曝比例；白天远景需比近景亮、无灯近景楼体和天空的主体对比 >0.20，
+  夜晚已知招牌 ROI 需有亮度/高饱和像素，雨天空区相对晴天变化控制在 ±0.020 且高亮雨线
+  占比 0.8%–8.0%，所有时段过曝比例 <3%。`--citystrip-negative` 会用确定性的删霓虹、
+  过亮雨线、洗白近景变体逐项证明对应 gate 会失败。
 - Live2D 那条线（`Sources/WithSnozzy/Character/Live2D/`）是完整可用的，
   但现在没在用——渲染版走通之后它成了备选。`Vendor/CubismCore/` 未入库
 - 房间仍以高完成度静态画为主体；Activity 已补上小反馈，但喝水、看书、伸懒腰
@@ -1691,6 +1697,8 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot  /tmp/poses.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip  /tmp/legs.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip /tmp/face.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip /tmp/hands.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip /tmp/city.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip-negative
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitystrip /tmp/activity.png

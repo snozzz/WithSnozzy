@@ -55,6 +55,29 @@ enum Snapshot {
         arg("--handstrip")
     }
 
+    /// 窗外城市的四时段对照（另含白天雨天）。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip /tmp/city.png
+    /// ```
+    ///
+    /// 每格直接使用生产 `CyberCity`，不是复制一份绘制算法。命令会在写图后
+    /// 输出平均明度/饱和度、远近局部边缘能量和过曝比例，并量三个固定的生产
+    /// ROI：夜晚招牌亮度/色度、雨天空区相对晴天的亮线占比、白天无灯近景楼体
+    /// 与天空的主体对比。`--citystrip-negative` 用确定性的变体证明三项 gate
+    /// 各自确实会失败。
+    static var cityStripPath: String? {
+        arg("--citystrip")
+    }
+
+    /// Re-run the city gates against three deterministic diagnostic variants:
+    /// no city lights, over-bright rain, and a washed near silhouette. This is
+    /// intentionally separate from the production image command so a reviewer
+    /// can prove each gate fails for the regression it is meant to catch.
+    static var cityStripNegative: Bool {
+        CommandLine.arguments.contains("--citystrip-negative")
+    }
+
     /// 近景切换的取景和完整骨骼帧序列。
     ///
     /// ```
@@ -290,6 +313,60 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+
+    static func runCityStrip(path: String) {
+        guard let rep = cityStripRepresentation(.normal),
+              let png = rep.representation(using: .png, properties: [:])
+        else {
+            print("城市对照渲染失败")
+            exit(1)
+        }
+
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(rep.pixelsWide)×\(rep.pixelsHigh))")
+            let report = CityStripReport(rep: rep)
+            report.printAndExit()
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
+    static func runCityStripNegative() {
+        let probes: [(CityDiagnosticVariant, CityStripReport.Gate)] = [
+            (.noNeon, .nightNeon),
+            (.brightRain, .rainSky),
+            (.washedNear, .daySilhouette),
+        ]
+        var allFailed = true
+        print("CITYSTRIP 负向变体自检（每项都必须让对应 gate 失败）")
+        for (variant, gate) in probes {
+            guard let rep = cityStripRepresentation(variant) else {
+                print("  ✗ \(variant.rawValue)：渲染失败")
+                allFailed = false
+                continue
+            }
+            let report = CityStripReport(rep: rep)
+            report.printMetrics(prefix: "  \(variant.rawValue)")
+            let matching = report.evaluate().filter { $0.gate == gate }
+            let failed = !matching.isEmpty && matching.allSatisfy { !$0.passed }
+            print("  " + (failed ? "✓ " : "✗ ")
+                  + "\(variant.rawValue) → \(gate.label) gate \(failed ? "失败" : "仍通过")")
+            allFailed = allFailed && failed
+        }
+        print("CITYSTRIP-NEGATIVE " + (allFailed ? "PASS" : "FAIL"))
+        exit(allFailed ? 0 : 1)
+    }
+
+    private static func cityStripRepresentation(_ variant: CityDiagnosticVariant)
+        -> NSBitmapImageRep? {
+        let renderer = ImageRenderer(content: CityStrip(variant: variant))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation else { return nil }
+        return NSBitmapImageRep(data: tiff)
     }
 
     static func runCloseUp(path: String) {
@@ -584,6 +661,366 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+}
+
+/// 城市本身的离线对照表。每格都走生产 `CyberCity`，所以这里不能偷偷用
+/// 一套只为快照存在的几何；它既是视觉 QA 图，也是下面像素报告的固定取样合同。
+private struct CityStrip: View {
+    let variant: CityDiagnosticVariant
+
+    init(variant: CityDiagnosticVariant = .normal) {
+        self.variant = variant
+    }
+
+    static let cellWidth: CGFloat = 320
+    static let cellHeight: CGFloat = 214
+    static let labelHeight: CGFloat = 20
+    static let labelGap: CGFloat = 2
+    static let gap: CGFloat = 4
+    static let padding: CGFloat = 4
+
+    struct Sample: Identifiable {
+        let id: String
+        let label: String
+        let palette: Palette
+        let weather: Weather
+    }
+
+    static let samples: [Sample] = [
+        Sample(id: "dawn", label: "DAWN", palette: .dawn, weather: .clear),
+        Sample(id: "day", label: "DAY", palette: .day, weather: .clear),
+        Sample(id: "day-rain", label: "DAY + RAIN", palette: .day, weather: .rain),
+        Sample(id: "dusk", label: "DUSK", palette: .dusk, weather: .clear),
+        Sample(id: "night", label: "NIGHT", palette: .night, weather: .clear),
+    ]
+
+    var body: some View {
+        HStack(spacing: Self.gap) {
+            ForEach(Self.samples) { sample in
+                VStack(spacing: Self.labelGap) {
+                    Text(sample.label)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .frame(height: Self.labelHeight)
+                    CyberCity(palette: sample.palette, weather: sample.weather, t: 43,
+                              diagnostic: variant)
+                        .frame(width: Self.cellWidth, height: Self.cellHeight)
+                        .clipped()
+                }
+            }
+        }
+        .padding(Self.padding)
+        .background(Color(white: 0.08))
+    }
+}
+
+/// `--citystrip` 的客观报告。所有区域都相对于一个固定 320×214 城市场景格，
+/// 标签和外框不会进入统计；边缘能量用相邻像素的亮度差，低频灰雾不会伪装成
+/// 近景轮廓。阈值只抓退化，不把「好不好看」压成一个数字。
+private struct CityStripReport {
+    enum Gate: String {
+        case daySilhouette, rainSky, nightNeon
+
+        var label: String {
+            switch self {
+            case .daySilhouette: "day silhouette contrast"
+            case .rainSky: "rain sky bounds"
+            case .nightNeon: "night neon ROI"
+            }
+        }
+    }
+
+    struct Check {
+        let gate: Gate?
+        let label: String
+        let passed: Bool
+    }
+
+    private struct Region {
+        let x, y, width, height: Int
+    }
+
+    struct Cell {
+        let name: String
+        let meanLuma: Double
+        let meanSaturation: Double
+        let farLuma: Double
+        let nearLuma: Double
+        let farEdge: Double
+        let nearEdge: Double
+        let clipped: Double
+        let skyLuma: Double
+        let neonLuma: Double
+        let neonSaturation: Double
+        let neonBrightRatio: Double
+        let silhouetteBodyP75: Double
+        let silhouetteSkyP25: Double
+        let silhouetteContrast: Double
+    }
+
+    // These are deliberately fixed, documented ROIs rather than another copy of
+    // CyberCity's geometry. Each is selected from the production strip:
+    // a clear upper-left sky patch, the known horizontal sign corridor at night,
+    // and a near tower body with no deliberate window/sign drawing in day.
+    private static let rainSkyRegion = Region(x: 0, y: 0, width: 60, height: 55)
+    private static let neonRegion = Region(x: 198, y: 100, width: 70, height: 35)
+    private static let silhouetteRegion = Region(x: 180, y: 90, width: 40, height: 35)
+    private static let silhouetteSkyRegion = Region(x: 180, y: 20, width: 40, height: 35)
+
+    private let cells: [Cell]
+    private let rainSkyDelta: Double
+    private let rainLineRatio: Double
+
+    init(rep: NSBitmapImageRep) {
+        var values: [Cell] = []
+        let sceneY = Int(CityStrip.padding + CityStrip.labelHeight + CityStrip.labelGap)
+        for i in CityStrip.samples.indices {
+            let x = Int(CityStrip.padding) + i * Int(CityStrip.cellWidth + CityStrip.gap)
+            values.append(Self.measure(rep: rep, name: CityStrip.samples[i].id,
+                                        x: x, y: sceneY,
+                                        width: Int(CityStrip.cellWidth),
+                                        height: Int(CityStrip.cellHeight)))
+        }
+        self.cells = values
+        let daySky = values.first(where: { $0.name == "day" })?.skyLuma ?? 0
+        let rainSky = values.first(where: { $0.name == "day-rain" })?.skyLuma ?? 0
+        self.rainSkyDelta = rainSky - daySky
+        let dayX = Int(CityStrip.padding) + Int(CityStrip.cellWidth + CityStrip.gap)
+        let rainX = dayX + Int(CityStrip.cellWidth + CityStrip.gap)
+        self.rainLineRatio = Self.rainLineRatio(rep: rep, dayX: dayX, rainX: rainX,
+                                                y: sceneY)
+    }
+
+    func printAndExit() {
+        printMetrics()
+        let checks = evaluate()
+        print("CITYSTRIP 自检")
+        var passed = true
+        for check in checks {
+            print("  " + (check.passed ? "✓ " : "✗ ") + check.label)
+            passed = passed && check.passed
+        }
+        print("CITYSTRIP " + (passed ? "PASS" : "FAIL"))
+        exit(passed ? 0 : 1)
+    }
+
+    func printMetrics(prefix: String = "") {
+        let lead = prefix.isEmpty ? "" : prefix + " "
+        print(lead + "CITYSTRIP 像素报告（每格 320×214；远景 y=9…68、近景 y=94…196）")
+        for cell in cells {
+            print(String(format: "  %@%@  luma %.3f  sat %.3f  farLuma %.3f  nearLuma %.3f  farEdge %.4f  nearEdge %.4f  near/far %.2fx  clip %.2f%%",
+                         lead, cell.name, cell.meanLuma, cell.meanSaturation,
+                         cell.farLuma, cell.nearLuma, cell.farEdge, cell.nearEdge,
+                         cell.nearEdge / max(cell.farEdge, 0.0001), cell.clipped * 100))
+            if cell.name == "night" {
+                print(String(format: "    night neon ROI: luma %.3f  sat %.3f  bright+chroma %.2f%%",
+                             cell.neonLuma, cell.neonSaturation,
+                             cell.neonBrightRatio * 100))
+            }
+            if cell.name == "day" {
+                print(String(format: "    day no-light near ROI: body p75 %.3f  sky p25 %.3f  contrast %.3f",
+                             cell.silhouetteBodyP75, cell.silhouetteSkyP25,
+                             cell.silhouetteContrast))
+            }
+        }
+        print(String(format: "  rain sky ROI vs clear: delta %.4f  bright-line lift %.2f%%",
+                     rainSkyDelta, rainLineRatio * 100))
+    }
+
+    func evaluate() -> [Check] {
+        guard let day = cells.first(where: { $0.name == "day" }),
+              cells.contains(where: { $0.name == "day-rain" }),
+              let dusk = cells.first(where: { $0.name == "dusk" }),
+              let night = cells.first(where: { $0.name == "night" })
+        else {
+            return [Check(gate: nil, label: "样本完整", passed: false)]
+        }
+
+        let all = cells
+        return [
+            Check(gate: nil, label: "白天远景比近景更亮（大气透视）",
+                  passed: day.farLuma > day.nearLuma + 0.035),
+            Check(gate: .daySilhouette,
+                  label: "白天无灯近景楼体与天空保持主体对比",
+                  passed: day.silhouetteContrast > 0.20),
+            Check(gate: nil, label: "白天近景局部边缘能量更高（轮廓没有被洗掉）",
+                  passed: day.nearEdge > day.farEdge * 1.08),
+            Check(gate: nil, label: "白天饱和度受控（不抢房间主体）",
+                  passed: day.meanSaturation < 0.34),
+            Check(gate: .rainSky,
+                  label: "雨天空区相对晴天变化适中且高亮雨线不稀不密",
+                  passed: rainSkyDelta >= -0.020 && rainSkyDelta <= 0.020
+                      && rainLineRatio >= 0.008 && rainLineRatio <= 0.080),
+            Check(gate: nil, label: "黄昏和白天保持明度分离",
+                  passed: dusk.meanLuma < day.meanLuma - 0.020),
+            Check(gate: nil, label: "夜晚保持暗部和霓虹色彩",
+                  passed: night.meanLuma < day.meanLuma - 0.10 && night.meanSaturation > 0.045),
+            Check(gate: .nightNeon,
+                  label: "夜晚已知招牌区域有亮度与高饱和像素（不是深蓝天空）",
+                  passed: night.neonLuma > 0.030
+                      && night.neonSaturation > 0.60
+                      && night.neonBrightRatio > 0.020),
+            Check(gate: nil, label: "所有时段没有明显过曝",
+                  passed: all.allSatisfy { $0.clipped < 0.030 }),
+        ]
+    }
+
+    private static func measure(rep: NSBitmapImageRep, name: String,
+                                x: Int, y: Int, width: Int, height: Int) -> Cell {
+        // 远景取上半段（天空+远塔肩），近景取中下段（中/近塔顶、窗格和招牌）。
+        // 只取最底部会漏掉近景轮廓，因为几何楼体都在底边闭合。
+        let far = Int(Double(height) * 0.04)..<Int(Double(height) * 0.32)
+        let near = Int(Double(height) * 0.44)..<Int(Double(height) * 0.92)
+        let wholeStats = stats(rep: rep, x: x, y: y, width: width, rows: 0..<height)
+        let farStats = stats(rep: rep, x: x, y: y, width: width, rows: far)
+        let nearStats = stats(rep: rep, x: x, y: y, width: width, rows: near)
+        let skyStats = regionStats(rep: rep, originX: x, originY: y,
+                                   region: Self.rainSkyRegion)
+        let neonStats = regionStats(rep: rep, originX: x, originY: y,
+                                    region: Self.neonRegion)
+        let bodyP75 = lumaQuantile(rep: rep, originX: x, originY: y,
+                                   region: Self.silhouetteRegion, quantile: 0.75)
+        let skyP25 = lumaQuantile(rep: rep, originX: x, originY: y,
+                                  region: Self.silhouetteSkyRegion, quantile: 0.25)
+        return Cell(name: name,
+                    meanLuma: wholeStats.luma,
+                    meanSaturation: wholeStats.saturation,
+                    farLuma: farStats.luma,
+                    nearLuma: nearStats.luma,
+                    farEdge: farStats.edge,
+                    nearEdge: nearStats.edge,
+                    clipped: wholeStats.clipped,
+                    skyLuma: skyStats.luma,
+                    neonLuma: neonStats.luma,
+                    neonSaturation: neonStats.saturation,
+                    neonBrightRatio: brightChromaRatio(rep: rep, originX: x, originY: y,
+                                                       region: Self.neonRegion),
+                    silhouetteBodyP75: bodyP75,
+                    silhouetteSkyP25: skyP25,
+                    silhouetteContrast: max(0, skyP25 - bodyP75))
+    }
+
+    private struct Stats {
+        var luma = 0.0
+        var saturation = 0.0
+        var edge = 0.0
+        var clipped = 0.0
+    }
+
+    private static func stats(rep: NSBitmapImageRep, x: Int, y: Int,
+                              width: Int, rows: Range<Int>) -> Stats {
+        var result = Stats()
+        var count = 0
+        var edgeCount = 0
+        for row in rows {
+            for col in 0..<width {
+                guard let pixel = rgb(rep, x: x + col, y: y + row) else { continue }
+                result.luma += pixel.luma
+                result.saturation += pixel.saturation
+                if pixel.r >= 0.995 && pixel.g >= 0.995 && pixel.b >= 0.995 {
+                    result.clipped += 1
+                }
+                count += 1
+                if col > 0, let left = rgb(rep, x: x + col - 1, y: y + row) {
+                    result.edge += abs(pixel.luma - left.luma)
+                    edgeCount += 1
+                }
+                if row > rows.lowerBound,
+                   let above = rgb(rep, x: x + col, y: y + row - 1) {
+                    result.edge += abs(pixel.luma - above.luma)
+                    edgeCount += 1
+                }
+            }
+        }
+        guard count > 0 else { return result }
+        result.luma /= Double(count)
+        result.saturation /= Double(count)
+        result.clipped /= Double(count)
+        if edgeCount > 0 { result.edge /= Double(edgeCount) }
+        return result
+    }
+
+    private static func regionStats(rep: NSBitmapImageRep, originX: Int, originY: Int,
+                                    region: Region) -> Stats {
+        stats(rep: rep, x: originX + region.x, y: originY + region.y,
+              width: region.width, rows: 0..<region.height)
+    }
+
+    private static func lumaQuantile(rep: NSBitmapImageRep, originX: Int, originY: Int,
+                                     region: Region, quantile: Double) -> Double {
+        var values: [Double] = []
+        values.reserveCapacity(region.width * region.height)
+        for row in 0..<region.height {
+            for col in 0..<region.width {
+                if let pixel = rgb(rep, x: originX + region.x + col,
+                                   y: originY + region.y + row) {
+                    values.append(pixel.luma)
+                }
+            }
+        }
+        guard !values.isEmpty else { return 0 }
+        values.sort()
+        let index = min(values.count - 1,
+                        max(0, Int((Double(values.count - 1) * quantile).rounded())))
+        return values[index]
+    }
+
+    private static func brightChromaRatio(rep: NSBitmapImageRep, originX: Int,
+                                          originY: Int, region: Region) -> Double {
+        var total = 0
+        var bright = 0
+        for row in 0..<region.height {
+            for col in 0..<region.width {
+                guard let pixel = rgb(rep, x: originX + region.x + col,
+                                      y: originY + region.y + row) else { continue }
+                total += 1
+                if pixel.luma >= 0.08 && pixel.saturation >= 0.60 { bright += 1 }
+            }
+        }
+        return total > 0 ? Double(bright) / Double(total) : 0
+    }
+
+    private static func rainLineRatio(rep: NSBitmapImageRep, dayX: Int, rainX: Int,
+                                      y: Int) -> Double {
+        let region = rainSkyRegion
+        var total = 0
+        var lifted = 0
+        for row in 0..<region.height {
+            for col in 0..<region.width {
+                guard let day = rgb(rep, x: dayX + region.x + col,
+                                    y: y + region.y + row),
+                      let rain = rgb(rep, x: rainX + region.x + col,
+                                     y: y + region.y + row) else { continue }
+                total += 1
+                // Compare to the clear production cell, not to a guessed white
+                // threshold. This isolates the high-bright rain stroke from the
+                // intentional cool base-color difference between clear and rain.
+                if rain.luma - day.luma > 0.030 { lifted += 1 }
+            }
+        }
+        return total > 0 ? Double(lifted) / Double(total) : 0
+    }
+
+    private struct Pixel {
+        let r: Double
+        let g: Double
+        let b: Double
+
+        var luma: Double { 0.2126 * r + 0.7152 * g + 0.0722 * b }
+        var saturation: Double {
+            let hi = max(r, max(g, b)), lo = min(r, min(g, b))
+            return hi > 0 ? (hi - lo) / hi : 0
+        }
+    }
+
+    private static func rgb(_ rep: NSBitmapImageRep, x: Int, y: Int) -> Pixel? {
+        guard let color = rep.colorAt(x: x, y: y),
+              let srgb = color.usingColorSpace(.sRGB)
+        else { return nil }
+        return Pixel(r: Double(srgb.redComponent),
+                     g: Double(srgb.greenComponent),
+                     b: Double(srgb.blueComponent))
     }
 }
 

@@ -21,6 +21,16 @@ enum Weather: String, CaseIterable, Codable, Identifiable {
     }
 }
 
+/// Only used by the offline citystrip negative probes. Production views use
+/// `.normal`; the probes make the image checks reproducible without cloning the
+/// city drawing algorithm in a script.
+enum CityDiagnosticVariant: String {
+    case normal
+    case noNeon
+    case brightRain
+    case washedNear
+}
+
 /// 窗外的降水。
 ///
 /// 粒子表在启动时算好一次，之后每帧只做「相位 = 时间 × 速度，取小数部分」这一步。
@@ -30,6 +40,9 @@ struct Precipitation: View {
     let t: Double
     /// 降水的颜色跟着天色走，阴天的雨才不会像白线。
     let tint: RGB
+    /// Kept at one for production. The citystrip probe raises this to verify
+    /// that an over-bright/over-dense rain treatment trips its sky-region bound.
+    var intensity: Double = 1
 
     private struct Particle {
         let x: Double        // 归一化横向起点
@@ -81,8 +94,11 @@ struct Precipitation: View {
             path.move(to: CGPoint(x: x, y: y * size.height))
             path.addLine(to: CGPoint(x: x - len * 0.22, y: y * size.height + len))
         }
-        ctx.stroke(path, with: .color(tint.lighter(0.55).color(0.42)),
-                   style: .init(lineWidth: max(0.7, size.width * 0.004), lineCap: .round))
+            ctx.stroke(path, with: .color(tint.lighter(0.55)
+                .color(min(1, 0.42 * intensity))),
+                   style: .init(lineWidth: max(0.7, size.width * 0.004
+                                               * sqrt(max(1, intensity))),
+                                lineCap: .round))
     }
 
     private func drawSnow(_ ctx: inout GraphicsContext, _ size: CGSize) {

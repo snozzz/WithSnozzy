@@ -39,6 +39,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runHandStrip(path: path)
             return
         }
+        if let path = Snapshot.cityStripPath {
+            Snapshot.runCityStrip(path: path)
+            return
+        }
+        if Snapshot.cityStripNegative {
+            Snapshot.runCityStripNegative()
+            return
+        }
         if let path = Snapshot.closeUpPath {
             Snapshot.runCloseUp(path: path)
             return
