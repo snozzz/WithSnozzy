@@ -1318,8 +1318,22 @@ resting / takingBreak 由 `FocusTimer.phase` 驱动，并联动现有手、眼�
 已经做完了（`Blender/headphones.py`，程序化建模，遮挡由几何算出来所以
 头发正确地压在头梁前面）。运行时按 `state.isPlaying` 交叉淡入。
 
-**如果要继续改**：耳罩尺寸、颜色都在 `headphones.py` 的 `build()` 参数里。
-另外可以考虑加一层「耳机在播放时轻微发光」的动态效果。
+耳罩的播放反馈也已经接上：`Scripts/headphone_masks.py --assets Assets` 从
+普通/耳机预乘 RGBA 差分提取两只耳罩的连通域，写出
+`Assets/headphone_masks.json` 和小型 mask PNG。运行时只加载这些 mask，不改
+Blender 几何；manifest 版本、全局画布、每条记录的 body 画布/像素倍率/ROI 边界、
+源 body/headphone、face/chin 清单 SHA-256 都会在加载时验证，任一项失配就整套禁用，
+不回普通 mask。普通姿态和托腮 2× base、00…08（08 为终态）各有自己的
+bbox/centroid；数组按原始索引原子发布，头倾不会把光圈留在旧位置。
+播放时复用角色那条 TimelineView，3.2 秒无状态呼吸，alpha 0.025…0.095；暂停
+严格不画。`RenderedSnozzy.Equatable` 比较离散 phase，动画不会被挡掉。
+
+验证：`dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --headphonestrip /tmp/headphones.png`。
+报告实际重渲普通、托腮 -1、00…08 的每一帧，并显示暂停差异 0、峰谷差分全在
+mask 容差内、face/hand 泄漏 0、每帧 bbox/coverage/centroid/components；负向 probe
+会真正注入 +12px 错位 mask、×3 过亮 alpha、暂停残光后重渲并要求三项失败。
+耳罩尺寸/颜色仍在 `Blender/headphones.py` 的 `build()` 参数里；改完几何后重新
+生成差分 mask 和源哈希 manifest。
 
 ### 2.5 对话系统（已做完，但有几条要知道）
 
@@ -1697,6 +1711,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --snapshot  /tmp/poses.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --legstrip  /tmp/legs.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --facestrip /tmp/face.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --handstrip /tmp/hands.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --headphonestrip /tmp/headphones.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip /tmp/city.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip-negative
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png

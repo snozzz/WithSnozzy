@@ -39,6 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runHandStrip(path: path)
             return
         }
+        if let path = Snapshot.headphoneStripPath {
+            Snapshot.runHeadphoneStrip(path: path)
+            return
+        }
         if let path = Snapshot.cityStripPath {
             Snapshot.runCityStrip(path: path)
             return

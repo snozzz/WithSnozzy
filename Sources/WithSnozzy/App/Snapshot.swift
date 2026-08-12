@@ -55,6 +55,16 @@ enum Snapshot {
         arg("--handstrip")
     }
 
+    /// 播放中耳机的低谷/峰值与暂停基线。普通姿势、托腮终态各走
+    /// 昼/夜两套真实 `RenderedSnozzy`，并输出 mask 覆盖和泄漏报告。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --headphonestrip out.png
+    /// ```
+    static var headphoneStripPath: String? {
+        arg("--headphonestrip")
+    }
+
     /// 窗外城市的四时段对照（另含白天雨天）。
     ///
     /// ```
@@ -309,6 +319,47 @@ enum Snapshot {
                       + String(format: "%.0f%%", Double(typing) / Double(n) * 100))
             }
             exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
+    static func runHeadphoneStrip(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hasRenderedCharacter, let normalMask = assets.headphoneMask else {
+            print("耳机成对素材或普通姿态 mask 没加载到（\(assets.loadedFrom ?? "没找到 Assets 目录")）")
+            exit(1)
+        }
+        guard assets.hasCompleteChinMotion,
+              assets.hasCompleteHeadphoneMasks,
+              let baseMask = assets.chinHeadphoneBaseMask,
+              assets.chinHeadphoneMasks.count == CloseUp.transitionFrames + 1 else {
+            print("托腮 -1/00…08 耳机素材或 mask 不完整；先跑生成脚本与 2× closeup 管线")
+            exit(1)
+        }
+
+        let renderer = ImageRenderer(content: HeadphoneStrip(assets: assets))
+        renderer.scale = 1
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            print("耳机快照渲染失败")
+            exit(1)
+        }
+
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(rep.pixelsWide)×\(rep.pixelsHigh))")
+            let report = HeadphoneStripReport(assets: assets,
+                                               normalMask: normalMask,
+                                               baseMask: baseMask,
+                                               chinMasks: assets.chinHeadphoneMasks,
+                                               finalMask: assets.chinHeadphoneMasks[CloseUp.transitionFrames])
+            let passed = report.printAndEvaluate()
+            exit(passed ? 0 : 1)
         } catch {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
@@ -1223,6 +1274,467 @@ private struct HandStrip: View {
         .offset(x: -crop.minX, y: -crop.minY)
         .frame(width: crop.width, height: crop.height, alignment: .topLeading)
         .clipped()
+    }
+}
+
+/// Playback headset feedback sheet.  Every cell is a real `RenderedSnozzy`
+/// over the same logical canvas; only the phase, palette, and close-up frame
+/// differ, so a screenshot can be compared without a second drawing path.
+private struct HeadphoneStrip: View {
+    let assets: SceneAssets
+
+    private struct Sample: Identifiable {
+        let id: String
+        let label: String
+        let palette: Palette
+        let headphones: Bool
+        let t: Double
+        let chinFrame: Int?
+    }
+
+    private static let samples: [Sample] = {
+        var result: [Sample] = []
+        for (name, palette) in [("DAY", Palette.day), ("NIGHT", Palette.night)] {
+            let poses: [(String, Int?)] = name == "DAY"
+                ? [("NORMAL", nil), ("CHIN -1", -1)]
+                    + (0...CloseUp.transitionFrames).map {
+                        (String(format: "CHIN %02d", $0), Optional($0))
+                    }
+                : [("NORMAL", nil),
+                   ("CHIN 08", Optional(CloseUp.transitionFrames))]
+            for (pose, frame) in poses {
+                result.append(Sample(id: "\(name)-\(pose)-paused",
+                                     label: "\(name) · \(pose) · PAUSED",
+                                     palette: palette, headphones: false, t: 0,
+                                     chinFrame: frame))
+                result.append(Sample(id: "\(name)-\(pose)-low",
+                                     label: "\(name) · \(pose) · PLAY LOW",
+                                     palette: palette, headphones: true, t: 0,
+                                     chinFrame: frame))
+                result.append(Sample(id: "\(name)-\(pose)-peak",
+                                     label: "\(name) · \(pose) · PLAY PEAK",
+                                     palette: palette, headphones: true,
+                                     t: HeadphoneGlow.period / 2,
+                                     chinFrame: frame))
+            }
+        }
+        return result
+    }()
+
+    private static let cellW: CGFloat = 360
+    private static let cellH: CGFloat = cellW / 1.5
+    private static let columns = 3
+
+    var body: some View {
+        VStack(spacing: 3) {
+            ForEach(0..<((Self.samples.count + Self.columns - 1) / Self.columns),
+                    id: \.self) { row in
+                HStack(spacing: 3) {
+                    ForEach(0..<Self.columns, id: \.self) { column in
+                        let index = row * Self.columns + column
+                        if index < Self.samples.count {
+                            cell(Self.samples[index])
+                        } else {
+                            Color.clear.frame(width: Self.cellW, height: Self.cellH)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(white: 0.10))
+    }
+
+    private func cell(_ sample: Sample) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color(white: sample.palette == .night ? 0.055 : 0.17)
+            RenderedSnozzy(assets: assets, palette: sample.palette,
+                           pose: Pose(), face: FaceExpression(),
+                           headphones: sample.headphones,
+                           chinFrame: sample.chinFrame, t: sample.t,
+                           headphonePhase: sample.headphones
+                               ? HeadphoneGlow.phase(at: sample.t) : nil)
+                .frame(width: Self.cellW, height: Self.cellH)
+            Text(sample.label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.82))
+                .padding(.horizontal, 6).padding(.vertical, 4)
+                .background(.black.opacity(0.34), in: Capsule())
+                .padding(6)
+        }
+        .frame(width: Self.cellW, height: Self.cellH)
+        .clipped()
+    }
+}
+
+/// Objective gates for `--headphonestrip`.
+///
+/// The report compares two renders with the same production body and only a
+/// different glow phase.  A one-logical-pixel edge tolerance accounts for
+/// SwiftUI's final resampling; any leak beyond that is a mask/placement bug.
+@MainActor
+private struct HeadphoneStripReport {
+    let assets: SceneAssets
+    let normalMask: HeadphoneMask
+    let baseMask: HeadphoneMask
+    let chinMasks: [HeadphoneMask]
+    let finalMask: HeadphoneMask
+
+    private struct Sample {
+        let label: String
+        let palette: Palette
+        let chinFrame: Int?
+        let mask: HeadphoneMask
+    }
+
+    private struct DynamicMetrics {
+        var pixels = 0
+        var outsideMask = 0
+        var forbidden = 0
+        var minLumaDelta = Double.greatestFiniteMagnitude
+        var maxLumaDelta = 0.0
+        var box: CGRect?
+    }
+
+    func printAndEvaluate() -> Bool {
+        // This is intentionally the complete production index: -1 is the
+        // published 2× base, 00…07 are the bone-rendered intermediates, and
+        // 08 is the terminal render.  Every item below is rendered twice at
+        // different phases; no representative-frame shortcut can hide drift.
+        var samples = [Sample(label: "DAY · NORMAL", palette: .day,
+                              chinFrame: nil, mask: normalMask)]
+        samples.append(Sample(label: "DAY · CHIN -1", palette: .day,
+                              chinFrame: -1, mask: baseMask))
+        for i in 0...CloseUp.transitionFrames {
+            samples.append(Sample(label: String(format: "DAY · CHIN %02d", i),
+                                  palette: .day, chinFrame: i, mask: chinMasks[i]))
+        }
+        // Keep explicit day/night production coverage without duplicating all
+        // eleven masks in the visual sheet.  The objective report above still
+        // checks every frame in both paused and playing states.
+        samples.append(Sample(label: "NIGHT · NORMAL", palette: .night,
+                              chinFrame: nil, mask: normalMask))
+        samples.append(Sample(label: "NIGHT · CHIN 08", palette: .night,
+                              chinFrame: CloseUp.transitionFrames,
+                              mask: finalMask))
+
+        print("HEADPHONESTRIP 像素报告（mask 容差 1px；呼吸周期 "
+              + String(format: "%.1fs", HeadphoneGlow.period) + "）")
+        var passed = true
+
+        for sample in samples {
+            guard let pausedA = render(sample: sample, headphones: false,
+                                       t: 3.0, phase: nil),
+                  let pausedB = render(sample: sample, headphones: false,
+                                       t: 3.0, phase: nil),
+                  let valley = render(sample: sample, headphones: true,
+                                      t: 3.0, phase: 0),
+                  let peak = render(sample: sample, headphones: true,
+                                    t: 3.0, phase: HeadphoneGlow.phaseCount / 2) else {
+                print("  ✗ \(sample.label)：渲染失败")
+                passed = false
+                continue
+            }
+
+            let pause = byteDifference(pausedA, pausedB)
+            let pauseOK = pause.changed == 0 && pause.maxDelta == 0
+            print("  \(pauseOK ? "✓" : "✗") \(sample.label) 暂停差异 "
+                  + "pixels=\(pause.changed) max=\(pause.maxDelta)")
+            passed = passed && pauseOK
+
+            let dynamic = dynamicDifference(valley, peak, sample: sample)
+            let boxOK = boxError(dynamic.box, expected: sample.mask.rect,
+                                 width: peak.pixelsWide, height: peak.pixelsHigh) <= 2
+            let maskOK = dynamic.pixels > 0 && dynamic.outsideMask == 0
+            let forbiddenOK = dynamic.forbidden == 0
+            let lightOK = dynamic.minLumaDelta > 0
+                && dynamic.maxLumaDelta <= 0.16
+            print(String(format: "    peak−low pixels=%d outsideMask=%d forbidden=%d "
+                         + "Δluma %.4f…%.4f bbox %@  %@",
+                         dynamic.pixels, dynamic.outsideMask, dynamic.forbidden,
+                         dynamic.minLumaDelta, dynamic.maxLumaDelta,
+                         boxDescription(dynamic.box),
+                         (boxOK && maskOK && forbiddenOK && lightOK) ? "✓" : "✗"))
+            passed = passed && boxOK && maskOK && forbiddenOK && lightOK
+        }
+
+        let alphaOK = HeadphoneGlow.minimumAlpha >= 0.015
+            && HeadphoneGlow.maximumAlpha > HeadphoneGlow.minimumAlpha
+            && HeadphoneGlow.maximumAlpha <= 0.14
+        print(String(format: "  %@ alpha %.3f…%.3f（范围 0.015…0.140）",
+                     alphaOK ? "✓" : "✗",
+                     HeadphoneGlow.minimumAlpha, HeadphoneGlow.maximumAlpha))
+        passed = passed && alphaOK
+
+        let masks: [(String, HeadphoneMask, Int?, Bool)] =
+            [("普通", normalMask, nil, false), ("托腮-1", baseMask, -1, true)]
+            + chinMasks.enumerated().map {
+                (String(format: "托腮%02d", $0.offset), $0.element,
+                 Optional($0.offset), true)
+            }
+        for (label, mask, frame, closeup) in masks {
+            let overlap = maskForbiddenPixels(mask, chinFrame: frame,
+                                               closeup: closeup)
+            let structuralOK = mask.coverage > 0 && mask.componentCount == 2
+                && overlap == 0
+            print(String(format: "  %@ mask coverage=%d bbox=(%.1f,%.1f)-(%.1f,%.1f) "
+                         + "centroid=(%.1f,%.1f) components=%d forbidden=%d %@",
+                         label, mask.coverage, mask.rect.minX, mask.rect.minY,
+                         mask.rect.maxX, mask.rect.maxY,
+                         mask.centroid.x, mask.centroid.y,
+                         mask.componentCount, overlap, structuralOK ? "✓" : "✗"))
+            passed = passed && structuralOK
+        }
+
+        // Negative probes re-render the actual production view with one bad
+        // input at a time.  They are intentionally not constants: a future
+        // change to mask selection, opacity, or the paused gate must make the
+        // injected defect disappear from this report and fail it.
+        let normalSample = samples[0]
+        let shifted = shiftedMask(normalMask, dx: 12)
+        let shiftedMaskFails: Bool
+        let overbrightFails: Bool
+        let pausedLightFails: Bool
+        var shiftedMetrics = DynamicMetrics()
+        var overbrightMetrics = DynamicMetrics()
+        var normalPaused = (changed: 0, maxDelta: 0)
+        var pausedLeak = (changed: 0, maxDelta: 0)
+        if let originalLow = render(sample: normalSample, headphones: true,
+                                    t: 3.0, phase: 0),
+           let shiftedPeak = render(sample: normalSample, headphones: true,
+                                    t: 3.0, phase: HeadphoneGlow.phaseCount / 2,
+                                    maskOverride: shifted),
+           let nominalPeak = render(sample: normalSample, headphones: true,
+                                    t: 3.0,
+                                    phase: HeadphoneGlow.phaseCount / 2),
+           let overbrightPeak = render(sample: normalSample, headphones: true,
+                                       t: 3.0,
+                                       phase: HeadphoneGlow.phaseCount / 2,
+                                       alphaScale: 3),
+           let pausedBody = render(sample: normalSample, headphones: false,
+                                   t: 3.0, phase: 0),
+           let pausedPhaseProbe = render(sample: normalSample, headphones: false,
+                                         t: 3.0,
+                                         phase: HeadphoneGlow.phaseCount / 2),
+           let leakedPaused = render(sample: normalSample, headphones: false,
+                                     t: 3.0, phase: 0,
+                                     pausedGlowLeak: true) {
+            shiftedMetrics = dynamicDifference(originalLow, shiftedPeak,
+                                                sample: normalSample)
+            overbrightMetrics = dynamicDifference(nominalPeak, overbrightPeak,
+                                                  sample: normalSample)
+            // Both renders use headphones=false, the ordinary body, the same
+            // mask source, and only differ in an ignored phase: a normal
+            // paused scene must remain exactly dark.
+            normalPaused = byteDifference(pausedBody, pausedPhaseProbe)
+            // The injected render has the exact same paused phase and body;
+            // only the narrow diagnostic fault opens the glow gate.
+            pausedLeak = byteDifference(pausedBody, leakedPaused)
+            shiftedMaskFails = shiftedMetrics.outsideMask > 0
+            overbrightFails = overbrightMetrics.pixels > 0
+                && overbrightMetrics.maxLumaDelta > 0.02
+            pausedLightFails = pausedLeak.changed > 0
+        } else {
+            shiftedMaskFails = false
+            overbrightFails = false
+            pausedLightFails = false
+        }
+        print("HEADPHONESTRIP 负向 gate："
+              + String(format: "漂移+12px outsideMask=%d %@、",
+                       shiftedMetrics.outsideMask, shiftedMaskFails ? "✓" : "✗")
+              + String(format: "过亮×3 pixels=%d Δluma=%.4f %@、",
+                       overbrightMetrics.pixels, overbrightMetrics.maxLumaDelta,
+                       overbrightFails ? "✓" : "✗")
+              + "正常暂停 phase差异 pixels=\(normalPaused.changed) max=\(normalPaused.maxDelta) "
+              + "\(normalPaused.changed == 0 ? "✓" : "✗")、"
+              + "注入暂停残光 pixels=\(pausedLeak.changed) max=\(pausedLeak.maxDelta) "
+              + "\(pausedLightFails ? "✓" : "✗")")
+        let negativeOK = shiftedMaskFails && overbrightFails
+            && normalPaused.changed == 0 && pausedLightFails
+        passed = passed && negativeOK
+        print("HEADPHONESTRIP " + (passed ? "PASS" : "FAIL"))
+        return passed
+    }
+
+    private func render(sample: Sample, headphones: Bool, t: Double, phase: Int?,
+                        maskOverride: HeadphoneMask? = nil,
+                        alphaScale: Double = 1,
+                        pausedGlowLeak: Bool = false)
+        -> NSBitmapImageRep? {
+        // AppKit's bitmap/tiff bridges are autoreleased.  The report renders
+        // 13 samples × four states; drain those temporary objects after each
+        // sample so this diagnostic does not look like a production memory
+        // leak in Instruments.
+        return autoreleasepool {
+            let view = ZStack {
+                Color.white
+                RenderedSnozzy(assets: assets, palette: sample.palette,
+                               pose: Pose(), face: FaceExpression(),
+                               headphones: headphones,
+                               chinFrame: sample.chinFrame, t: t,
+                               headphonePhase: phase,
+                               headphoneMaskOverride: maskOverride,
+                               headphoneGlowAlphaScale: alphaScale,
+                               headphoneGlowPausedLeak: pausedGlowLeak)
+            }
+            .frame(width: assets.legs.canvasW, height: assets.legs.canvasH)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation else { return nil }
+            return NSBitmapImageRep(data: tiff)
+        }
+    }
+
+    private func shiftedMask(_ mask: HeadphoneMask, dx: CGFloat) -> HeadphoneMask {
+        HeadphoneMask(image: mask.image, rect: mask.rect.offsetBy(dx: dx, dy: 0),
+                      pixelScale: mask.pixelScale, alpha: mask.alpha,
+                      pixelWidth: mask.pixelWidth, pixelHeight: mask.pixelHeight,
+                      coverage: mask.coverage, centroid: mask.centroid,
+                      componentCount: mask.componentCount)
+    }
+
+    private func dynamicDifference(_ low: NSBitmapImageRep, _ high: NSBitmapImageRep,
+                                   sample: Sample) -> DynamicMetrics {
+        let w = min(low.pixelsWide, high.pixelsWide)
+        let h = min(low.pixelsHigh, high.pixelsHigh)
+        let sx = CGFloat(w) / assets.legs.canvasW
+        let sy = CGFloat(h) / assets.legs.canvasH
+        var result = DynamicMetrics()
+        for y in 0..<h {
+            for x in 0..<w {
+                let p = rgba(low, x: x, y: y), q = rgba(high, x: x, y: y)
+                let byteDelta = max(abs(p.r - q.r), max(abs(p.g - q.g),
+                                      max(abs(p.b - q.b), abs(p.a - q.a))))
+                guard byteDelta > 1 else { continue }
+                result.pixels += 1
+                let logical = CGPoint(x: CGFloat(x) / sx, y: CGFloat(y) / sy)
+                if !sample.mask.contains(logical, padding: 1) { result.outsideMask += 1 }
+                if forbidden(logical, sample: sample) { result.forbidden += 1 }
+                let luma0 = (0.2126 * Double(p.r) + 0.7152 * Double(p.g)
+                    + 0.0722 * Double(p.b)) / 255
+                let luma1 = (0.2126 * Double(q.r) + 0.7152 * Double(q.g)
+                    + 0.0722 * Double(q.b)) / 255
+                let delta = abs(luma1 - luma0)
+                result.minLumaDelta = min(result.minLumaDelta, delta)
+                result.maxLumaDelta = max(result.maxLumaDelta, delta)
+                let point = CGPoint(x: x, y: y)
+                if let box = result.box {
+                    result.box = box.union(CGRect(origin: point, size: CGSize(width: 1, height: 1)))
+                } else {
+                    result.box = CGRect(origin: point, size: CGSize(width: 1, height: 1))
+                }
+            }
+        }
+        if result.minLumaDelta == .greatestFiniteMagnitude { result.minLumaDelta = 0 }
+        return result
+    }
+
+    private func forbidden(_ point: CGPoint, sample: Sample) -> Bool {
+        let faceRects: [CGRect]
+        if let frame = sample.chinFrame, frame >= 0,
+           assets.faceChinFrames.indices.contains(frame) {
+            faceRects = assets.faceChinFrames[frame].patches.values.map {
+                CGRect(x: CGFloat($0.x) / 2, y: CGFloat($0.y) / 2,
+                       width: CGFloat($0.w) / 2, height: CGFloat($0.h) / 2)
+            }
+        } else if sample.chinFrame != nil {
+            faceRects = assets.face2x.patches.values.map {
+                CGRect(x: CGFloat($0.x) / 2, y: CGFloat($0.y) / 2,
+                       width: CGFloat($0.w) / 2, height: CGFloat($0.h) / 2)
+            }
+        } else {
+            faceRects = assets.face.patches.values.map {
+                CGRect(x: $0.x, y: $0.y, width: $0.w, height: $0.h)
+            }
+        }
+        if faceRects.contains(where: { $0.contains(point) }) { return true }
+        let hand = assets.hands.rect
+        return CGRect(x: hand.x, y: hand.y, width: hand.w, height: hand.h)
+            .contains(point)
+    }
+
+    private func maskForbiddenPixels(_ mask: HeadphoneMask, chinFrame: Int?,
+                                     closeup: Bool) -> Int {
+        let faceRects: [CGRect]
+        if closeup, let chinFrame,
+           assets.faceChinFrames.indices.contains(chinFrame) {
+            faceRects = assets.faceChinFrames[chinFrame].patches.values.map {
+                CGRect(x: CGFloat($0.x) / 2, y: CGFloat($0.y) / 2,
+                       width: CGFloat($0.w) / 2, height: CGFloat($0.h) / 2)
+            }
+        } else if closeup {
+            faceRects = assets.face2x.patches.values.map {
+                CGRect(x: CGFloat($0.x) / 2, y: CGFloat($0.y) / 2,
+                       width: CGFloat($0.w) / 2, height: CGFloat($0.h) / 2)
+            }
+        } else {
+            faceRects = assets.face.patches.values.map {
+                CGRect(x: CGFloat($0.x), y: CGFloat($0.y),
+                       width: CGFloat($0.w), height: CGFloat($0.h))
+            }
+        }
+        let hand = assets.hands.rect
+        var count = 0
+        for y in 0..<mask.pixelHeight {
+            for x in 0..<mask.pixelWidth {
+                guard mask.alpha[y * mask.pixelWidth + x] > 0 else { continue }
+                let point = CGPoint(x: mask.rect.minX + CGFloat(x) / CGFloat(mask.pixelScale),
+                                    y: mask.rect.minY + CGFloat(y) / CGFloat(mask.pixelScale))
+                if faceRects.contains(where: { $0.contains(point) })
+                    || CGRect(x: hand.x, y: hand.y, width: hand.w, height: hand.h)
+                        .contains(point) {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
+    private func boxError(_ box: CGRect?, expected: CGRect,
+                          width: Int, height: Int) -> CGFloat {
+        guard let box else { return .greatestFiniteMagnitude }
+        let sx = CGFloat(width) / assets.legs.canvasW
+        let sy = CGFloat(height) / assets.legs.canvasH
+        let want = CGRect(x: expected.minX * sx, y: expected.minY * sy,
+                          width: expected.width * sx, height: expected.height * sy)
+        return max(abs(box.minX - want.minX), max(abs(box.minY - want.minY),
+                   max(abs(box.maxX - want.maxX), abs(box.maxY - want.maxY))))
+    }
+
+    private func rgba(_ rep: NSBitmapImageRep, x: Int, y: Int)
+        -> (r: Int, g: Int, b: Int, a: Int) {
+        if let data = rep.bitmapData, rep.samplesPerPixel >= 4 {
+            let offset = y * rep.bytesPerRow + x * rep.samplesPerPixel
+            return (Int(data[offset]), Int(data[offset + 1]),
+                    Int(data[offset + 2]), Int(data[offset + 3]))
+        }
+        guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else {
+            return (0, 0, 0, 0)
+        }
+        return (Int(c.redComponent * 255), Int(c.greenComponent * 255),
+                Int(c.blueComponent * 255), Int(c.alphaComponent * 255))
+    }
+
+    private func byteDifference(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep)
+        -> (changed: Int, maxDelta: Int) {
+        let w = min(a.pixelsWide, b.pixelsWide), h = min(a.pixelsHigh, b.pixelsHigh)
+        var changed = 0, maxDelta = 0
+        for y in 0..<h {
+            for x in 0..<w {
+                let p = rgba(a, x: x, y: y), q = rgba(b, x: x, y: y)
+                let delta = max(abs(p.r - q.r), max(abs(p.g - q.g),
+                                  max(abs(p.b - q.b), abs(p.a - q.a))))
+                if delta > 0 { changed += 1; maxDelta = max(maxDelta, delta) }
+            }
+        }
+        return (changed, maxDelta)
+    }
+
+    private func boxDescription(_ box: CGRect?) -> String {
+        guard let box else { return "none" }
+        return String(format: "(%.0f,%.0f)-(%.0f,%.0f)",
+                      box.minX, box.minY, box.maxX, box.maxY)
     }
 }
 

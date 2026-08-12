@@ -27,6 +27,37 @@ struct RenderedSnozzy: View, Equatable {
     var chinFrame: Int? = nil
     /// 当前时间。腿部姿势由它推导。
     let t: Double
+    /// Optional explicit glow phase used by deterministic snapshot probes.
+    /// Production leaves this nil and derives the phase from the shared
+    /// timeline's `t`; probes can change only the glow while keeping the
+    /// character pose, leg frame, and face fixed.
+    let headphonePhase: Int?
+    /// Snapshot-only fault injection. Production leaves both values at their
+    /// defaults; negative probes still exercise this real production view.
+    let headphoneMaskOverride: HeadphoneMask?
+    let headphoneGlowAlphaScale: Double
+    /// Diagnostic-only paused leak. It deliberately keeps `headphones == false`
+    /// (and therefore the ordinary body) while allowing the same mask to draw.
+    let headphoneGlowPausedLeak: Bool
+
+    init(assets: SceneAssets, palette: Palette, pose: Pose,
+         face: FaceExpression, headphones: Bool, chinFrame: Int? = nil,
+         t: Double, headphonePhase: Int? = nil,
+         headphoneMaskOverride: HeadphoneMask? = nil,
+         headphoneGlowAlphaScale: Double = 1,
+         headphoneGlowPausedLeak: Bool = false) {
+        self.assets = assets
+        self.palette = palette
+        self.pose = pose
+        self.face = face
+        self.headphones = headphones
+        self.chinFrame = chinFrame
+        self.t = t
+        self.headphonePhase = headphonePhase
+        self.headphoneMaskOverride = headphoneMaskOverride
+        self.headphoneGlowAlphaScale = headphoneGlowAlphaScale
+        self.headphoneGlowPausedLeak = headphoneGlowPausedLeak
+    }
 
     /// 角色图和房间、桌子是同一台相机渲出来的，三层像素级对齐，
     /// 所以直接满幅绘制。构图在 `Scripts/blocking.py` 里定，不在这里调。
@@ -34,6 +65,14 @@ struct RenderedSnozzy: View, Equatable {
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
         a.headphones == b.headphones && a.palette == b.palette
             && a.chinFrame == b.chinFrame
+            // The glow is deliberately phase-quantized.  Comparing this
+            // discrete state keeps the 3.2-second breath alive through the
+            // parent `.equatable()` gate without redrawing for every wall-clock
+            // tick.
+            && a.headphoneGlowPhase == b.headphoneGlowPhase
+            && a.headphoneMaskOverride == b.headphoneMaskOverride
+            && a.headphoneGlowAlphaScale == b.headphoneGlowAlphaScale
+            && a.headphoneGlowPausedLeak == b.headphoneGlowPausedLeak
             && abs(a.pose.breath - b.pose.breath) < 0.01
             && abs(a.pose.bodySway - b.pose.bodySway) < 0.01
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
@@ -58,6 +97,12 @@ struct RenderedSnozzy: View, Equatable {
                 // 托腮期间贴片跟着档位换：抬手那几帧脸在转，淡出；
                 // 终态换成在终态姿势上渲的 facechin 贴片（头歪、手贴脸）。
                 let overlay = faceOverlayState
+                if let mask = headphoneGlowMask,
+                   headphones || headphoneGlowPausedLeak {
+                    HeadphoneGlow(mask: mask, palette: palette,
+                                  phase: headphoneGlowPhase, width: w, height: h,
+                                  alphaScale: headphoneGlowAlphaScale)
+                }
                 FaceOverlay(assets: assets, pose: pose, face: face,
                             palette: palette,
                             highResolution: assets.hasHighResolutionFace,
@@ -104,6 +149,28 @@ struct RenderedSnozzy: View, Equatable {
             return (nil, 1)
         }
         return (frame, 1)
+    }
+
+    /// Playback is the only source of this feedback.  A paused scene returns
+    /// -1 so it cannot inherit a phase from the last playing frame.
+    private var headphoneGlowPhase: Int {
+        headphones || headphoneGlowPausedLeak
+            ? (headphonePhase ?? HeadphoneGlow.phase(at: t)) : -1
+    }
+
+    /// Select the mask belonging to the exact torso image currently on screen.
+    /// The 2× chin base/intermediate/final assets have independent masks because
+    /// the head is intentionally tilted through the action.
+    private var headphoneGlowMask: HeadphoneMask? {
+        guard headphones || headphoneGlowPausedLeak else { return nil }
+        if let headphoneMaskOverride { return headphoneMaskOverride }
+        guard assets.hasCompleteHeadphoneMasks else { return nil }
+        if let frame = chinFrame {
+            if frame < 0 { return assets.chinHeadphoneBaseMask }
+            guard assets.chinHeadphoneMasks.indices.contains(frame) else { return nil }
+            return assets.chinHeadphoneMasks[frame]
+        }
+        return assets.headphoneMask
     }
 
     /// 该画哪一张上半身，以及它贴在哪。

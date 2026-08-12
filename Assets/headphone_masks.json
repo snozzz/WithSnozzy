@@ -1,0 +1,258 @@
+{
+  "canvas": [
+    1536,
+    1024
+  ],
+  "masks": {
+    "chin_00": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        823.0101090413449,
+        375.31065424806906
+      ],
+      "components": 2,
+      "coverage": 4402,
+      "file": "headphone_mask_chin2x_00.png",
+      "pixelScale": 2,
+      "rect": [
+        753.5,
+        334.5,
+        119.5,
+        62.5
+      ]
+    },
+    "chin_01": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        823.0439610242465,
+        375.31191932925447
+      ],
+      "components": 2,
+      "coverage": 4413,
+      "file": "headphone_mask_chin2x_01.png",
+      "pixelScale": 2,
+      "rect": [
+        753.5,
+        334.5,
+        119.5,
+        62.5
+      ]
+    },
+    "chin_02": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        823.4764021887825,
+        375.6364569083447
+      ],
+      "components": 2,
+      "coverage": 4386,
+      "file": "headphone_mask_chin2x_02.png",
+      "pixelScale": 2,
+      "rect": [
+        754.0,
+        333.5,
+        119.5,
+        64.5
+      ]
+    },
+    "chin_03": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        824.5275302718757,
+        376.1506739776102
+      ],
+      "components": 2,
+      "coverage": 4377,
+      "file": "headphone_mask_chin2x_03.png",
+      "pixelScale": 2,
+      "rect": [
+        755.0,
+        332.0,
+        120.0,
+        67.5
+      ]
+    },
+    "chin_04": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        825.3964244521338,
+        376.7589388696655
+      ],
+      "components": 2,
+      "coverage": 4335,
+      "file": "headphone_mask_chin2x_04.png",
+      "pixelScale": 2,
+      "rect": [
+        756.5,
+        330.5,
+        119.5,
+        70.5
+      ]
+    },
+    "chin_05": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        825.8774044032444,
+        377.27566628041717
+      ],
+      "components": 2,
+      "coverage": 4315,
+      "file": "headphone_mask_chin2x_05.png",
+      "pixelScale": 2,
+      "rect": [
+        757.5,
+        329.5,
+        120.0,
+        73.0
+      ]
+    },
+    "chin_06": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        826.3533720930233,
+        377.56848837209304
+      ],
+      "components": 2,
+      "coverage": 4300,
+      "file": "headphone_mask_chin2x_06.png",
+      "pixelScale": 2,
+      "rect": [
+        758.0,
+        328.5,
+        120.0,
+        75.0
+      ]
+    },
+    "chin_07": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        826.3168652184069,
+        377.6742583508526
+      ],
+      "components": 2,
+      "coverage": 4281,
+      "file": "headphone_mask_chin2x_07.png",
+      "pixelScale": 2,
+      "rect": [
+        758.0,
+        329.0,
+        120.0,
+        75.0
+      ]
+    },
+    "chin_08": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        826.5385870832362,
+        377.63756120307767
+      ],
+      "components": 2,
+      "coverage": 4289,
+      "file": "headphone_mask_chin2x_08.png",
+      "pixelScale": 2,
+      "rect": [
+        758.5,
+        328.5,
+        120.0,
+        75.5
+      ]
+    },
+    "chin_base": {
+      "canvas": [
+        1536,
+        611
+      ],
+      "centroid": [
+        823.0101090413449,
+        375.31065424806906
+      ],
+      "components": 2,
+      "coverage": 4402,
+      "file": "headphone_mask_chin2x_base.png",
+      "pixelScale": 2,
+      "rect": [
+        753.5,
+        334.5,
+        119.5,
+        62.5
+      ]
+    },
+    "normal": {
+      "canvas": [
+        1536,
+        600
+      ],
+      "centroid": [
+        822.0742954739538,
+        374.66268146883004
+      ],
+      "components": 2,
+      "coverage": 1171,
+      "file": "headphone_mask_normal.png",
+      "pixelScale": 1,
+      "rect": [
+        753.0,
+        335.0,
+        120.0,
+        62.0
+      ]
+    }
+  },
+  "pixelScale": 1,
+  "sources": {
+    "chin.json": "6682027fdd22d91855dfd447e355417e482b1f110b32d26ea9355b126ca47ae5",
+    "face.json": "82519002a228a6b1d2e935edca015cd69227055fffd908bccdce58c0a885d1b2",
+    "face2x.json": "b4939b81320e141185a09a20c6719f706f80e8c16eb7959b80625d0e9dc35916",
+    "facechin2x.json": "475ff9bb7f664e7684c68e089c3dd0aa7da49ce45388a00fa95aab5a8f9bf0ec",
+    "snozzy_body.png": "1ba1fcb776b79f788556f53ec05a146fedd6d089989228232df5c111b02849c6",
+    "snozzy_body_chin2x.png": "ada06e5a4f9c4d2daae853cb419590451aaad39322e5d75d3917ff26f6991bff",
+    "snozzy_body_chin2x_00.png": "e4ed1c13015e7dec09bc2f924f992f5ebc2baf41f09140a9825089688698dccc",
+    "snozzy_body_chin2x_01.png": "c0e2d253c6e3e4e346a1ed8a6a85f73ae8a536e39b0ecc5fd3ae7050ae4926db",
+    "snozzy_body_chin2x_02.png": "3a4c815c401ed31b94d338b78936f7c510368025390fd8e6e09fd25dde307290",
+    "snozzy_body_chin2x_03.png": "8747e957e2f434d81c13196877efe2713c0c5364929788af214772891f87c753",
+    "snozzy_body_chin2x_04.png": "ff51f5380a656adc14bba9134544b0550163eeae8064409363923091ecaeab03",
+    "snozzy_body_chin2x_05.png": "3147f47c87c230c44825fbba344ab1adcd03d7dff4a400657fa0d4b7f4a84539",
+    "snozzy_body_chin2x_06.png": "5fdae29d139f13148ac1731d9d0eed3583e19f52d8f8eeb6fa606a111e4ed71a",
+    "snozzy_body_chin2x_07.png": "0be270bb159c11707a15ef077a003f24ac0d7ab627ef981567f0c94842105f58",
+    "snozzy_body_chin_headphones2x.png": "7a032a46dcf27af98a0a0ef0ace67adfab658db01a60a6f584c66c136d17df10",
+    "snozzy_body_chin_headphones2x_00.png": "1fd84d395df463708bdd93076a073cc4544c9c73414c1302a9e38ce8327b37f9",
+    "snozzy_body_chin_headphones2x_01.png": "c14fe664d40af427bc93004027f50fe31535c53f3a4c839456fc1a3428e81c14",
+    "snozzy_body_chin_headphones2x_02.png": "55a3147fe580fee09fdb3718a58708d4fc497355b57f015927115e364912e4e9",
+    "snozzy_body_chin_headphones2x_03.png": "14f1231a39463d42cffbfee2bda85838526c79a115be1220593bc6e0b570fdba",
+    "snozzy_body_chin_headphones2x_04.png": "f50e0009e817a2248111caee1d8f85847dfd2a9e0b8858ddc90e7185c6741b91",
+    "snozzy_body_chin_headphones2x_05.png": "9823aeb7171d306bca2dd7976a5a5ea571dcd39223cecd88d0289b221bc72033",
+    "snozzy_body_chin_headphones2x_06.png": "897197d97319fa72b5c950c4f922f11ae16dd7ec04038975c4e20f039332e54c",
+    "snozzy_body_chin_headphones2x_07.png": "70294311b5d7a16b629b268d3816243c937861cbb69c0cf2ed04440e73b81e40",
+    "snozzy_body_closeup2x.png": "e45db9f94519863621bb28f269d2327f0be4ded3c4966a6bf805450b2f24f6e6",
+    "snozzy_body_closeup_headphones2x.png": "33648f72a0a59a6aa920d398272ea01730efe64b466d3435b940ccc2b3ac2192",
+    "snozzy_body_headphones.png": "54751500c540936aa24b8142582bdb0c8eb193be9f7227d745be6d3960986523"
+  },
+  "version": 2
+}
