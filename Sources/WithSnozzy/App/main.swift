@@ -19,12 +19,20 @@ if MCPServer.isRequested {
     MCPServer.run()
 }
 
+if SettingsDiagnostics.isRequested {
+    SettingsDiagnostics.run()
+}
+
 // Three.js Phase 0 owns a dedicated AppKit window and WKWebView. Keep it out
 // of the production SwiftUI scene so the renderer and screenshot gate cannot
 // be hidden by menu-bar/window lifecycle state.
 if let path = ThreePhase0Diagnostics.requestedPath {
     MainActor.assumeIsolated {
         ThreePhase0Diagnostics.runStandalone(path: path)
+    }
+} else if let request = Realtime3DRoomDiagnostics.request {
+    MainActor.assumeIsolated {
+        Realtime3DRoomDiagnostics.runStandalone(request: request)
     }
 } else {
     // 别的都要 UI（或者至少要 AppKit 的运行循环），交给 SwiftUI。

@@ -16,6 +16,7 @@ struct AppSettings: Codable {
     /// 上次打开的侧边面板。
     var panel: String?
     var radioMood: RadioMood = .chill
+    var sceneMode: SceneMode = .twoPointFiveD
     var characterStyle: CharacterStyle = .rendered
     var live2dModelPath: String = "hiyori_en/hiyori_free"
     /// 对话走哪个命令行。默认 claude——比 codex 快一倍。
@@ -52,6 +53,7 @@ struct AppSettings: Codable {
         lowPower = get(.lowPower, d.lowPower)
         panel = get(.panel, d.panel)
         radioMood = get(.radioMood, d.radioMood)
+        sceneMode = get(.sceneMode, d.sceneMode)
         characterStyle = get(.characterStyle, d.characterStyle)
         live2dModelPath = get(.live2dModelPath, d.live2dModelPath)
         chatBackend = get(.chatBackend, d.chatBackend)

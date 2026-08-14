@@ -31,7 +31,7 @@ fi
 # 手绘素材（如果有）。放进 Resources/Assets/，运行时从 Bundle 里取。
 if [ -d "$ROOT/Assets" ] && [ -n "$(ls -A "$ROOT/Assets" 2>/dev/null)" ]; then
   mkdir -p "$APP/Contents/Resources/Assets"
-  cp "$ROOT/Assets/"* "$APP/Contents/Resources/Assets/" 2>/dev/null || true
+  find "$ROOT/Assets" -mindepth 1 -maxdepth 1 ! -name Realtime3D -exec cp -R {} "$APP/Contents/Resources/Assets/" \;
   echo "▸ 已打包手绘素材 ($(ls "$ROOT/Assets" | wc -l | tr -d ' ') 个文件)"
 fi
 
@@ -58,6 +58,22 @@ if [ -f "$ROOT/Sources/WithSnozzy/Realtime3D/phase0.html" ] \
   cp "$ROOT/Assets/Realtime3D/Phase0Runtime.glb" "$PHASE0_RES/Phase0Runtime.glb"
   cp "$ROOT/Assets/Realtime3D/Phase0Manifest.json" "$PHASE0_RES/Phase0Manifest.json"
   echo "▸ Three.js Phase 0 资源已打包"
+fi
+
+# Production real-time room. Unlike the Phase 0 gate this bundle is loaded by
+# the normal SwiftUI scene; it stays fully local and is torn down when the user
+# switches back to 2.5D. The authoring .blend is deliberately not packaged.
+ROOM_RES="$APP/Contents/Resources/ThreeRealtime3D"
+if [ -f "$ROOT/Sources/WithSnozzy/Realtime3D/room.html" ] \
+  && [ -f "$ROOT/Sources/WithSnozzy/Realtime3D/room.bundle.js" ] \
+  && [ -f "$ROOT/Assets/Realtime3D/SnozzyRoom3D.glb" ] \
+  && [ -f "$ROOT/Assets/Realtime3D/SnozzyRoom3DManifest.json" ]; then
+  mkdir -p "$ROOM_RES"
+  cp "$ROOT/Sources/WithSnozzy/Realtime3D/room.html" "$ROOM_RES/room.html"
+  cp "$ROOT/Sources/WithSnozzy/Realtime3D/room.bundle.js" "$ROOM_RES/room.bundle.js"
+  cp "$ROOT/Assets/Realtime3D/SnozzyRoom3D.glb" "$ROOM_RES/SnozzyRoom3D.glb"
+  cp "$ROOT/Assets/Realtime3D/SnozzyRoom3DManifest.json" "$ROOM_RES/SnozzyRoom3DManifest.json"
+  echo "▸ Three.js 生产 3D 房间资源已打包"
 fi
 
 # 图标。

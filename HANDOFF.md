@@ -1283,9 +1283,66 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
   但现在没在用——渲染版走通之后它成了备选。`Vendor/CubismCore/` 未入库
 - 房间仍以高完成度静态画为主体；Activity 已补上小反馈，但喝水、看书、伸懒腰
   这些需要新上半身与 3D 道具的长动作还没做
-- 当前明确**不改运行时全 3D**。固定相机下收益不足，却要重建插画房间、材质、
-  222 骨与 58 形态键；继续用 Blender 离线 3D + SwiftUI 2.5D。只有加入自由镜头
-  才重新评估
+- 2.5D 仍是默认、稳定路径；现在另有一个可切换的实验性运行时全 3D 场景，
+  用来和 2.5D 做体验对比。它不改变现有 2D 图层，也不接语音/记忆系统。
+
+### 运行时 3D（实验路径）
+
+生产资源在 `Sources/WithSnozzy/Realtime3D/`，打包后位于
+`Contents/Resources/ThreeRealtime3D/`：`room.html`、固定版本的本地 Three.js
+bundle、`SnozzyRoom3D.glb` 和 `SnozzyRoom3DManifest.json`。Swift 侧用非持久化
+`WKWebView` 承载本地页面，设置面板的“渲染场景”切换到 3D 时只替换完整场景的
+背景，TopBar、Dock 和面板仍走原来的 SwiftUI；迷你/桌宠继续走 2.5D。切回
+2.5D 会销毁 WebView、GPU context 和临时开发资源。
+
+运行时约定：Blender 的 Z-up GLB 在根节点只做一次 `Z-up → Y-up` 转换；角色材质
+使用 MeshBasic/unlit、贴图显式 sRGB，头发/睫毛保留 alpha cutout。相机绝不能按
+整个房间 bounds 自动 framing（离群装饰会把 Snozzy 缩成小人），必须消费 manifest
+的 `camera.position/target/fovDegrees`，报告中的 `cameraContract` gate 也必须显示
+`source=manifest`。manifest 还应保留 `validation.contactContract` 和每个动作的
+`clips[].contact`，否则诊断应诚实失败。
+
+动作名按 manifest 的真实 clip 名绑定：`idle_seated_loop`、`typing_loop`、
+`coffee_once`、`phone_once`、`stand_stretch_once`。日常默认 typing/idle 之间
+0.32 秒 crossfade；喝咖啡和看手机必须同时播放对应的
+`coffee_once_PropMotion` / `phone_once_PropMotion`，动作被打断或结束时显式恢复
+`Prop_Coffee` / `Prop_Phone` 的 rest TRS，不能假定 `AnimationAction.stop()` 会复位。
+
+### 3D 诊断与常见坑
+
+```bash
+# 六张动作隔离截图：idle / typing / coffee / phone / stand / typing_return
+room_out=$(mktemp -d /tmp/withsnozzy-room-out.XXXXXX)
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --3droom-snapshot \
+  Assets/Realtime3D/SnozzyRoom3D.glb \
+  --3droom-output "$room_out" --3droom-report "$room_out/report.json"
+
+# 前台短性能 smoke：真实 animate() 帧间隔、WebGL 信息和 RSS
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --3droom \
+  Assets/Realtime3D/SnozzyRoom3D.glb \
+  --3droom-output /tmp/withsnozzy-room-smoke \
+  --3droom-report /tmp/withsnozzy-room-smoke/report.json
+```
+
+`--3droom-snapshot` 使用确定性的 `AnimationMixer` 本地时间采样，不等待被
+WKWebView 节流的 wall-clock timer；每张图采样前会 stop/reset 全部 action，只启用
+一个主动作（咖啡/手机另加一个 PropMotion），报告 `diagnosticActiveWeights`，
+并以此 gate 防止上一动作的手臂串到下一张。截图应在动作中段的可读时间点采样，
+不是刚切换的第一帧。报告还检查 WebGL、骨骼/形态键/材质/三角形、真实 clip 名、
+prop companion、manifest contact、camera source 和 idle/typing 像素差。
+
+contact 不能只信 manifest：runtime 会以 `source=runtimeAnimationSample` 逐帧复核
+咖啡右手 `56..120/24`、手机左手 `52..128/24` 与对应 PropMotion 的世界距离，
+并完整采样 typing 的 24fps。8 个 `J_Bip_{L,R}_{Index,Middle,Ring,Little}3`
+用 local `+Y` 骨段长度作指尖，Keyboard 使用实际 child mesh geometry bbox 的
+rotation-only basis；每帧每手至少一指尖须落在 footprint（外扩 5mm）且距顶面≤10mm。
+缺节点、动作或非有限值一律 fail closed，完成后恢复 typing；报告新增 `runtimeContact`
+gate。材质运行时总数须≤40，routine 需证明分布、暂停/恢复、手动重排和销毁取消合同。
+
+每次改 `room.js` 后先跑 `node --check Sources/WithSnozzy/Realtime3D/room.js`，
+再用仓库的 Bun 命令生成同目录 `room.bundle.js`，最后 `Scripts/build_app.sh
+release`；不要手改 bundle。资产侧替换 GLB 或 manifest 后必须重跑六图 PASS，
+否则旧报告不能代表新资产。
 
 ---
 
@@ -1654,6 +1711,9 @@ MCP 这套代码没白写：协议层面和 OpenAI 自己的插件已经完全�
 ```bash
 # 构建并打包
 ./Scripts/build_app.sh release
+
+# 偏好迁移：旧 JSON 默认 2.5D，显式 3D 可编码往返
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --settingscheck
 
 # 跑起来看
 open dist/WithSnozzy.app

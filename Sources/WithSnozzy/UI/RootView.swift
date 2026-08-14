@@ -26,11 +26,18 @@ struct RootView: View {
         let pal = state.palette
 
         return ZStack {
-            SceneStack(
-                palette: pal,
-                weather: state.weather,
-                interval: state.frameInterval,
-                paused: !state.isVisible)
+            if state.sceneMode == .realtime3DExperimental {
+                Realtime3DRoomView(isVisible: state.isVisible,
+                                   lowPower: state.lowPower,
+                                   session: state.realtime3D)
+                    .ignoresSafeArea()
+            } else {
+                SceneStack(
+                    palette: pal,
+                    weather: state.weather,
+                    interval: state.frameInterval,
+                    paused: !state.isVisible)
+            }
 
             VStack(spacing: 0) {
                 TopBar(palette: pal)
@@ -64,8 +71,20 @@ struct RootView: View {
                 }
             }
         }
-        .background(pal.wallShade.color)
-        .grain()
+        .background(state.sceneMode == .realtime3DExperimental
+                    ? Color.black
+                    : pal.wallShade.color)
+        .overlay {
+            // The WebGL room already has its own color management and grain
+            // budget. Applying the 2.5D tile over it muddies the GLB textures.
+            if state.sceneMode != .realtime3DExperimental {
+                Grain.tile
+                    .resizable(resizingMode: .tile)
+                    .opacity(0.035)
+                    .blendMode(.overlay)
+                    .allowsHitTesting(false)
+            }
+        }
         .animation(.easeInOut(duration: 0.9), value: pal)  // 时段切换时颜色平滑过渡
         .preferredColorScheme(.dark)
     }

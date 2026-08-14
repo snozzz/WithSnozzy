@@ -47,6 +47,17 @@ let package = Package(
             name: "WithSnozzy",
             dependencies: appDependencies,
             path: "Sources/WithSnozzy",
+            // Web runtime files are copied by Scripts/build_app.sh. Keeping
+            // them out of the Swift target removes SwiftPM's unhandled-file
+            // warnings without turning local JS into a Swift resource bundle.
+            exclude: [
+                "Realtime3D/phase0.bundle.js",
+                "Realtime3D/phase0.html",
+                "Realtime3D/phase0.js",
+                "Realtime3D/room.bundle.js",
+                "Realtime3D/room.html",
+                "Realtime3D/room.js",
+            ],
             swiftSettings: appSwiftSettings,
             linkerSettings: appLinkerSettings
         )

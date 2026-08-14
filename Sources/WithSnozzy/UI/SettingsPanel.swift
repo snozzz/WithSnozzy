@@ -16,6 +16,20 @@ struct SettingsPanel: View {
 
         VStack(alignment: .leading, spacing: 16) {
             section("场景") {
+                row("渲染场景") {
+                    Picker("", selection: $s.sceneMode) {
+                        ForEach(SceneMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    .labelsHidden()
+                    .frame(width: 142)
+                }
+                Text(state.sceneMode.explanation)
+                    .font(.system(size: 9, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+                if state.sceneMode == .realtime3DExperimental {
+                    realtime3DControls
+                }
                 row("时段") {
                     Picker("", selection: $s.timeMode) {
                         ForEach(TimeMode.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -225,6 +239,50 @@ struct SettingsPanel: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("待办、专注、聊天、长期记忆、设置与本机 MCP 队列都会删除，无法撤销。")
+        }
+    }
+
+    @ViewBuilder
+    private var realtime3DControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: state.realtime3D.isReady ? "checkmark.circle.fill" : "circle.dotted")
+                    .foregroundStyle(state.realtime3D.isReady
+                                     ? palette.accent.color
+                                     : .white.opacity(0.38))
+                Text(state.realtime3D.status)
+                    .font(.system(size: 10, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+
+            Text("动作预览")
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.38))
+
+            HStack(spacing: 6) {
+                ForEach(Realtime3DAction.allCases) { action in
+                    Button {
+                        state.realtime3D.request(action)
+                    } label: {
+                        Label(action.label, systemImage: action.symbol)
+                            .font(.system(size: 9, design: .rounded))
+                            .labelStyle(.titleAndIcon)
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(state.realtime3D.activeAction.contains(action.rawValue)
+                          ? palette.accent.color
+                          : .white.opacity(0.5))
+                    .help("在 3D 房间里播放\(action.label)")
+                }
+            }
+
+            Text("实时 3D 使用本地 GLB，不连接网络；切回 2.5D 会释放 WebGL 房间。")
+                .font(.system(size: 9, design: .rounded))
+                .foregroundStyle(.white.opacity(0.32))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

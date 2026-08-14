@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' file:; worker-src 'self' blob:;">
+  <title>With Snozzy · 3D Room</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Rounded", sans-serif; }
+    html, body, #room-root { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #0e1020; }
+    #room-root { position: relative; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .room-hud { position: absolute; left: 22px; bottom: 22px; display: flex; align-items: center; gap: 8px;
+      padding: 9px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+      background: rgba(14,16,32,.72); box-shadow: 0 8px 28px rgba(0,0,0,.26); backdrop-filter: blur(16px);
+      color: rgba(255,255,255,.72); font-size: 11px; letter-spacing: .01em; pointer-events: none; }
+    .room-dot { width: 7px; height: 7px; border-radius: 99px; background: #f3a7c4; box-shadow: 0 0 10px #f3a7c4; }
+    .room-error { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%, -50%); width: min(340px, 78vw);
+      padding: 22px 24px; border: 1px solid rgba(255,255,255,.14); border-radius: 18px; text-align: center;
+      background: rgba(21,19,36,.92); color: rgba(255,255,255,.82); box-shadow: 0 18px 60px rgba(0,0,0,.42); }
+    .room-error strong { display: block; margin-bottom: 9px; color: #f3a7c4; font-size: 14px; }
+    .room-error span { color: rgba(255,255,255,.58); font-size: 11px; line-height: 1.45; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="room-root">
+    <canvas id="room-canvas" aria-label="Snozzy 3D room"></canvas>
+    <div class="room-hud"><span class="room-dot"></span><span id="room-status">正在打开房间…</span></div>
+    <div id="room-loading" class="room-error"><strong>正在布置 Snozzy 的房间</strong><span>首次打开会解码角色材质，请稍候…</span></div>
+    <div id="room-error" class="room-error hidden"><strong>3D 房间暂时不可用</strong><span id="room-error-message">—</span></div>
+  </div>
+  <script src="./room.bundle.js"></script>
+</body>
+</html>

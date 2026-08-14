@@ -95,6 +95,10 @@ final class AppState {
     /// 手绘房间素材。缺失时场景自动回落到程序化绘制。
     let sceneAssets = SceneAssets()
 
+    /// Non-persistent status and action requests for the optional real-time
+    /// 3D room. The WebView itself is owned by the view tree, not AppState.
+    let realtime3D = Realtime3DSession()
+
     /// 指针位置。底部控制条靠它决定显隐。
     let pointer = PointerWatcher()
 
@@ -347,6 +351,7 @@ final class AppState {
         s.lowPower = lowPower
         s.panel = panel?.rawValue
         s.radioMood = radioMood
+        s.sceneMode = sceneMode
         s.characterStyle = characterStyle
         s.live2dModelPath = live2d.modelDirectory
         s.chatBackend = chat.backend
@@ -377,6 +382,7 @@ final class AppState {
         panel = saved.panel.flatMap(Panel.init(rawValue:))
         source = saved.source
         windowMode = saved.windowMode
+        sceneMode = saved.sceneMode
         for (i, sound) in Ambience.allCases.enumerated() {
             ambienceLevels[i] = saved.ambienceLevels[i]
             audio.setAmbienceLevel(sound, saved.ambienceLevels[i])
@@ -673,6 +679,13 @@ final class AppState {
 
     // 场景
     var timeMode: TimeMode = .auto { didSet { scheduleSave() } }
+    var sceneMode: SceneMode = .twoPointFiveD {
+        didSet {
+            guard sceneMode != oldValue else { return }
+            if sceneMode != .realtime3DExperimental { realtime3D.reset() }
+            scheduleSave()
+        }
+    }
     var weather: Weather = .clear {
         didSet {
             guard weather != oldValue else { return }
