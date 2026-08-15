@@ -589,8 +589,12 @@ def _rotate_world(arm, name, axis, radians):
     bpy.context.view_layer.update()
 
 
-def _chin_phase(amount, start, end):
-    """A deterministic eased phase in the chin-rest timeline.
+def _eased_phase(amount, start, end):
+    """A deterministic eased phase in a long-action timeline.
+
+    Shared by `chin_rest` and `stretch`: both need "this bone group starts
+    here and arrives there", so the joints do not all land on the same frame
+    (that reads as a pose switch rather than a movement).
 
     The arm leaves the keyboard first, the fingers shape while the wrist is
     already in flight, and the head follows last.  The final two percent is
@@ -697,13 +701,13 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
             # Start only after the wrist has left the keybed, but spread the
             # 7° roll over the remaining samples so the ponytails do not make
             # one late silhouette spike.
-            phase = _chin_phase(amount, 0.18, 0.82)
+            phase = _eased_phase(amount, 0.18, 0.82)
         elif pb.name in finger_names:
-            phase = _chin_phase(amount, 0.16, 0.78)
+            phase = _eased_phase(amount, 0.16, 0.78)
         else:
-            phase = _chin_phase(amount, 0.00, 0.58)
+            phase = _eased_phase(amount, 0.00, 0.58)
         # Leave 2% of the travel for the final 1–2 mm settling at the jaw.
-        settle = _chin_phase(amount, 0.86, 1.00)
+        settle = _eased_phase(amount, 0.86, 1.00)
         phase = min(1.0, 0.98 * phase + 0.02 * settle)
         a_loc, a_rot, a_scale = start[pb.name].decompose()
         b_loc, b_rot, b_scale = target[pb.name].decompose()
@@ -715,6 +719,102 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
 
     return (arm.matrix_world
             @ arm.pose.bones[f"J_Bip_{side}_LowerArm"].head).z
+
+
+# 伸懒腰：两条胳膊举过头顶、胸口往后打开、脸抬起来。
+#
+# 和托腮共用同一套机制（在骨骼局部变换之间插值 + 分组相位），但约束不同：
+#
+# - **两条胳膊一起动**，所以桌面那一层里一只手都不该留（第 60 条：那一层的
+#   前提是"里面的东西都在桌沿前面"，举起来的胳膊不满足）。只剩键盘。
+# - **脊柱和胯一根都不许动**，但**胸可以**。缝线在 y=600，而 `J_Bip_C_Chest`
+#   的支点在腰以上——绕它转，缝线那一行的像素一个都不动。判据不是"我觉得
+#   不会动"，是 `measure_stretch.py` 逐像素量缝线以下的漂移，必须是 0。
+# - 头抬起来了，所以**面部贴片要按这条动作逐帧重出**，和托腮一样
+#   （`render_face.py … stretch`）。
+STRETCH_SHOULDER = (1.0, 0.0, 0.30)
+# 大臂往斜上外方举。X 给太大是"投降"，太小是"举手发言"。
+STRETCH_UPPER_ARM = (0.62, -0.02, 0.78)
+# 小臂收回来一点，肘保持弯着——完全伸直的胳膊像被吊起来，不像自己在伸。
+STRETCH_LOWER_ARM = (0.22, -0.10, 0.97)
+STRETCH_HAND = (0.10, -0.16, 0.98)
+# 手指松松张开。伸懒腰的手是舒展的，不是握拳，也不是笔直的板。
+STRETCH_CURL = 0.30
+STRETCH_FINGER_SPLAY = {"Index": .16, "Middle": .05, "Ring": -.06, "Little": -.16}
+# 胸、脖子、头各自往后仰多少（弧度，负号是往上抬）。
+# 胸给太多会把缝线那一带也带起来——量出来为止，别凭感觉加。
+STRETCH_CHEST = -0.10
+STRETCH_UPPER_CHEST = -0.12
+STRETCH_NECK = -0.10
+STRETCH_HEAD = -0.13
+
+
+def stretch(arm, scene, amount=1.0):
+    """伸个懒腰。**在 `settle` 之后调**，用法和 `chin_rest` 一样。
+
+    两条胳膊举过头顶、胸口打开、脸抬起来。`amount` 0…1 是动作进度，
+    中间值就是真正的中间姿势（离线渲成帧，运行时播帧，不做位图淡入）。
+    """
+    amount = max(0.0, min(1.0, float(amount)))
+    finger_names = {
+        f"J_Bip_{side}_{finger}{seg}"
+        for side in ("L", "R")
+        for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
+        for seg in (1, 2, 3)
+    }
+    torso_names = ["J_Bip_C_Chest", "J_Bip_C_UpperChest",
+                   "J_Bip_C_Neck", "J_Bip_C_Head"]
+    arm_names = [f"J_Bip_{side}_{bone}"
+                 for side in ("L", "R")
+                 for bone in ("Shoulder", "UpperArm", "LowerArm", "Hand")]
+    moving = [arm.pose.bones[n]
+              for n in torso_names + arm_names + sorted(finger_names)
+              if n in arm.pose.bones]
+    start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    # 胸口先打开，头跟着仰——顺序无所谓（都是绕自己的支点转），
+    # 但**必须在摆胳膊之前**：肩膀挂在胸上，胸一转肩就跟着走了。
+    for name, angle in (("J_Bip_C_Chest", STRETCH_CHEST),
+                        ("J_Bip_C_UpperChest", STRETCH_UPPER_CHEST),
+                        ("J_Bip_C_Neck", STRETCH_NECK),
+                        ("J_Bip_C_Head", STRETCH_HEAD)):
+        _rotate_world(arm, name, (1, 0, 0), angle)
+
+    for side in ("L", "R"):
+        sx = 1 if side == "L" else -1
+        for bone, d in (("Shoulder", STRETCH_SHOULDER),
+                        ("UpperArm", STRETCH_UPPER_ARM),
+                        ("LowerArm", STRETCH_LOWER_ARM)):
+            aim(arm, f"J_Bip_{side}_{bone}", (sx * d[0], d[1], d[2]))
+        aim(arm, f"J_Bip_{side}_Hand",
+            (sx * STRETCH_HAND[0], STRETCH_HAND[1], STRETCH_HAND[2]),
+            prefer="Middle")
+        curl(arm, side, STRETCH_CURL)
+        for finger, angle in STRETCH_FINGER_SPLAY.items():
+            pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}1")
+            if pb is not None:
+                pb.rotation_mode = 'XYZ'
+                pb.rotation_euler[2] = sx * angle
+    bpy.context.view_layer.update()
+
+    target = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    torso_set = set(torso_names)
+
+    # 分组相位：胳膊先走，身体跟上，手指最后舒展开。
+    # 全部同时到位的话读起来是"换了个姿势"，不是"伸了个懒腰"。
+    for pb in moving:
+        if pb.name in torso_set:
+            phase = _eased_phase(amount, 0.12, 0.86)
+        elif pb.name in finger_names:
+            phase = _eased_phase(amount, 0.20, 0.92)
+        else:
+            phase = _eased_phase(amount, 0.00, 0.72)
+        a_loc, a_rot, a_scale = start[pb.name].decompose()
+        b_loc, b_rot, b_scale = target[pb.name].decompose()
+        pb.matrix_basis = Matrix.LocRotScale(a_loc.lerp(b_loc, phase),
+                                             a_rot.slerp(b_rot, phase),
+                                             a_scale.lerp(b_scale, phase))
+    bpy.context.view_layer.update()
 
 
 # 每根手指各弯多少，无名指和小指要多弯一点。
