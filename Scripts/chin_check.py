@@ -336,6 +336,33 @@ def main():
              else "✗ 抬起来的手漏到桌面层上面了" if extra
              else "✗ 那只手根本没抬起来"))
 
+    # --- 4. 库里那张是不是这次渲的 -------------------------------------
+    # 这条是补第 70 条那个洞。上面所有判据的输入**都是刚渲出来的图**，
+    # 于是"`pose.py` 改了、素材忘了重出"这件事一条都查不到：代码对、
+    # 判据全绿、画面还是老样子。实测那次差了 3461 个结构性像素。
+    #
+    # 所以这里回头看一眼 `Assets/`：把这次渲的终态按发布时的缝线切一刀，
+    # 和库里那张比。**应该逐像素相同**——它本来就该是同一次渲的产物。
+    published = os.path.join(a.assets, "snozzy_body_chin2x.png" if scale == 2
+                             else "snozzy_body_chin.png")
+    if not os.path.exists(published):
+        ok = False
+        print(f"✗ 库里没有 {published}——先发布一次素材")
+    else:
+        have = load(published)
+        rows = have.shape[0]
+        if have.shape[1] != chin.shape[1] or rows > chin.shape[0]:
+            ok = False
+            print(f"✗ {published} 是 {have.shape[:2][::-1]}，"
+                  f"和这次渲的 {chin.shape[:2][::-1]} 对不上")
+        else:
+            stale = int(diff(chin[:rows], have).sum())
+            ok &= stale == 0
+            print(f"库里的终态 vs 这次渲的：差 {stale} 个结构性像素  "
+                  + ("✓ 素材就是这份代码渲的"
+                     if stale == 0 else
+                     "✗ 素材比代码旧（第 70 条）——把近景那整段重出一遍"))
+
     print("CHIN " + ("全部通过" if ok else "有不合格项"))
     return 0 if ok else 1
 

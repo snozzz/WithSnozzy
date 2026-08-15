@@ -1701,7 +1701,14 @@ private struct CloseUpStrip: View {
     let headphones: Bool
 
     /// 每格画多宽。窗口是 3:2，按这个宽度反推高度。
-    private static let cellW: CGFloat = 330
+    ///
+    /// **必须是真实窗口能达到的最小宽度**（`WindowMode.normal.minimumSize`
+    /// 的 720），不能为了出图小就随手给 330。气泡和摸头热区是按窗口尺寸
+    /// 算位置再被 `SceneCamera.penned` 夹进窗口的，格子一小，夹取就把气泡
+    /// 压到她脸上——判据于是报出一个真实窗口里**不可能发生**的毛病。
+    /// 反过来也一样：格子给大了，只在小窗口才露的毛病就照不出来。
+    /// 和第 69 条同一个道理，判据画的必须是真的会上屏的那个尺寸。
+    private static let cellW: CGFloat = 720
     /// nil 是真实常态，-1 是发布的 2× 常态起点，随后八张中间帧和终态。
     private static let samples: [Int?] = [nil, -1]
         + (0...CloseUp.transitionFrames).map(Optional.some)

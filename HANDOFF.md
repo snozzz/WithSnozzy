@@ -1123,6 +1123,57 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
 近景现在不做模糊了（用户说直接切近就行）。真要景深，得让"角色以外的
 所有层"用同一个参数。
 
+**70. 同一个姿势存了两份素材，只有一份跟着代码走了。**
+`pose.py` 的 `CHIN_*` 定稿之后，2× 发布集（真正上屏的那套）重出了，
+**1× 兼容那两张没有**——`snozzy_body_chin.png` / `_headphones.png` 停在
+定稿前的参数上。实测拿当前代码重渲一张 1× 终态，和库里那张差 **3461 个
+结构性像素**（腐蚀过，不是 DITHERED 噪点）；同一次比 2× 那套是**逐字节相同**的。
+
+影响没有听起来那么大：1× 那两张只在 2× 发布集**没通过校验**时才画
+（`RenderedSnozzy.torsoLayer` 的回退分支）。但那正是最坏的时候——
+素材本来就出问题了，回退还给你一个**另一个姿势**。
+
+为什么没人发现：这条链上的判据**全都拿刚渲出来的图当输入**。
+`measure_chin.py` 在 3D 里现算，`chin_check.py` 比 `/tmp/closeup*/` 里的原图，
+`chin_frames.py` 比同一批原图。**没有一条回头看 `Assets/` 里那张是不是
+同一次渲的**，于是"代码对、判据绿、回退路径是旧姿势"可以同时成立。
+
+`chin_check.py` 现在补了这一条（最后一行）：把这次渲的终态按发布缝线切一刀，
+和 `Assets/` 里那张做结构性差分，**必须是 0**。拿旧素材试过，报 3461，抓得住。
+和第 46 条同一族：**两处存着同一件事，就得有一条判据把它们钉在一起。**
+
+配套：`Scripts/leg_frames.py --chin-only` 只重出近景那两张 1× 上半身
+（`render_closeup.py` 的输出目录里没有 `snozzy_<姿势>.png`，走主路会直接报错；
+而为这两张重渲一整套姿势要多花三分钟，还会把腿那一块的包围盒搅动一个像素、
+连带让 `chin.json` / `hands.json` 的矩形合同对不上）。它复用同一个
+`chin_seam()`，并且缝线一变就直接报错要你走完整那条路。
+
+**71. 「下巴坐在拳头上」这个托腮在这个机位下做不出来，别再试第三轮。**
+p03 那版（四指沿颊线斜上、指尖压在颧骨下）看着仍不像"托"，很自然会想到
+换成松拳、让下颌压在食指那节上——那才是插画里最标准的托腮。
+**试过了，六个变体全废**，而且废的原因是几何性的，不是参数没调好：
+
+手掌在这个机位下比脸还长。手从下外方伸过来，要么指尖停在颧骨外侧
+（p03，眼睛干净），要么把手收短、整只手往里挪到下颌底下——**一挪就压到眼睛**。
+实测可见的手部顶点落进眼区：q1 105 个、q4 98 个、q3 187 个、q5 207 个，
+而 p03 是 **0**。中间没有安全带：`hand_dir` 的 X 分量往里收一点，
+指节就从颧骨爬到眼下。
+
+所以这个机位的上限就是 p03。真想要"下颌压在手上"，要动的是**相机**
+（换一个更侧、更低的近景机位，让手从画面外侧进来），不是 `CHIN_*` 那几个数。
+`render_chin_candidates.py` 里那一族参数留着，别再跑一遍。
+
+**72. 判据画的尺寸必须是真实窗口能达到的尺寸。**
+`--closeup` 那张图里，气泡结结实实盖在她脸上——而真实窗口里根本不会发生。
+`CloseUpStrip.cellW` 当时是 330，比普通窗口的最小宽度（720）还小一半；
+气泡的位置是按窗口尺寸算完再被 `SceneCamera.penned` 夹进窗口的，
+格子一小，夹取就把它压到脸上。算了一遍：640 宽以上就不再重叠，
+而窗口最小是 720，**这个毛病不可能上屏**。
+
+差点因此去改气泡的锚点——那会把真实窗口里本来正确的位置改坏。
+反过来同样成立：格子给大了，只在小窗口才露的毛病就照不出来。
+和第 69 条一个道理：判据和真实画面**尺寸也要对齐**，不只是层序对齐。
+
 ## 四、验证纪律
 
 这个项目里"看着对"和"真的对"经常不是一回事，所以**把主观的东西做成可测的**：
@@ -1756,16 +1807,23 @@ python3 Scripts/hand_frames.py /tmp/hands2x --out Assets
 $B --background --factory-startup --python Blender/measure_hands.py -- Snozzy.vrm
 
 # 近景（托腮）：1× 只验兼容源序列，2× 生成并验发布合同
+# **改了 pose.py 的 CHIN_* 就得把下面整段跑完**，只改代码不重出素材，
+# 画面上还是老样子，而且所有判据都是绿的（第 70 条）
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup1x
-python3 Scripts/leg_frames.py /tmp/closeup1x --out Assets
-python3 Scripts/hand_frames.py /tmp/closeup1x --out Assets
+python3 Scripts/leg_frames.py /tmp/closeup1x --out Assets --chin-only
 python3 Scripts/chin_check.py /tmp/closeup1x
+#   ↑ --chin-only 只重出近景那两张 1× 上半身；腿和常态上半身没变就别动它们，
+#     动了会把腿那一块的包围盒搅动一个像素，chin.json 的矩形合同就对不上
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup2x 2
 python3 Scripts/chin_frames.py /tmp/closeup2x --out Assets  # base/逐帧/连续性/chin.json
 
-# 近景 2× 面部贴片：每个 00…08 姿态各自 13 块
+# 近景 2× 面部贴片：每个 00…08 姿态各自 13 块（约 12 分钟，126 张）
+# **必须和上面的身体帧同一次改动一起重出**——只重出身体，贴片会按旧头姿
+# 贴到新的脸上，比不动还难看
 $B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/facechin2x 2 chin
 python3 Scripts/face_patches.py /tmp/facechin2x --out Assets --prefix facechin2x --chin
+python3 Scripts/headphone_masks.py --assets Assets   # 耳罩发光的 mask 跟着歪掉的头走
+python3 Scripts/chin_check.py /tmp/closeup2x --assets Assets --facechin /tmp/facechin2x
 python3 Scripts/chin_check.py /tmp/closeup2x --assets Assets --facechin /tmp/facechin2x
 
 # 普通 2× 面部贴片（同样固定 13 个变体）

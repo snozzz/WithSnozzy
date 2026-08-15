@@ -106,6 +106,67 @@ def chin_seam(chin_path, ref_path, desk_path, seam):
     return max(seam, min(row, int(ys.max()) + 1))
 
 
+def chin_only(a, seam):
+    """只重出近景那两张 1× 上半身，腿和常态上半身原样不动。
+
+    改了 `pose.CHIN_*` 之后，需要重出的只有托腮那几张——`settle` 没变，
+    腿、常态上半身、面部贴片全都还是对的。但 `render_closeup.py` 的输出
+    目录里没有 `snozzy_<姿势>.png`，整条主路会直接报错；而为了这两张去
+    重渲一整套姿势要多花三分钟，还会把几十个二进制文件搅进 diff，
+    更糟的是腿那一块的包围盒万一漂一个像素，`chin.json` / `hands.json`
+    的矩形合同就对不上了（`SceneAssets.loadChin` 逐字段比）。
+
+    切多深仍然问 `chin_seam()`，和主路共用同一份实现——**不许在这里
+    另写一遍裁切逻辑**（第 46 条：两处算同一件事迟早会各错各的）。
+    参照帧改用已经发布的 `snozzy_body.png`：它就是主路从中枢那张切出来的
+    缝线以上部分，和 `snozzy_{hub}.png` 在这一段逐像素相同。
+    """
+    legs_path = os.path.join(a.out, "legs.json")
+    if not os.path.exists(legs_path):
+        raise SystemExit(f"没有 {legs_path}——第一次出素材要走完整的那条路")
+    with open(legs_path) as f:
+        legs = json.load(f)
+
+    chin_src = os.path.join(a.src, "torso_chin.png")
+    if not os.path.exists(chin_src):
+        raise SystemExit(f"没有 {chin_src}（先跑 Blender/render_closeup.py）")
+
+    canvas = tuple(legs.get("canvas", [1536, 1024]))
+    if Image.open(chin_src).size != canvas:
+        raise SystemExit(f"{chin_src} 是 {Image.open(chin_src).size}，"
+                         f"legs.json 的画布是 {canvas}——1× 那一趟才走这条路")
+
+    # 参照帧只取缝线以上，`chin_seam` 也只在那一段之上找差异；
+    # 用发布出来的上半身，就不需要目录里有整幅的姿势图。
+    ref = os.path.join(a.out, "snozzy_body.png")
+    if not os.path.exists(ref):
+        raise SystemExit(f"没有 {ref}——第一次出素材要走完整的那条路")
+    padded = os.path.join(a.src, "_ref_body_padded.png")
+    with Image.open(ref) as src:
+        full = Image.new("RGBA", canvas)
+        full.paste(src.convert("RGBA"), (0, 0))
+        full.save(padded)
+
+    chin_row = chin_seam(chin_src, padded, a.desk, seam)
+    if chin_row != legs.get("chinSeam"):
+        raise SystemExit(
+            f"缝线变了：legs.json 是 {legs.get('chinSeam')}、这次量出来 {chin_row}。"
+            "chin.json / hands.json 的矩形合同会对不上，要走完整的那条路重出。")
+
+    box = (0, 0, canvas[0], chin_row)
+    total = 0
+    for src, dst in ((chin_src, "snozzy_body_chin.png"),
+                     (os.path.join(a.src, "torso_chin_headphones.png"),
+                      "snozzy_body_chin_headphones.png")):
+        if not os.path.exists(src):
+            raise SystemExit(f"没有 {src}")
+        Image.open(src).convert("RGBA").crop(box).save(os.path.join(a.out, dst))
+        total += os.path.getsize(os.path.join(a.out, dst))
+    os.remove(padded)
+    print(f"LEGS 只重出近景 1× 上半身两张，切到第 {chin_row} 行，"
+          f"{total / 1024:.0f} KB；腿和常态上半身没动")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("src", help="render_poses.py / render_layers.py 的输出目录")
@@ -113,8 +174,13 @@ def main():
     ap.add_argument("--seam", type=int, default=SEAM)
     ap.add_argument("--desk", default="Assets/desk.png",
                     help="桌面层，用来算近景那张上半身该切多深")
+    ap.add_argument("--chin-only", action="store_true",
+                    help="只重出近景那两张 1× 上半身，别动腿和常态上半身")
     a = ap.parse_args()
     seam = a.seam
+
+    if a.chin_only:
+        return chin_only(a, seam)
 
     poses = [os.path.basename(p)[7:-4]
              for p in sorted(glob.glob(os.path.join(a.src, "snozzy_*.png")))]
