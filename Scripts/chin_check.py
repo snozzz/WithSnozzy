@@ -343,9 +343,13 @@ def main():
     #
     # 所以这里回头看一眼 `Assets/`：把这次渲的终态按发布时的缝线切一刀，
     # 和库里那张比。**应该逐像素相同**——它本来就该是同一次渲的产物。
-    published = os.path.join(a.assets, "snozzy_body_chin2x.png" if scale == 2
-                             else "snozzy_body_chin.png")
-    if not os.path.exists(published):
+    #
+    # 只在 2× 这一趟查：1× 那一趟是**纯源码检查**，不发布任何素材
+    # （1× 托腮上半身已经删了——运行时不画它，留着就是第二份拷贝）。
+    published = os.path.join(a.assets, "snozzy_body_chin2x.png")
+    if scale != 2:
+        print("（1× 只验源序列，不发布素材，跳过库存一致性检查）")
+    elif not os.path.exists(published):
         ok = False
         print(f"✗ 库里没有 {published}——先发布一次素材")
     else:

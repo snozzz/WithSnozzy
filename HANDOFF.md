@@ -1123,24 +1123,30 @@ stdio 那条路必须在 `main.swift` 里、在**任何 AppKit 代码之前**接
 近景现在不做模糊了（用户说直接切近就行）。真要景深，得让"角色以外的
 所有层"用同一个参数。
 
-**70. 同一个姿势存了两份素材，只有一份跟着代码走了。**
+**70. 同一个姿势存了两份素材，第二份没人画、于是没人发现它旧了。**
 `pose.py` 的 `CHIN_*` 定稿之后，2× 发布集（真正上屏的那套）重出了，
-**1× 兼容那两张没有**——`snozzy_body_chin.png` / `_headphones.png` 停在
-定稿前的参数上。实测拿当前代码重渲一张 1× 终态，和库里那张差 **3461 个
-结构性像素**（腐蚀过，不是 DITHERED 噪点）；同一次比 2× 那套是**逐字节相同**的。
+**1× 那两张没有**——`snozzy_body_chin.png` / `_headphones.png` 停在定稿前的
+参数上。实测拿当前代码重渲一张 1× 终态，和库里那张差 **3461 个结构性像素**
+（腐蚀过，不是 DITHERED 噪点）；同一次比 2× 那套是**逐字节相同**的。
 
-影响没有听起来那么大：1× 那两张只在 2× 发布集**没通过校验**时才画
-（`RenderedSnozzy.torsoLayer` 的回退分支）。但那正是最坏的时候——
-素材本来就出问题了，回退还给你一个**另一个姿势**。
+**查下来它根本没人画。** `RenderedSnozzy.torsoLayer` 早就改成"素材不全时
+保持常态姿势、只推镜头"，那条回退分支删掉了；`SceneAssets` 却还在
+`load()` 里把这两张读进内存。也就是说它是一份**没有读者的拷贝**——
+所以谁也不会发现它旧了，画面上永远看不出来。
 
-为什么没人发现：这条链上的判据**全都拿刚渲出来的图当输入**。
-`measure_chin.py` 在 3D 里现算，`chin_check.py` 比 `/tmp/closeup*/` 里的原图，
-`chin_frames.py` 比同一批原图。**没有一条回头看 `Assets/` 里那张是不是
-同一次渲的**，于是"代码对、判据绿、回退路径是旧姿势"可以同时成立。
+真正的教训不是"加条判据把两份钉在一起"，是**别留第二份**。现在：
+1× 那一趟只验源序列、不发布任何素材，那两张 PNG 和 `SceneAssets` 里
+对应的两个字段一起删了；`leg_frames.py` 仍然量 `chinSeam` 写进 `legs.json`
+（`chin.json` 的矩形合同要对它），但不再切那张图。
 
-`chin_check.py` 现在补了这一条（最后一行）：把这次渲的终态按发布缝线切一刀，
-和 `Assets/` 里那张做结构性差分，**必须是 0**。拿旧素材试过，报 3461，抓得住。
-和第 46 条同一族：**两处存着同一件事，就得有一条判据把它们钉在一起。**
+判据也补了一条，防的是**发布集本身**旧掉（那一份是有读者的）：
+`chin_check.py` 最后一行把这次渲的终态和 `Assets/snozzy_body_chin2x.png`
+做结构性差分，必须是 0。拿旧素材试过，报 3461，抓得住。
+
+配套的一条方法论：**"代码对、判据全绿、画面不对"时，先问判据的输入是
+从哪来的。** 这条链上所有判据都拿刚渲出来的图当输入
+（`measure_chin.py` 在 3D 里现算，`chin_check.py` / `chin_frames.py` 比
+`/tmp/closeup*/` 里的原图），没有一条回头看 `Assets/`。
 
 配套：`Scripts/leg_frames.py --chin-only` 只重出近景那两张 1× 上半身
 （`render_closeup.py` 的输出目录里没有 `snozzy_<姿势>.png`，走主路会直接报错；
@@ -1819,14 +1825,11 @@ python3 Scripts/hand_frames.py /tmp/hands2x --out Assets
 # 手放得对不对（腕角/指尖高度/出界/袖口）。不渲染，几秒钟
 $B --background --factory-startup --python Blender/measure_hands.py -- Snozzy.vrm
 
-# 近景（托腮）：1× 只验兼容源序列，2× 生成并验发布合同
+# 近景（托腮）：1× 只验源序列（不发布素材），2× 生成并验发布合同
 # **改了 pose.py 的 CHIN_* 就得把下面整段跑完**，只改代码不重出素材，
-# 画面上还是老样子，而且所有判据都是绿的（第 70 条）
+# 画面上还是老样子（第 70 条）
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup1x
-python3 Scripts/leg_frames.py /tmp/closeup1x --out Assets --chin-only
 python3 Scripts/chin_check.py /tmp/closeup1x
-#   ↑ --chin-only 只重出近景那两张 1× 上半身；腿和常态上半身没变就别动它们，
-#     动了会把腿那一块的包围盒搅动一个像素，chin.json 的矩形合同就对不上
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup2x 2
 python3 Scripts/chin_frames.py /tmp/closeup2x --out Assets  # base/逐帧/连续性/chin.json
 

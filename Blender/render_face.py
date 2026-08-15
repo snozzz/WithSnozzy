@@ -49,13 +49,21 @@ import snozzy_lib as S, pose as P
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[-2:]
 VRM, OUT = args[:2]
 SCALE = int(args[2]) if len(args) > 2 else 1
-# 第 4 个参数给 "chin" 时在**托腮终态**上出贴片（头是歪的、手贴着脸）。
-# 近景终态的贴片必须在这套姿势下重渲：头一歪，眼嘴的矩形就跟着脸走了；
-# 而手贴着脸也没关系——贴片和终态底图是同一个姿势渲的，手在矩形里的像素
-# 两边完全一致，盖上去等于没盖。切片用 face_patches.py --prefix facechin2x。
-CHIN = len(args) > 3 and args[3] == "chin"
+# 第 4 个参数给动作名（`chin` / `stretch`）时，在**那条动作的每一档**上
+# 出贴片。头一动，眼嘴的矩形就跟着脸走了，常态那套贴片贴上去就是错位；
+# 而手/胳膊挡不挡得住无所谓——贴片和底图是同一个姿势渲的，
+# 矩形里的像素两边完全一致，盖上去等于没盖。
+# 切片用 `face_patches.py --prefix facechin2x --chin`（伸懒腰同理换前缀）。
+ACTION = args[3] if len(args) > 3 else None
 os.makedirs(OUT, exist_ok=True)
 W, H = 1536 * SCALE, 1024 * SCALE
+
+
+# 动作名 → `pose.py` 里那个摆姿势的函数。加新动作只在这里登记一行，
+# 下面那段逐帧循环不用改。
+ACTIONS = {"chin": P.chin_rest, "stretch": P.stretch}
+if ACTION is not None and ACTION not in ACTIONS:
+    raise SystemExit(f"不认识的动作 {ACTION!r}，可选：{sorted(ACTIONS)}")
 
 
 def shape(meshes, name, value):
@@ -115,7 +123,7 @@ VARIANTS = {
 }
 
 
-def build(variant=None, chin_amount=None):
+def build(variant=None, action_amount=None):
     meshes = S.load(VRM)
     scene = S.setup_scene(res=W)
     scene.render.resolution_x, scene.render.resolution_y = W, H
@@ -123,8 +131,8 @@ def build(variant=None, chin_amount=None):
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
     P.settle(scene, arm)
-    if chin_amount is not None:
-        P.chin_rest(arm, scene, amount=chin_amount)
+    if action_amount is not None:
+        ACTIONS[ACTION](arm, scene, amount=action_amount)
     if variant:
         for k, v in variant.get("shapes", {}).items():
             shape(meshes, k, v)
@@ -137,21 +145,20 @@ def build(variant=None, chin_amount=None):
 
 
 channels = {k: v["ch"] for k, v in VARIANTS.items()}
-if CHIN:
-    # The close-up timeline has eight in-betweens plus the settled terminal
-    # pose.  Each one gets its own neutral base and 13 variants; a terminal
-    # patch cannot be safely faded over a rotating head.
+if ACTION:
+    # 长动作的时间轴是八张中间姿势加一个终态。**每一档各出一套 13 块**——
+    # 头在动，一套贴片盖不住整段；淡出再硬切也不行（脸转到一半没有表情）。
     for frame in range(9):
         amount = (frame + 1) / 9.0
-        scene = build(chin_amount=amount)
+        scene = build(action_amount=amount)
         scene.render.filepath = os.path.join(OUT, f"_base_{frame:02d}.png")
         bpy.ops.render.render(write_still=True)
-        print(f"FACE chin base {frame:02d} amount={amount:.4f}")
+        print(f"FACE {ACTION} base {frame:02d} amount={amount:.4f}")
         for name, spec in VARIANTS.items():
-            scene = build(spec, chin_amount=amount)
+            scene = build(spec, action_amount=amount)
             scene.render.filepath = os.path.join(OUT, f"_{frame:02d}_{name}.png")
             bpy.ops.render.render(write_still=True)
-            print(f"FACE chin {frame:02d} {name}")
+            print(f"FACE {ACTION} {frame:02d} {name}")
 else:
     scene = build()
     scene.render.filepath = os.path.join(OUT, "_base.png")
@@ -167,4 +174,4 @@ else:
 # 通道表交给切片脚本，让它检查跨通道重叠
 with open(os.path.join(OUT, "channels.json"), "w") as f:
     json.dump(channels, f, indent=2)
-print(f"FACE 共 {len(VARIANTS)} 个变体" + (" × 9 帧" if CHIN else ""))
+print(f"FACE 共 {len(VARIANTS)} 个变体" + (f" × 9 帧（{ACTION}）" if ACTION else ""))

@@ -145,9 +145,6 @@ final class SceneAssets {
     /// 上半身。缝线以上，所有姿势共用一张；戴耳机时换成戴着的那张。
     private(set) var snozzyBody: NSImage?
     private(set) var snozzyBodyPhones: NSImage?
-    /// 近景时托着腮的那张上半身，同样分戴不戴耳机。缺了就只推镜头不换姿势。
-    private(set) var snozzyBodyChin: NSImage?
-    private(set) var snozzyBodyChinPhones: NSImage?
     /// 播放反馈只使用从普通/耳机成对素材差分出的可见耳机 mask。
     /// 普通姿态一套；托腮动作按 2× base、00…08（08 为终态）各一套。
     private(set) var headphoneMask: HeadphoneMask?
@@ -236,10 +233,10 @@ final class SceneAssets {
             snozzyBody = NSImage(contentsOf: dir.appendingPathComponent("snozzy_body.png"))
             snozzyBodyPhones = NSImage(contentsOf:
                 dir.appendingPathComponent("snozzy_body_headphones.png"))
-            snozzyBodyChin = NSImage(contentsOf:
-                dir.appendingPathComponent("snozzy_body_chin.png"))
-            snozzyBodyChinPhones = NSImage(contentsOf:
-                dir.appendingPathComponent("snozzy_body_chin_headphones.png"))
+            // 1× 托腮上半身**不再加载**：`torsoLayer` 早就不画它了
+            // （素材不全时保持常态姿势、只推镜头，不退化成另一个姿势）。
+            // 留着它就是留了同一个姿势的第二份拷贝，而第二份必然会脱节——
+            // 实测确实脱节了整整一版（第 70 条）。
             loadLegs(dir)
             loadHands(dir)
 
