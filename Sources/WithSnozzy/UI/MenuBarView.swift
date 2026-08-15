@@ -115,6 +115,21 @@ struct MenuBarView: View {
                   ? "托着腮凑过来，顺便念一句待办"
                   : "只有完整窗口有这个画面")
 
+            // 伸懒腰。自动触发要等一整段番茄钟走完，改完素材想验一眼等不起，
+            // 所以和近景一样必须留一个绕过冷却的入口。
+            Button {
+                state.revealWindow?()
+                state.stretch.begin(force: true)
+            } label: {
+                Label("让她伸个懒腰", systemImage: "figure.arms.open")
+                    .font(.system(size: 11))
+            }
+            .disabled(state.windowMode != .normal
+                      || !state.sceneAssets.hasCompleteStretchMotion)
+            .help(state.sceneAssets.hasCompleteStretchMotion
+                  ? "举起双臂舒展一下，专注段结束时她会自己来一个"
+                  : "还没出伸懒腰的素材")
+
             HStack {
                 Button("显示主窗口") { state.revealWindow?() }
                     .font(.system(size: 11))

@@ -17,20 +17,27 @@ struct TypingHands: View, Equatable {
     let frame: Int
     /// 托腮动作档位；-1 是常态起点，终态才换成专用单手层。
     var chinFrame: Int? = nil
+    /// 伸懒腰档位。语义同上，但那一层到后面**只剩键盘**——两只手都举起来了，
+    /// 一只都不该留在桌面之上（第 60 条）。空不是漏渲。
+    var stretchFrame: Int? = nil
 
     static func == (a: TypingHands, b: TypingHands) -> Bool {
-        a.frame == b.frame && a.chinFrame == b.chinFrame && a.palette == b.palette
+        a.frame == b.frame && a.chinFrame == b.chinFrame
+            && a.stretchFrame == b.stretchFrame && a.palette == b.palette
     }
 
     var body: some View {
         GeometryReader { geo in
             let m = assets.hands
-            let motionReady = assets.hasCompleteChinMotion
-            let moving = motionReady ? chinFrame.flatMap {
-                assets.chinHandFrames.indices.contains($0) ? assets.chinHandFrames[$0] : nil
-            } : nil
-            let final = motionReady && (chinFrame ?? -1) >= assets.chin.frames
-                ? assets.chinHandFinal : nil
+            // 播哪条动作由 `SceneAssets` 解析，这一层只管画（第 46 条）。
+            let action = assets.activeAction(chin: chinFrame, stretch: stretchFrame)
+            let motionReady = action != nil
+            let moving = action.flatMap { set, frame in
+                set.handFrames.indices.contains(frame) ? set.handFrames[frame] : nil
+            }
+            let final = action.flatMap { set, frame in
+                frame >= set.manifest.frames ? set.handFinal : nil
+            }
             // -1 只换成近景的高清底图，手仍保留启动那一刻的真实
             // 打字帧。若在这里强制归到 frame 0，镜头还没开始动，手指
             // 就会先硬切一次；第一张真骨骼帧自然负责收手动作。
@@ -42,7 +49,8 @@ struct TypingHands: View, Equatable {
                m.canvas.count > 1, m.canvas[1] > 0 {
                 let sx = geo.size.width / CGFloat(w)
                 let sy = geo.size.height / CGFloat(m.canvas[1])
-                let r = (moving != nil || final != nil) ? assets.chin.handRect : m.rect
+                let r = (moving != nil || final != nil)
+                    ? (action?.set.manifest.handRect ?? m.rect) : m.rect
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)

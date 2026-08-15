@@ -75,6 +75,8 @@ final class AppState {
 
     /// 近景切换。你把窗口切回前台，她会托着腮凑近看你一眼。
     let closeUp = CloseUp()
+    /// 专注段结束时伸个懒腰。和近景互斥——同一时刻只该有一条长动作。
+    let stretch = StretchRig()
 
     /// 和她对话。走本机已登录的命令行（Claude Pro / Codex），不用 API key。
     let chat = SnozzyChat()
@@ -661,7 +663,7 @@ final class AppState {
             guard windowMode != oldValue else { return }
             // 迷你/桌宠模式里没有那个画面，正演着的近景要收掉——
             // 不收的话切回完整模式时它还挂在那儿，镜头凭空是推进的
-            if windowMode != .normal { closeUp.cancel() }
+            if windowMode != .normal { closeUp.cancel(); stretch.cancel() }
             onWindowModeChange?(windowMode)
             scheduleSave()
         }
@@ -774,6 +776,9 @@ final class AppState {
             self.audio.chime(rising: finished == .work)
             if finished == .work {
                 self.celebrate()
+                // 专注完了先伸个懒腰再说话：动作是"歇下来"的信号，
+                // 台词跟在后面才像松了口气，反过来就成了边说边举手。
+                self.stretch.begin()
                 self.chatter.say(.focusFinished)
             } else {
                 self.chatter.say(.breakFinished)
@@ -805,6 +810,14 @@ final class AppState {
             }
         }
 
+        // 伸懒腰：素材齐了、窗口是完整形态、近景没在跑才演。
+        // 两条长动作共用同一批图层槽位，同时跑会互相盖掉。
+        stretch.canStart = { [weak self] in
+            guard let self else { return false }
+            return self.windowMode == .normal
+                && !self.closeUp.isActive
+                && self.sceneAssets.hasCompleteStretchMotion
+        }
         closeUp.canStart = { [weak self] in
             guard let self else { return false }
             // 桌宠/迷你模式里根本没有那个画面；面板开着说明你正在用它，

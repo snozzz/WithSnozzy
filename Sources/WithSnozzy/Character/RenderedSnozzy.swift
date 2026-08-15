@@ -25,6 +25,9 @@ struct RenderedSnozzy: View, Equatable {
     /// 中间姿势，frames 是终态。
     /// 两端之间播真实的 Blender 骨骼姿势，不做位图交叉淡入。
     var chinFrame: Int? = nil
+    /// 伸懒腰的档位，语义和 `chinFrame` 一样。两者互斥，由
+    /// `SceneAssets.activeAction` 解析成"哪一套素材的第几帧"。
+    var stretchFrame: Int? = nil
     /// 当前时间。腿部姿势由它推导。
     let t: Double
     /// Optional explicit glow phase used by deterministic snapshot probes.
@@ -42,6 +45,7 @@ struct RenderedSnozzy: View, Equatable {
 
     init(assets: SceneAssets, palette: Palette, pose: Pose,
          face: FaceExpression, headphones: Bool, chinFrame: Int? = nil,
+         stretchFrame: Int? = nil,
          t: Double, headphonePhase: Int? = nil,
          headphoneMaskOverride: HeadphoneMask? = nil,
          headphoneGlowAlphaScale: Double = 1,
@@ -52,6 +56,7 @@ struct RenderedSnozzy: View, Equatable {
         self.face = face
         self.headphones = headphones
         self.chinFrame = chinFrame
+        self.stretchFrame = stretchFrame
         self.t = t
         self.headphonePhase = headphonePhase
         self.headphoneMaskOverride = headphoneMaskOverride
@@ -64,7 +69,7 @@ struct RenderedSnozzy: View, Equatable {
 
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
         a.headphones == b.headphones && a.palette == b.palette
-            && a.chinFrame == b.chinFrame
+            && a.chinFrame == b.chinFrame && a.stretchFrame == b.stretchFrame
             // The glow is deliberately phase-quantized.  Comparing this
             // discrete state keeps the 3.2-second breath alive through the
             // parent `.equatable()` gate without redrawing for every wall-clock
@@ -94,9 +99,7 @@ struct RenderedSnozzy: View, Equatable {
                     // 和房间共用一套时段染色，否则她永远是正午的亮度
                     .colorMultiply(PaintedRoom.ambient(palette).color)
                 // 眨眼、视线、眼型、嘴。贴片和底图共用同一台相机，直接盖上即可。
-                // 托腮期间贴片跟着档位换：抬手那几帧脸在转，淡出；
-                // 终态换成在终态姿势上渲的 facechin 贴片（头歪、手贴脸）。
-                let overlay = faceOverlayState
+                // 长动作期间换成那一档专用的贴片（头在转，矩形跟着脸走）。
                 if let mask = headphoneGlowMask,
                    headphones || headphoneGlowPausedLeak {
                     HeadphoneGlow(mask: mask, palette: palette,
@@ -106,7 +109,7 @@ struct RenderedSnozzy: View, Equatable {
                 FaceOverlay(assets: assets, pose: pose, face: face,
                             palette: palette,
                             highResolution: assets.hasHighResolutionFace,
-                            chinFrame: overlay.frame, strength: overlay.strength,
+                            actionFace: actionFace,
                             width: w, height: h)
             }
             .frame(width: w, height: h, alignment: .topLeading)
@@ -139,16 +142,19 @@ struct RenderedSnozzy: View, Equatable {
         }
     }
 
-    /// 面部贴片此刻该用哪一套、以多大强度贴。
+    /// 面部贴片此刻该用哪一套。
     ///
-    /// 每个骨骼姿态都选对应的 facechin set；不再淡出常态贴片再硬切终态。
-    /// 缺任何一项时返回常态贴片，并由 `torsoLayer` 保持常态姿势。
-    private var faceOverlayState: (frame: Int?, strength: Double) {
-        guard assets.hasCompleteChinMotion, let frame = chinFrame, frame >= 0,
-              assets.faceChinFrames.indices.contains(frame) else {
-            return (nil, 1)
-        }
-        return (frame, 1)
+    /// 长动作的每一档都有自己那一套贴片（头在转，矩形跟着脸走），
+    /// 所以这里直接把解析好的那一套交给 `FaceOverlay`——它不需要知道
+    /// 现在播的是托腮还是伸懒腰。缺任何一项就退回常态贴片，
+    /// 同时 `torsoLayer` 也会保持常态姿势，两者是同一个 guard 的结果。
+    private var actionFace: (manifest: FaceManifest, images: [String: NSImage])? {
+        guard let (set, frame) = assets.activeAction(chin: chinFrame,
+                                                     stretch: stretchFrame),
+              frame >= 0,
+              set.faceSets.indices.contains(frame),
+              set.faceImages.indices.contains(frame) else { return nil }
+        return (set.faceSets[frame], set.faceImages[frame])
     }
 
     /// Playback is the only source of this feedback.  A paused scene returns
@@ -165,6 +171,10 @@ struct RenderedSnozzy: View, Equatable {
         guard headphones || headphoneGlowPausedLeak else { return nil }
         if let headphoneMaskOverride { return headphoneMaskOverride }
         guard assets.hasCompleteHeadphoneMasks else { return nil }
+        // 伸懒腰时头往后仰，耳机跟着走，而 mask 只按托腮那条动作派生过。
+        // 拿错位的 mask 去发光比不发光难看得多，所以这一段直接不发光——
+        // 要补的话是给 `headphone_masks.py` 加一条伸懒腰的派生，不是在这里凑。
+        if stretchFrame != nil { return nil }
         if let frame = chinFrame {
             if frame < 0 { return assets.chinHeadphoneBaseMask }
             guard assets.chinHeadphoneMasks.indices.contains(frame) else { return nil }
@@ -179,27 +189,25 @@ struct RenderedSnozzy: View, Equatable {
     /// 托腮戴耳机 → 托腮 → 常态戴耳机 → 常态。少了托腮那两张就只推镜头
     /// 不换姿势，功能仍然可用——和素材缺失时回落到程序化房间同一个原则。
     private var torsoLayer: (NSImage, LegManifest.Rect)? {
-        // `nil` is the ordinary scene state.  It must never inherit the 2×
-        // close-up base merely because the optional chin bundle is loaded;
-        // only an explicit close-up frame selects close-up assets.  `-1` is
-        // the published 2× base at the start of the close-up timeline.
-        if assets.hasCompleteChinMotion, let frame = chinFrame {
-            if frame >= 0 && assets.chinBodyFrames.indices.contains(frame) {
-                let frames = headphones ? assets.chinBodyPhoneFrames : assets.chinBodyFrames
+        // `nil` is the ordinary scene state.  It must never inherit a 2× action
+        // base merely because an optional motion bundle is loaded; only an
+        // explicit action frame selects those assets.  `-1` is the published
+        // 2× base at the start of that action's timeline.
+        if let (set, frame) = assets.activeAction(chin: chinFrame,
+                                                  stretch: stretchFrame) {
+            if frame >= 0 && set.bodyFrames.indices.contains(frame) {
+                let frames = headphones ? set.phoneFrames : set.bodyFrames
                 if frames.indices.contains(frame) {
-                    return (frames[frame], assets.chin.bodyRect)
+                    return (frames[frame], set.manifest.bodyRect)
                 }
             }
-            if frame >= assets.chin.frames,
-               assets.chin.pixelScale > 1,
-               let img = (headphones ? assets.chinBodyPhoneFinal : nil)
-                ?? assets.chinBodyFinal {
-                return (img, assets.chin.bodyRect)
+            if frame >= set.manifest.frames {
+                return (headphones ? set.phoneFinal : set.bodyFinal,
+                        set.manifest.bodyRect)
             }
-            if frame < 0,
-               let img = (headphones ? assets.chinBodyPhoneBase : nil)
-                ?? assets.chinBodyBase {
-                return (img, assets.chin.bodyRect)
+            if frame < 0 {
+                return (headphones ? set.phoneBase : set.bodyBase,
+                        set.manifest.bodyRect)
             }
         }
         // Incomplete motion assets deliberately do not fall back to the old

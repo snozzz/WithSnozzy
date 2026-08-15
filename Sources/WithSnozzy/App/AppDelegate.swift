@@ -55,6 +55,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
+        if Snapshot.stretchCheck {
+            exit(Snapshot.runStretchCheck() ? 0 : 1)
+        }
         if Snapshot.activityCheck {
             exit(ActivityRig.selfCheck() ? 0 : 1)
         }

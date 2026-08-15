@@ -44,9 +44,12 @@ struct FaceOverlay: View {
     let palette: Palette
     /// 高密度角色底图启用时用同机位 2× 贴片；逻辑坐标不变，只增加源像素密度。
     var highResolution = false
-    /// 托腮动作当前帧；每一帧都有与底图同姿势的 facechin 贴片。
-    /// nil / -1 使用常态 2× 贴片。
-    var chinFrame: Int? = nil
+    /// 正在播长动作时，那一档专用的贴片（矩形跟着转过去的头走）。
+    ///
+    /// **这一层不需要知道现在播的是托腮还是伸懒腰**——由
+    /// `SceneAssets.activeAction` 解析好再交进来。它自己去认动作的话，
+    /// 每加一条动作这里就要改一次，迟早漏掉某一条（第 46 条）。
+    var actionFace: (manifest: FaceManifest, images: [String: NSImage])? = nil
     /// 保留一个总强度旋钮给调试快照；生产动作始终传 1，不靠淡出掩盖
     /// 贴片错位。
     var strength: Double = 1
@@ -64,15 +67,12 @@ struct FaceOverlay: View {
         // 底图按 (sx, sy) 各自拉伸满幅，贴片却按同一个比例摆，纵向就错开了。
         // 表现是**眼睛上方浮着两块方片**，越拉越远（用户拉窗口时发现的）。
         // 这类"两处各算一遍同一件事"的错在这个项目里犯过好几次了（第 7 条）。
-        let chinIndex = chinFrame.flatMap { frame in
-            assets.faceChinFrames.indices.contains(frame) ? frame : nil
-        }
-        let useChin = chinIndex != nil
-        let use2x = !useChin && highResolution && !assets.facePatches2x.isEmpty
-        let manifest = useChin ? assets.faceChinFrames[chinIndex!]
-            : use2x ? assets.face2x : assets.face
-        let images = useChin ? assets.facePatchesChinFrames[chinIndex!]
-            : use2x ? assets.facePatches2x : assets.facePatches
+        let use2x = actionFace == nil && highResolution
+            && !assets.facePatches2x.isEmpty
+        let manifest = actionFace?.manifest
+            ?? (use2x ? assets.face2x : assets.face)
+        let images = actionFace?.images
+            ?? (use2x ? assets.facePatches2x : assets.facePatches)
         let sx = width / CGFloat(manifest.canvas.first ?? 1536)
         let sy = height / CGFloat(manifest.canvas.last ?? 1024)
         let blink = clamp(pose.blink * face.blinkScale, 0, 1)

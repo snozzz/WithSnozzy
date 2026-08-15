@@ -108,6 +108,20 @@ enum Snapshot {
         arg("--closeup")
     }
 
+    /// 伸懒腰整条动作：素材契约 + 逐帧时间轴。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --stretchcheck
+    /// ```
+    ///
+    /// 不出图。伸懒腰不推镜头，所以"取景"那一半不存在；真正会坏的是
+    /// **素材契约**（8 帧 + 终态 + 耳机 + 手层 + 9 套贴片少一样就该整套停用）
+    /// 和**顺序**（起落必须共用同一列，倒放漏一帧就是"举上去和放下来不是
+    /// 一条路"）。这两样截图都验不了。
+    static var stretchCheck: Bool {
+        CommandLine.arguments.contains("--stretchcheck")
+    }
+
     /// Activity 状态机的覆盖和数值约束。只量真正供 SceneStack 使用的纯函数，
     /// 不为了自检另画一棵迟早会和真实画面分家的场景树。
     static var activityCheck: Bool {
@@ -504,6 +518,65 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+
+    /// 伸懒腰：素材契约 + 走一遍时间轴。
+    static func runStretchCheck() -> Bool {
+        let assets = SceneAssets()
+        assets.load()
+        var ok = true
+        func check(_ label: String, _ pass: Bool) {
+            ok = ok && pass
+            print("  " + (pass ? "✓ " : "✗ ") + label)
+        }
+
+        let ready = assets.hasCompleteStretchMotion
+        check("伸懒腰 2× 素材契约完整（8 帧 + 终态 + 耳机 + 手层 + 9 套贴片）", ready)
+        if !ready {
+            print("  facestretch: \(assets.faceStretchFrames.count) 套贴片；"
+                  + "先跑 Blender/render_stretch.py 与 Scripts/stretch_frames.py")
+        }
+
+        // 手层到后面**只剩键盘**是对的（两只手都举起来了，第 60 条），
+        // 但它不能是空的——键盘一直在那一层里。空了就是渲染脚本把键盘也遮了。
+        if let set = assets.stretchAssetSet {
+            let rect = set.manifest.handRect
+            check("手层矩形和常态一致（\(rect.w)×\(rect.h)）",
+                  rect.w == assets.hands.rect.w && rect.h == assets.hands.rect.h)
+            check("上半身切得比常态深（\(set.manifest.bodyRect.h) > \(assets.legs.seam)）",
+                  set.manifest.bodyRect.h > assets.legs.seam)
+        }
+
+        // 走一遍真实时间轴。停留时长是随机的，所以盯着 `isActive` 采样。
+        let rig = StretchRig()
+        var sequence: [String] = []
+        let done = DispatchSemaphore(value: 0)
+        Task { @MainActor in
+            rig.begin(force: true)
+            while rig.isActive {
+                let label = rig.frame.map(String.init) ?? "nil"
+                if sequence.last != label { sequence.append(label) }
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+            let label = rig.frame.map(String.init) ?? "nil"
+            if sequence.last != label { sequence.append(label) }
+            done.signal()
+        }
+        while done.wait(timeout: .now()) == .timedOut {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+        }
+        print("逐帧时间轴：" + sequence.joined(separator: " → "))
+        let forward = ["-1"] + (0...StretchRig.transitionFrames).map(String.init)
+        let reverse = stride(from: StretchRig.transitionFrames - 1, through: 0, by: -1)
+            .map(String.init) + ["-1", "nil"]
+        check("常态 base → 00…08 正放完整", sequence.starts(with: forward))
+        check("08 → 07…00 → base → 常态，倒放共用同一列",
+              sequence.suffix(reverse.count) == ArraySlice(reverse))
+        check("没有重复档位", Set(sequence).count == sequence.count
+              || sequence.count == forward.count + reverse.count)
+
+        print("STRETCH " + (ok ? "全部通过" : "有不合格项"))
+        return ok
     }
 
     static func runActivityStrip(path: String) {

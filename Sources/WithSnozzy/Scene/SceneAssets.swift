@@ -177,6 +177,22 @@ final class SceneAssets {
     private(set) var chin = ChinManifest()
     private(set) var chinAssetSet: ChinAssetSet?
     var hasCompleteChinMotion: Bool { chinAssetSet != nil }
+    /// 伸懒腰整套。结构和托腮一样，所以复用同一个 `ChinAssetSet`——
+    /// 两条动作在运行时的形状确实是同一个：base、8 帧、终态、耳机、手层、贴片。
+    private(set) var stretchAssetSet: ChinAssetSet?
+    var hasCompleteStretchMotion: Bool { stretchAssetSet != nil }
+
+    /// 此刻在播哪条长动作、播到第几档。
+    ///
+    /// 两条动作互斥——同一时刻她不可能既托腮又伸懒腰，`CloseUp` 和
+    /// `StretchRig` 谁在跑谁给出非 nil。**解析只该有一份**：上半身、
+    /// 面部贴片、桌面手层三处都问这个函数，各写一遍迟早会在某一层上
+    /// 用错帧（第 46 条）。
+    func activeAction(chin: Int?, stretch: Int?) -> (set: ChinAssetSet, frame: Int)? {
+        if let frame = chin, let set = chinAssetSet { return (set, frame) }
+        if let frame = stretch, let set = stretchAssetSet { return (set, frame) }
+        return nil
+    }
 
     /// 面部贴片。眨眼、视线、嘴角这些细微变化只改一小块像素，
     /// 单独出贴片比整张重渲便宜三个数量级。
@@ -192,11 +208,26 @@ final class SceneAssets {
     private(set) var faceChinFrames: [FaceManifest] = []
     private(set) var faceChinManifest = ChinFaceManifest()
     var hasChinFace: Bool {
-        faceChinManifest.frames == CloseUp.transitionFrames + 1
-            && faceChinFrames.count == faceChinManifest.frames
-            && facePatchesChinFrames.count == faceChinManifest.frames
-            && faceChinFrames.enumerated().allSatisfy {
-                $0.element.patches.count == facePatchesChinFrames[$0.offset].count
+        Self.completeActionFace(faceChinManifest, faceChinFrames,
+                                facePatchesChinFrames)
+    }
+    /// 伸懒腰 00…08 每帧一套贴片。头会往后仰，所以和托腮一样不能共用常态那套。
+    private(set) var facePatchesStretchFrames: [[String: NSImage]] = []
+    private(set) var faceStretchFrames: [FaceManifest] = []
+    private(set) var faceStretchManifest = ChinFaceManifest()
+    var hasStretchFace: Bool {
+        Self.completeActionFace(faceStretchManifest, faceStretchFrames,
+                                facePatchesStretchFrames)
+    }
+
+    private static func completeActionFace(_ manifest: ChinFaceManifest,
+                                           _ frames: [FaceManifest],
+                                           _ images: [[String: NSImage]]) -> Bool {
+        manifest.frames == CloseUp.transitionFrames + 1
+            && frames.count == manifest.frames
+            && images.count == manifest.frames
+            && frames.enumerated().allSatisfy {
+                $0.element.patches.count == images[$0.offset].count
             }
     }
 
@@ -286,48 +317,20 @@ final class SceneAssets {
                     facePatches2x = loaded
                 }
             }
-            if let data = try? Data(contentsOf: dir.appendingPathComponent("facechin2x.json")),
-               let m = try? JSONDecoder().decode(ChinFaceManifest.self, from: data) {
-                var manifests: [FaceManifest] = []
-                var images: [[String: NSImage]] = []
-                let validCanvas = m.canvas == face2x.canvas && m.canvas == [3072, 2048]
-                let validFrames = m.frames == CloseUp.transitionFrames + 1
-                    && m.sets.count == m.frames
-                let validSetCanvases = m.sets.allSatisfy { $0.canvas == m.canvas }
-                if validCanvas && validFrames && validSetCanvases {
-                    for (i, set) in m.sets.enumerated() {
-                        let loaded = set.patches.keys.reduce(into: [String: NSImage]()) { out, key in
-                            out[key] = NSImage(contentsOf: dir.appendingPathComponent(
-                                String(format: "facechin2x_%02d_%@.png", i, key)))
-                        }
-                        let sameKeys = Set(set.patches.keys) == Set(face2x.patches.keys)
-                        let sameChannels = set.channels == face2x.channels
-                        let exactImages = set.patches.allSatisfy { key, rect in
-                            guard rect.w > 0, rect.h > 0,
-                                  rect.x >= 0, rect.y >= 0,
-                                  rect.x + rect.w <= (set.canvas.first ?? 0),
-                                  rect.y + rect.h <= (set.canvas.last ?? 0),
-                                  let image = loaded[key] else { return false }
-                            return image.representations.contains {
-                                $0.pixelsWide == rect.w && $0.pixelsHigh == rect.h
-                            }
-                        }
-                        guard sameKeys && sameChannels && exactImages else {
-                            manifests.removeAll(); images.removeAll(); break
-                        }
-                        manifests.append(set)
-                        images.append(loaded)
-                    }
-                }
-                if manifests.count == m.frames {
-                    faceChinManifest = m
-                    faceChinFrames = manifests
-                    facePatchesChinFrames = images
-                }
+            if let set = loadActionFace(dir, prefix: "facechin2x") {
+                faceChinManifest = set.manifest
+                faceChinFrames = set.frames
+                facePatchesChinFrames = set.images
             }
-            // 托腮动作在面部贴片之后加载：头现在跟着动作歪，终态必须配
-            // facechin 贴片才能眨眼说话，缺了就整套回退（loadChin 里 guard）。
+            if let set = loadActionFace(dir, prefix: "facestretch2x") {
+                faceStretchManifest = set.manifest
+                faceStretchFrames = set.frames
+                facePatchesStretchFrames = set.images
+            }
+            // 长动作在面部贴片之后加载：头跟着动作转，每一档都要配对应的
+            // 贴片才能眨眼说话，缺了就整套不启用（loadChin / loadStretch 里 guard）。
             loadChin(dir)
+            loadStretch(dir)
             loadHeadphoneMasks(dir)
 
             if let data = try? Data(contentsOf: dir.appendingPathComponent("scene.json")),
@@ -410,6 +413,114 @@ final class SceneAssets {
 
     /// 托腮动作中间帧。三路（上半身、耳机上半身、桌面手层）必须同时完整，
     /// 少一张就整套停用，不能在动作中途让手或耳机闪一下，也不能退回旧终态硬切。
+    /// 一条长动作的逐帧面部贴片（`facechin2x` / `facestretch2x`）。
+    ///
+    /// 托腮和伸懒腰都会转头，两者都要"每一档各一套 13 块"。这段校验很啰嗦
+    /// （键集、通道、矩形、真实像素尺寸逐条比），但**只该有一份**——
+    /// 抄第二份的话，加动作时改了这边忘了那边，表现是某一档的贴片悄悄错位。
+    private struct ActionFaceSet {
+        let manifest: ChinFaceManifest
+        let frames: [FaceManifest]
+        let images: [[String: NSImage]]
+    }
+
+    private func loadActionFace(_ dir: URL, prefix: String) -> ActionFaceSet? {
+        guard let data = try? Data(contentsOf:
+                dir.appendingPathComponent("\(prefix).json")),
+              let m = try? JSONDecoder().decode(ChinFaceManifest.self, from: data),
+              m.canvas == face2x.canvas, m.canvas == [3072, 2048],
+              m.frames == CloseUp.transitionFrames + 1,
+              m.sets.count == m.frames,
+              m.sets.allSatisfy({ $0.canvas == m.canvas }) else { return nil }
+
+        var manifests: [FaceManifest] = []
+        var images: [[String: NSImage]] = []
+        for (i, set) in m.sets.enumerated() {
+            let loaded = set.patches.keys.reduce(into: [String: NSImage]()) { out, key in
+                out[key] = NSImage(contentsOf: dir.appendingPathComponent(
+                    String(format: "\(prefix)_%02d_%@.png", i, key)))
+            }
+            let sameKeys = Set(set.patches.keys) == Set(face2x.patches.keys)
+            let sameChannels = set.channels == face2x.channels
+            let exactImages = set.patches.allSatisfy { key, rect in
+                guard rect.w > 0, rect.h > 0,
+                      rect.x >= 0, rect.y >= 0,
+                      rect.x + rect.w <= (set.canvas.first ?? 0),
+                      rect.y + rect.h <= (set.canvas.last ?? 0),
+                      let image = loaded[key] else { return false }
+                return image.representations.contains {
+                    $0.pixelsWide == rect.w && $0.pixelsHigh == rect.h
+                }
+            }
+            guard sameKeys && sameChannels && exactImages else { return nil }
+            manifests.append(set)
+            images.append(loaded)
+        }
+        guard manifests.count == m.frames else { return nil }
+        return ActionFaceSet(manifest: m, frames: manifests, images: images)
+    }
+
+    /// 伸懒腰。和托腮同一套契约，但**只有 2× 一份**——不留第二份拷贝
+    /// （第 70 条：没人画的那份必然会旧）。素材缺任何一项就整套不启用，
+    /// 她只是不伸懒腰，不会播一个残缺动作。
+    private func loadStretch(_ dir: URL) {
+        stretchAssetSet = nil
+        guard let data = try? Data(contentsOf:
+                dir.appendingPathComponent("stretch.json")),
+              let m = try? JSONDecoder().decode(ChinManifest.self, from: data),
+              m.isUsable, hasStretchFace,
+              m.frames == CloseUp.transitionFrames,
+              m.canvas == legs.canvas,
+              m.bodyRect.x == 0, m.bodyRect.y == 0,
+              m.bodyRect.w == (legs.canvas.first ?? 1536),
+              m.bodyRect.h > 0,
+              m.bodyRect.h <= (legs.canvas.count > 1 ? legs.canvas[1] : 1024),
+              m.handRect.x == hands.rect.x, m.handRect.y == hands.rect.y,
+              m.handRect.w == hands.rect.w, m.handRect.h == hands.rect.h,
+              m.pixelScale == 2, m.pixelScale == hands.pixelScale else { return }
+
+        func images(_ prefix: String) -> [NSImage] {
+            (0..<m.frames).compactMap { i in
+                NSImage(contentsOf: dir.appendingPathComponent(
+                    String(format: "\(prefix)_%02d.png", i)))
+            }
+        }
+        func image(_ name: String) -> NSImage? {
+            NSImage(contentsOf: dir.appendingPathComponent(name))
+        }
+        func matches(_ image: NSImage, _ rect: LegManifest.Rect) -> Bool {
+            image.representations.contains {
+                $0.pixelsWide == rect.w * m.pixelScale
+                    && $0.pixelsHigh == rect.h * m.pixelScale
+            }
+        }
+
+        let bodies = images("snozzy_body_stretch2x")
+        let phones = images("snozzy_body_stretch_headphones2x")
+        let handFrames = images("snozzy_stretch_hand")
+        guard bodies.count == m.frames, phones.count == m.frames,
+              handFrames.count == m.frames,
+              let bodyBase = image("snozzy_body_stretch_base2x.png"),
+              let phoneBase = image("snozzy_body_stretch_base_headphones2x.png"),
+              let bodyFinal = image("snozzy_body_stretch2x.png"),
+              let phoneFinal = image("snozzy_body_stretch_headphones2x.png"),
+              let handFinal = image("snozzy_stretch_hand_final.png"),
+              bodies.allSatisfy({ matches($0, m.bodyRect) }),
+              phones.allSatisfy({ matches($0, m.bodyRect) }),
+              handFrames.allSatisfy({ matches($0, m.handRect) }),
+              matches(bodyBase, m.bodyRect), matches(phoneBase, m.bodyRect),
+              matches(bodyFinal, m.bodyRect), matches(phoneFinal, m.bodyRect),
+              matches(handFinal, m.handRect) else { return }
+
+        stretchAssetSet = ChinAssetSet(
+            manifest: m,
+            bodyFrames: bodies, phoneFrames: phones,
+            bodyBase: bodyBase, phoneBase: phoneBase,
+            bodyFinal: bodyFinal, phoneFinal: phoneFinal,
+            handFrames: handFrames, handFinal: handFinal,
+            faceSets: faceStretchFrames, faceImages: facePatchesStretchFrames)
+    }
+
     private func loadChin(_ dir: URL) {
         chinAssetSet = nil
         guard let data = try? Data(contentsOf: dir.appendingPathComponent("chin.json")),

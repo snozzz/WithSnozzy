@@ -1,0 +1,25 @@
+[2026-07-30 05:01:07 CST] Terminal runner started
+[2026-07-30 05:01:07 CST] attempt 1/6 using session 845eb931-233d-46ef-963b-3a371014a4d4
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:01:10 CST] attempt 1 did not complete cleanly; status=1
+[2026-07-30 05:01:10 CST] waiting 300s before retry
+[2026-07-30 05:06:10 CST] attempt 2/6 using session 73c20e3e-a02b-4348-a790-894e0c26b2fd
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:06:13 CST] attempt 2 did not complete cleanly; status=1
+[2026-07-30 05:06:13 CST] waiting 300s before retry
+[2026-07-30 05:11:13 CST] attempt 3/6 using session 845eb931-233d-46ef-963b-3a371014a4d4
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:11:16 CST] attempt 3 did not complete cleanly; status=1
+[2026-07-30 05:11:16 CST] waiting 300s before retry
+[2026-07-30 05:16:16 CST] attempt 4/6 using session 845eb931-233d-46ef-963b-3a371014a4d4
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:16:19 CST] attempt 4 did not complete cleanly; status=1
+[2026-07-30 05:16:19 CST] waiting 300s before retry
+[2026-07-30 05:21:19 CST] attempt 5/6 using session 845eb931-233d-46ef-963b-3a371014a4d4
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:21:22 CST] attempt 5 did not complete cleanly; status=1
+[2026-07-30 05:21:22 CST] waiting 300s before retry
+[2026-07-30 05:26:22 CST] attempt 6/6 using session 845eb931-233d-46ef-963b-3a371014a4d4
+Failed to authenticate. API Error: 403 Request not allowed
+[2026-07-30 05:26:25 CST] attempt 6 did not complete cleanly; status=1
+[2026-07-30 05:26:25 CST] final status 1

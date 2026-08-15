@@ -802,13 +802,19 @@ def stretch(arm, scene, amount=1.0):
 
     # 分组相位：胳膊先走，身体跟上，手指最后舒展开。
     # 全部同时到位的话读起来是"换了个姿势"，不是"伸了个懒腰"。
+    #
+    # **每一组的区间都要铺满整条时间轴**，只错开起点。第一版给的是
+    # (0, 0.72) / (0.12, 0.86) / (0.20, 0.92)，胳膊在第 6 帧就到位了，
+    # 后面两帧一动不动——`stretch_frames.py` 的相邻 XOR 峰值比报 3.34
+    # （上限 2.5），因为动作全挤在中段、尾巴是三帧重复。
+    # 现在这一组算出来 1.34/1.40/1.59，动作从头铺到尾。
     for pb in moving:
         if pb.name in torso_set:
-            phase = _eased_phase(amount, 0.12, 0.86)
+            phase = _eased_phase(amount, 0.06, 1.00)
         elif pb.name in finger_names:
-            phase = _eased_phase(amount, 0.20, 0.92)
+            phase = _eased_phase(amount, 0.14, 1.00)
         else:
-            phase = _eased_phase(amount, 0.00, 0.72)
+            phase = _eased_phase(amount, 0.00, 0.96)
         a_loc, a_rot, a_scale = start[pb.name].decompose()
         b_loc, b_rot, b_scale = target[pb.name].decompose()
         pb.matrix_basis = Matrix.LocRotScale(a_loc.lerp(b_loc, phase),
