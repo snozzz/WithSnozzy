@@ -125,10 +125,20 @@ def main():
     hub = "together" if "together" in poses else poses[0]
     poses = [hub] + sorted(p for p in poses if p != hub)
 
-    trans = sorted(glob.glob(os.path.join(a.src, "trans_*_*.png")))
+    # **只认腿部姿势那几支过渡。** `render_closeup.py` / `render_stretch.py`
+    # 的中间帧也叫 `trans_*_*.png`，而 HANDOFF 让它们和姿势图渲进同一个目录，
+    # 于是 `trans_chin_00…07` 会被当成第六支换腿过渡：
+    # `seam_residual` 把托腮抬起来的胳膊算成"上半身不共用"（实测报 0.899%，
+    # 只算腿的话是 0.000%），`alpha_bbox` 可能被那条袖子撑大腿的矩形，
+    # 还会切出一堆 `snozzy_move_chin_*.png` 这种没人要的图。
+    # 分支名必须落在 `poses` 里才算数。
+    trans = []
     steps = {}
-    for p in trans:
+    for p in sorted(glob.glob(os.path.join(a.src, "trans_*_*.png"))):
         m = re.match(r"trans_(.+)_(\d+)\.png$", os.path.basename(p))
+        if m is None or m.group(1) not in poses:
+            continue
+        trans.append(p)
         steps.setdefault(m.group(1), []).append(int(m.group(2)))
     counts = {len(v) for v in steps.values()}
     if len(counts) > 1:
