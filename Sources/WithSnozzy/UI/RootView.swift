@@ -178,7 +178,8 @@ private struct SceneStack: View {
                     let activity = ActivityRig.cue(
                         at: t, phase: state.focus.phase, playing: state.isPlaying,
                         transitionFrom: state.activityTransitionFrom,
-                        transitionStartedAt: state.activityTransitionStartedAt)
+                        transitionStartedAt: state.activityTransitionStartedAt,
+                        forced: state.forcedActivity)
                     let faceActivity = ActivityRig.attentionCue(
                         from: activity, amount: state.closeUp.attentionAmount)
                     ZStack {

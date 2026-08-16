@@ -449,6 +449,16 @@ final class AppState {
     /// phase/playing 连续切换时会把尚未结束的混合结果再次冻结到这里。
     private(set) var activityTransitionFrom: ActivityCue?
     private(set) var activityTransitionStartedAt = Date.distantPast
+    /// 调试面板按住的活动档位。nil 时照常按 58 秒的槽位自己抽。
+    ///
+    /// 走的是和 phase/playing 完全一样的那条路：改之前先冻结屏幕此刻的
+    /// 完整 cue，于是强制切换也是 2.4 秒平滑过渡，而不是瞬移眼球。
+    var forcedActivity: SnozzyActivity? {
+        willSet {
+            guard newValue != forcedActivity else { return }
+            captureActivityTransition(at: Date())
+        }
+    }
     var isPlaying = false {
         willSet {
             guard newValue != isPlaying else { return }
@@ -461,7 +471,8 @@ final class AppState {
         activityTransitionFrom = ActivityRig.cue(
             at: t, phase: focus.phase, playing: isPlaying,
             transitionFrom: activityTransitionFrom,
-            transitionStartedAt: activityTransitionStartedAt)
+            transitionStartedAt: activityTransitionStartedAt,
+            forced: forcedActivity)
         activityTransitionStartedAt = changedAt
     }
 
@@ -818,6 +829,7 @@ final class AppState {
                 && !self.closeUp.isActive
                 && self.sceneAssets.hasCompleteStretchMotion
         }
+        stretch.startScheduling()
         closeUp.canStart = { [weak self] in
             guard let self else { return false }
             // 桌宠/迷你模式里根本没有那个画面；面板开着说明你正在用它，

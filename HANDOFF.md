@@ -1205,6 +1205,21 @@ HANDOFF 让 `render_closeup.py` 和姿势图渲进同一个目录，而两边的
 修法是分支名必须落在 `poses` 里才算数。**判据报警时先看它把什么算进去了**
 （第 45 条）——这次报的数是真的，只是量的不是它声称的那件事。
 
+**71.7 别用合成鼠标事件去验 UI——抢不过真光标，还会在别人桌面上乱点。**
+动作面板做完想看一眼，于是写了个 `CGEvent` 移光标 + 点击的小工具去把
+控制条勾出来。两件事同时不对：
+
+- **坐标单位错了。** `CGEvent` 用的是**点**，`screencapture` 出来的是
+  Retina **像素**，这台机器上差两倍。照像素给的 y=1545 直接落到屏幕外面，
+  光标被夹在底边，控制条当然不出来。
+- **移了也不算数。** verify 了一下，`CGEvent(source: nil).location` 报的
+  还是用户真光标的位置——合成的移动被真实输入盖掉了。而那次误点还把终端
+  切到了前台。
+
+正解是**照真实视图渲一张图**：`--actionpanel` 用 `ImageRenderer` 渲
+`ActionPanel` 本体，几百毫秒出图、可重复、不碰别人的桌面。
+这条和 `--closeup`、`--facefit` 是同一族——**UI 的判据是渲视图，不是操纵鼠标**。
+
 **72. 判据画的尺寸必须是真实窗口能达到的尺寸。**
 `--closeup` 那张图里，气泡结结实实盖在她脸上——而真实窗口里根本不会发生。
 `CloseUpStrip.cellW` 当时是 330，比普通窗口的最小宽度（720）还小一半；
@@ -1343,6 +1358,15 @@ HANDOFF 让 `render_closeup.py` 和姿势图渲进同一个目录，而两边的
   `AppState.lastCelebration`；`celebrationAmount(at:)` 用共享时间线做 1.80 秒纯包络，
   在普通/困倦/托腮注意力之上叠克制笑眼笑嘴，真实说话口型随后接管嘴部；侧屏勾形
   严格画在既有屏幕 clip 内，amount=0 不画。skip、手动切换和短休息结束不触发。
+- **伸懒腰**：每隔 5–10 分钟自发一次（`StretchRig.idleRange`，每次重新抽，
+  固定周期几轮就能预判），专注段自然结束时也来一个。两条胳膊举过头顶、
+  胸口打开、脸抬起来，八张真骨骼中间帧，倒放共用同一列。
+  只发布 2× 一份素材，缺任何一项整套不启用
+- **动作面板**（控制条上那个招手图标）：把所有能主动演的东西列出来，
+  点一下就演——托腮、伸懒腰、五个活动档位（按住不放就一直是那一档）、
+  专注完成的短反馈。**每一行调的都是生产入口**，不另开播放路径（第 69 条）。
+  存在的理由是测试：这些动作平时都有门槛（托腮要等冷却、伸懒腰 5–10 分钟
+  一次、活动档位 58 秒一个槽位自己抽），改完素材等不起
 - 场景里的键盘是 **3D 建的**（`Blender/keyboard.py`），斜着放；
   重绘图里画的那块已抹掉。桌板也在 3D 里，只当遮挡用
 - 底部控制条鼠标靠近才浮出
@@ -1895,6 +1919,8 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip /tmp/city.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip-negative
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --stretchcheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel /tmp/panel.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitystrip /tmp/activity.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --celebrationstrip /tmp/celebration.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --memorycheck

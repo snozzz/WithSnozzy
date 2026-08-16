@@ -4,6 +4,7 @@ import SwiftUI
 struct Dock: View {
     let palette: Palette
     @Environment(AppState.self) private var state
+    @State private var showActions = false
 
     var body: some View {
         @Bindable var s = state
@@ -85,6 +86,20 @@ struct Dock: View {
                        isOn: state.closeUp.isActive, tint: palette.accent,
                        help: "叫她凑近看看") {
                 state.closeUp.begin()
+            }
+
+            // ── 动作面板 ──────────────────────────────
+            // 每个动作平时都有自己的门槛（近景要等冷却、伸懒腰 5–10 分钟
+            // 一次、活动档位按槽位抽签），改完素材想验一眼等不起。
+            // 面板里每一行调的都是生产入口，不另开一条播放路径（第 69 条）。
+            IconButton(symbol: "figure.wave", size: 14,
+                       isOn: showActions || state.stretch.isActive,
+                       tint: palette.accent, help: "动作面板：让她做点什么") {
+                showActions.toggle()
+            }
+            .popover(isPresented: $showActions, arrowEdge: .top) {
+                ActionPanel(palette: palette)
+                    .environment(state)
             }
 
             // ── 说话 ─────────────────────────────────

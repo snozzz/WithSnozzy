@@ -122,6 +122,20 @@ enum Snapshot {
         CommandLine.arguments.contains("--stretchcheck")
     }
 
+    /// 动作面板长什么样。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel out.png
+    /// ```
+    ///
+    /// 这个面板的每一行都调生产入口，逻辑归 `--stretchcheck` 和
+    /// `--activitycheck` 验；这里只把它**照真实视图渲一张图**，
+    /// 确认排版没崩、该禁用的行禁用了。比去操纵鼠标点开 popover 可靠得多——
+    /// 那条路要跟真实光标抢控制权，而且在别人桌面上乱点很危险。
+    static var actionPanelPath: String? {
+        arg("--actionpanel")
+    }
+
     /// Activity 状态机的覆盖和数值约束。只量真正供 SceneStack 使用的纯函数，
     /// 不为了自检另画一棵迟早会和真实画面分家的场景树。
     static var activityCheck: Bool {
@@ -520,6 +534,35 @@ enum Snapshot {
         }
     }
 
+    /// 把动作面板照真实视图渲一张图。
+    static func runActionPanel(path: String) {
+        let state = AppState()
+        state.sceneAssets.load()
+        let view = ActionPanel(palette: .day)
+            .environment(state)
+            .background(Color(white: 0.16))
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            print("动作面板渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+            print("托腮素材 \(state.sceneAssets.hasCompleteChinMotion ? "齐" : "缺")"
+                  + "，伸懒腰素材 \(state.sceneAssets.hasCompleteStretchMotion ? "齐" : "缺")"
+                  + "，下次自发伸懒腰还有 \(Int(state.stretch.secondsUntilNext)) 秒")
+            exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
     /// 伸懒腰：素材契约 + 走一遍时间轴。
     static func runStretchCheck() -> Bool {
         let assets = SceneAssets()
@@ -546,6 +589,20 @@ enum Snapshot {
             check("上半身切得比常态深（\(set.manifest.bodyRect.h) > \(assets.legs.seam)）",
                   set.manifest.bodyRect.h > assets.legs.seam)
         }
+
+        // 自发节拍：5–10 分钟一次。这条只能验区间和"启动时不会立刻就伸"，
+        // 真等一轮要十分钟——但区间写错（比如少个零）是最容易犯的错，
+        // 而它恰恰是这个功能唯一的可调参数。
+        let range = StretchRig.idleRange
+        check("自发间隔 5–10 分钟（实际 \(Int(range.lowerBound))…"
+              + "\(Int(range.upperBound)) 秒）",
+              range.lowerBound == 300 && range.upperBound == 600)
+        let fresh = StretchRig()
+        fresh.startScheduling()
+        let due = fresh.secondsUntilNext
+        check("刚启动不会立刻伸（还有 \(Int(due)) 秒）",
+              due > range.lowerBound - 5 && due <= range.upperBound)
+        fresh.stopScheduling()
 
         // 走一遍真实时间轴。停留时长是随机的，所以盯着 `isActive` 采样。
         let rig = StretchRig()

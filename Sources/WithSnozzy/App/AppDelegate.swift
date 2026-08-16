@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
+        if let path = Snapshot.actionPanelPath {
+            Snapshot.runActionPanel(path: path)
+            return
+        }
         if Snapshot.stretchCheck {
             exit(Snapshot.runStretchCheck() ? 0 : 1)
         }

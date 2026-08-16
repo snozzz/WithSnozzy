@@ -10,6 +10,29 @@ enum SnozzyActivity: String, CaseIterable, Hashable {
     case planning
     case resting
     case takingBreak
+
+    /// 面板上显示的名字。放在枚举上而不是面板里——加一档活动时
+    /// 编译器会直接指着这里说少了一个分支，写在面板里只会悄悄少一行。
+    var label: String {
+        switch self {
+        case .typing: "敲代码"
+        case .researching: "查资料"
+        case .planning: "想事情"
+        case .resting: "发会儿呆"
+        case .takingBreak: "歇一歇"
+        }
+    }
+
+    /// 面板上那个小图标。
+    var symbol: String {
+        switch self {
+        case .typing: "keyboard"
+        case .researching: "magnifyingglass"
+        case .planning: "lightbulb"
+        case .resting: "cloud"
+        case .takingBreak: "cup.and.saucer"
+        }
+    }
 }
 
 /// 一项活动给画面各层的提示。角色、手和场景读同一份，避免各演各的。
@@ -69,10 +92,15 @@ enum ActivityRig {
 
     /// `transitionFrom` 必须是在外部状态改变前捕获的完整画面 cue。
     /// 再次切换时捕获当前混合结果，新的 2.4 秒便会从屏幕此刻的样子起步。
+    /// `forced` 是调试面板按住的那一档：给了就不再按 58 秒的槽位抽签，
+    /// 但**照样走 `transitionFrom` 那 2.4 秒的过渡**——强制切换和自然切换
+    /// 在画面上必须是同一件事，否则面板里看着对、真实运行里是另一回事。
     static func cue(at t: Double, phase: FocusPhase, playing: Bool,
                     transitionFrom: ActivityCue? = nil,
-                    transitionStartedAt: Date = .distantPast) -> ActivityCue {
-        let target = cueWithinPhase(at: t, phase: phase, playing: playing)
+                    transitionStartedAt: Date = .distantPast,
+                    forced: SnozzyActivity? = nil) -> ActivityCue {
+        let target = forced.map { base(for: $0, playing: playing) }
+            ?? cueWithinPhase(at: t, phase: phase, playing: playing)
         let elapsed = t - transitionStartedAt.timeIntervalSinceReferenceDate
         let amount = smoothstep(max(0, min(1, elapsed / blendDuration)))
         let result: ActivityCue
@@ -337,6 +365,29 @@ enum ActivityRig {
             && difference(attentionEnd, attending) < 1e-9
         ok = ok && attentionContinuous
         print("  close-up gaze " + (attentionContinuous ? "continuous" : "FAILED"))
+
+        // 调试面板按住一档时，画面必须走**和自然切换同一条**的 2.4 秒过渡：
+        // 起点是切换前屏幕上的那个 cue，终点是那一档的 base。
+        // 直接瞬移到目标（或者面板另算一套）都会让面板里看到的和真实运行
+        // 不是一回事——判据和被判的东西分家，第 69 条。
+        var forcedOK = true
+        for activity in SnozzyActivity.allCases {
+            let t0 = 1_000.0
+            let before = cue(at: t0, phase: .work, playing: false)
+            let start = cue(at: t0, phase: .work, playing: false,
+                            transitionFrom: before,
+                            transitionStartedAt: Date(timeIntervalSinceReferenceDate: t0),
+                            forced: activity)
+            let end = cue(at: t0 + blendDuration + 1, phase: .work, playing: false,
+                          transitionFrom: before,
+                          transitionStartedAt: Date(timeIntervalSinceReferenceDate: t0),
+                          forced: activity)
+            forcedOK = forcedOK && difference(start, before) < 1e-9
+                && end.activity == activity
+                && valid(start) && valid(end)
+        }
+        ok = ok && forcedOK
+        print("  forced activity " + (forcedOK ? "continuous, lands on target" : "FAILED"))
         print("ACTIVITY " + (ok ? "全部通过" : "有不合格项"))
         return ok
     }
