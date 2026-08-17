@@ -25,9 +25,10 @@ struct RenderedSnozzy: View, Equatable {
     /// 中间姿势，frames 是终态。
     /// 两端之间播真实的 Blender 骨骼姿势，不做位图交叉淡入。
     var chinFrame: Int? = nil
-    /// 伸懒腰的档位，语义和 `chinFrame` 一样。两者互斥，由
-    /// `SceneAssets.activeAction` 解析成"哪一套素材的第几帧"。
-    var stretchFrame: Int? = nil
+    /// 伸懒腰 / 喝咖啡 / 玩手机此刻播到哪一档，语义和 `chinFrame` 一样
+    /// （再往上是停留那一列）。几条动作互斥，由 `SceneAssets.activeAction`
+    /// 解析成"哪一套素材的第几帧"。
+    var action: (kind: ActionKind, frame: Int)? = nil
     /// 当前时间。腿部姿势由它推导。
     let t: Double
     /// Optional explicit glow phase used by deterministic snapshot probes.
@@ -45,7 +46,7 @@ struct RenderedSnozzy: View, Equatable {
 
     init(assets: SceneAssets, palette: Palette, pose: Pose,
          face: FaceExpression, headphones: Bool, chinFrame: Int? = nil,
-         stretchFrame: Int? = nil,
+         action: (kind: ActionKind, frame: Int)? = nil,
          t: Double, headphonePhase: Int? = nil,
          headphoneMaskOverride: HeadphoneMask? = nil,
          headphoneGlowAlphaScale: Double = 1,
@@ -56,7 +57,7 @@ struct RenderedSnozzy: View, Equatable {
         self.face = face
         self.headphones = headphones
         self.chinFrame = chinFrame
-        self.stretchFrame = stretchFrame
+        self.action = action
         self.t = t
         self.headphonePhase = headphonePhase
         self.headphoneMaskOverride = headphoneMaskOverride
@@ -69,7 +70,9 @@ struct RenderedSnozzy: View, Equatable {
 
     static func == (a: RenderedSnozzy, b: RenderedSnozzy) -> Bool {
         a.headphones == b.headphones && a.palette == b.palette
-            && a.chinFrame == b.chinFrame && a.stretchFrame == b.stretchFrame
+            && a.chinFrame == b.chinFrame
+            && a.action?.kind == b.action?.kind
+            && a.action?.frame == b.action?.frame
             // The glow is deliberately phase-quantized.  Comparing this
             // discrete state keeps the 3.2-second breath alive through the
             // parent `.equatable()` gate without redrawing for every wall-clock
@@ -81,6 +84,10 @@ struct RenderedSnozzy: View, Equatable {
             && abs(a.pose.breath - b.pose.breath) < 0.01
             && abs(a.pose.bodySway - b.pose.bodySway) < 0.01
             && abs(a.pose.headBob - b.pose.headBob) < 0.01
+            // 打瞌睡那一下的位移比呼吸大得多，容差也得小一档，
+            // 否则整段下沉会被这道相等判据挡掉、只在惊醒时跳一下。
+            && abs(a.pose.doze - b.pose.doze) < 0.004
+            && abs(a.pose.wake - b.pose.wake) < 0.004
             // 换腿期间每换一帧才重画。原来这里比的是淡入进度（连续量），
             // 于是整个过渡期间每帧都重画；现在帧是离散的，重画次数少得多
             && LegPose.at(a.t, in: a.assets.legs) == LegPose.at(b.t, in: b.assets.legs)
@@ -117,8 +124,14 @@ struct RenderedSnozzy: View, Equatable {
             // 面部贴片会各自错开一点，接缝处就露出来了。
             // 支点放在腰部（图的下方），放中心的话头会跟着上下浮，像在颠。
             .scaleEffect(1 + pose.breath * 0.006, anchor: .bottom)
-            .rotationEffect(.degrees(pose.bodySway * 0.8), anchor: .bottom)
-            .offset(x: 0, y: pose.headBob * h * 0.008)
+            // 打瞌睡时整个人往前倾一点：只往下挪的话像被压扁，
+            // 加一点前倾才读得出"要栽下去了"。惊醒那一下往回带。
+            .rotationEffect(.degrees(pose.bodySway * 0.8
+                                     + pose.doze * 1.6 - pose.wake * 0.7),
+                            anchor: .bottom)
+            // 点头下沉的幅度比呼吸大一个量级——它是这一段唯一在动的东西，
+            // 小了根本看不出来（1024 高的画布上 doze=1 大约是 12 像素）。
+            .offset(x: 0, y: pose.headBob * h * 0.008 + pose.doze * h * 0.012)
             .allowsHitTesting(false)
         }
     }
@@ -150,7 +163,7 @@ struct RenderedSnozzy: View, Equatable {
     /// 同时 `torsoLayer` 也会保持常态姿势，两者是同一个 guard 的结果。
     private var actionFace: (manifest: FaceManifest, images: [String: NSImage])? {
         guard let (set, frame) = assets.activeAction(chin: chinFrame,
-                                                     stretch: stretchFrame),
+                                                     action: action),
               frame >= 0,
               set.faceSets.indices.contains(frame),
               set.faceImages.indices.contains(frame) else { return nil }
@@ -171,10 +184,11 @@ struct RenderedSnozzy: View, Equatable {
         guard headphones || headphoneGlowPausedLeak else { return nil }
         if let headphoneMaskOverride { return headphoneMaskOverride }
         guard assets.hasCompleteHeadphoneMasks else { return nil }
-        // 伸懒腰时头往后仰，耳机跟着走，而 mask 只按托腮那条动作派生过。
-        // 拿错位的 mask 去发光比不发光难看得多，所以这一段直接不发光——
-        // 要补的话是给 `headphone_masks.py` 加一条伸懒腰的派生，不是在这里凑。
-        if stretchFrame != nil { return nil }
+        // 长动作里头会仰起来低下去，耳机跟着走，而 mask 只按托腮那条动作
+        // 派生过。拿错位的 mask 去发光比不发光难看得多，所以这几段直接
+        // 不发光——要补的话是给 `headphone_masks.py` 加对应动作的派生，
+        // 不是在这里凑。
+        if action != nil { return nil }
         if let frame = chinFrame {
             if frame < 0 { return assets.chinHeadphoneBaseMask }
             guard assets.chinHeadphoneMasks.indices.contains(frame) else { return nil }
@@ -194,21 +208,9 @@ struct RenderedSnozzy: View, Equatable {
         // explicit action frame selects those assets.  `-1` is the published
         // 2× base at the start of that action's timeline.
         if let (set, frame) = assets.activeAction(chin: chinFrame,
-                                                  stretch: stretchFrame) {
-            if frame >= 0 && set.bodyFrames.indices.contains(frame) {
-                let frames = headphones ? set.phoneFrames : set.bodyFrames
-                if frames.indices.contains(frame) {
-                    return (frames[frame], set.manifest.bodyRect)
-                }
-            }
-            if frame >= set.manifest.frames {
-                return (headphones ? set.phoneFinal : set.bodyFinal,
-                        set.manifest.bodyRect)
-            }
-            if frame < 0 {
-                return (headphones ? set.phoneBase : set.bodyBase,
-                        set.manifest.bodyRect)
-            }
+                                                  action: action),
+           let image = set.body(frame, headphones: headphones) {
+            return (image, set.manifest.bodyRect)
         }
         // Incomplete motion assets deliberately do not fall back to the old
         // 1× terminal torso: keep the normal body and both keyboard hands and

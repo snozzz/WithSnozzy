@@ -37,7 +37,7 @@
 """
 import bpy, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import snozzy_lib as S, pose as P, keyboard as K, headphones as HP
+import snozzy_lib as S, pose as P, keyboard as K, headphones as HP, props as PR
 
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[-2:]
 VRM, OUT = args[:2]
@@ -59,6 +59,7 @@ def build(amount=1.0, hands_layer=False, with_headphones=False):
     # 键盘要在 `toon_materials` 之前建好才跟着走同一套卡通着色；
     # 而 `toon_materials` 只能跑一次（第二次会再接一层）。和 render_hands 一致。
     kbd = K.build()
+    PR.build()          # 桌上的杯子和手机：两层里都画，见 render_action.py
     kbd.hide_render = not hands_layer
     S.toon_materials(); S.room_lights()
     P.settle(scene, arm)

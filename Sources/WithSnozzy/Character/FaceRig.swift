@@ -106,6 +106,20 @@ enum FaceRig {
             e.mouthSmile *= (1 - sleepy * 0.7)
             e.lookX *= (1 - sleepy)
             e.lookY *= (1 - sleepy)
+
+            // 点头那一轮：沉下去时眼皮更重，猛地惊醒时眼睛短暂睁大、
+            // 嘴微微张一下。**和身体读同一份公式**（`DrowsyRig.nod`），
+            // 各算一遍的话眼睛和头会各点各的，比不动更怪。
+            let (sink, wake) = DrowsyRig.nod(at: t, drowsy: sleepy)
+            e.eyeSad = max(e.eyeSad, sink)
+            if wake > 0.02 {
+                e.eyeWide = max(e.eyeWide, wake * 0.85)
+                e.eyeSad *= (1 - wake)
+                e.mouthOpen = max(e.mouthOpen, wake * 0.35)
+                // 惊醒时视线弹回屏幕，比"睁着眼但眼球不动"活得多。
+                e.lookX = e.lookX * (1 - wake) + (-0.35) * wake
+                e.lookY = e.lookY * (1 - wake) + (-0.20) * wake
+            }
         }
 
         // ── 专注完成的短反馈 ──

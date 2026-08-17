@@ -108,19 +108,26 @@ enum Snapshot {
         arg("--closeup")
     }
 
-    /// 伸懒腰整条动作：素材契约 + 逐帧时间轴。
+    /// 三条长动作（伸懒腰 / 喝咖啡 / 玩手机）：素材契约 + 逐帧时间轴。
     ///
     /// ```
-    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --stretchcheck
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --actioncheck
     /// ```
     ///
-    /// 不出图。伸懒腰不推镜头，所以"取景"那一半不存在；真正会坏的是
-    /// **素材契约**（8 帧 + 终态 + 耳机 + 手层 + 9 套贴片少一样就该整套停用）
-    /// 和**顺序**（起落必须共用同一列，倒放漏一帧就是"举上去和放下来不是
-    /// 一条路"）。这两样截图都验不了。
-    static var stretchCheck: Bool {
-        CommandLine.arguments.contains("--stretchcheck")
+    /// 不出图。这几条都不推镜头，所以"取景"那一半不存在；真正会坏的是
+    /// **素材契约**（8 帧 + 终态 + 停留列 + 耳机 + 手层 + 逐档贴片，
+    /// 少一样就该整套停用）和**顺序**（起落必须共用同一列，停留必须整圈
+    /// 循环再回终态）。这两样截图都验不了。
+    static var actionCheck: Bool {
+        CommandLine.arguments.contains("--actioncheck")
     }
+
+    /// 迷你播放器和桌宠长什么样。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip out.png
+    /// ```
+    static var compactStripPath: String? { arg("--compactstrip") }
 
     /// 动作面板长什么样。
     ///
@@ -128,7 +135,7 @@ enum Snapshot {
     /// WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel out.png
     /// ```
     ///
-    /// 这个面板的每一行都调生产入口，逻辑归 `--stretchcheck` 和
+    /// 这个面板的每一行都调生产入口，逻辑归 `--actioncheck` 和
     /// `--activitycheck` 验；这里只把它**照真实视图渲一张图**，
     /// 确认排版没崩、该禁用的行禁用了。比去操纵鼠标点开 popover 可靠得多——
     /// 那条路要跟真实光标抢控制权，而且在别人桌面上乱点很危险。
@@ -534,6 +541,69 @@ enum Snapshot {
         }
     }
 
+    /// 判据专用的透明底格子。桌宠模式**任何一层不透明的背景都会在桌面上
+    /// 留下一个方块**，而在纯色底上看不出来——垫格子才看得见。
+    private struct Checkerboard: View {
+        var body: some View {
+            Canvas { ctx, size in
+                let n = 10.0
+                for y in stride(from: 0.0, to: size.height, by: n) {
+                    for x in stride(from: 0.0, to: size.width, by: n) {
+                        let dark = (Int(x / n) + Int(y / n)) % 2 == 0
+                        ctx.fill(Path(CGRect(x: x, y: y, width: n, height: n)),
+                                 with: .color(dark ? .white.opacity(0.22)
+                                                   : .black.opacity(0.22)))
+                    }
+                }
+            }
+        }
+    }
+
+    /// 迷你播放器和桌宠这两个形态照真实视图渲一张对照图。
+    ///
+    /// **尺寸必须是真实窗口能达到的尺寸**（第 72 条）：这两个形态的默认窗口
+    /// 是 340×280 和 300×320，判据就照这两个画。画大了，"她的头顶被切掉"
+    /// 这类只在小窗口出现的毛病就照不出来。
+    ///
+    /// 报的数是**角色占了这一格的多少**：这两个形态里除了她几乎没别的东西，
+    /// 占比太小就是"桌面上一个小不点"，太大就是"一张脸怼在屏幕上"。
+    static func runCompactStrip(path: String) {
+        let state = AppState()
+        state.sceneAssets.load()
+        let mini = WindowMode.mini.defaultSize
+        let pet = WindowMode.pet.defaultSize
+        let view = HStack(alignment: .top, spacing: 0) {
+            MiniView().environment(state)
+                .frame(width: mini.width, height: mini.height)
+                .clipped()
+            PetView().environment(state)
+                .frame(width: pet.width, height: pet.height)
+                .clipped()
+                // 桌宠背景必须是透明的，垫一层格子才看得出有没有多余的底
+                .background(Checkerboard())
+        }
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        guard let image = renderer.nsImage,
+              let tiff = image.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]) else {
+            print("迷你/桌宠渲染失败")
+            exit(1)
+        }
+        do {
+            try png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+            print("角色渲染版素材 \(state.sceneAssets.hasRenderedCharacter ? "齐" : "缺")"
+                  + "，迷你 \(Int(mini.width))×\(Int(mini.height))"
+                  + "，桌宠 \(Int(pet.width))×\(Int(pet.height))")
+            exit(0)
+        } catch {
+            print("写入失败: \(error.localizedDescription)")
+            exit(1)
+        }
+    }
+
     /// 把动作面板照真实视图渲一张图。
     static func runActionPanel(path: String) {
         let state = AppState()
@@ -553,9 +623,10 @@ enum Snapshot {
         do {
             try png.write(to: URL(fileURLWithPath: path))
             print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
-            print("托腮素材 \(state.sceneAssets.hasCompleteChinMotion ? "齐" : "缺")"
-                  + "，伸懒腰素材 \(state.sceneAssets.hasCompleteStretchMotion ? "齐" : "缺")"
-                  + "，下次自发伸懒腰还有 \(Int(state.stretch.secondsUntilNext)) 秒")
+            let ready = ActionKind.allCases
+                .map { "\($0.label)\(state.sceneAssets.hasCompleteMotion($0) ? "齐" : "缺")" }
+                .joined(separator: "、")
+            print("托腮素材 \(state.sceneAssets.hasCompleteChinMotion ? "齐" : "缺")，" + ready)
             exit(0)
         } catch {
             print("写入失败: \(error.localizedDescription)")
@@ -563,8 +634,11 @@ enum Snapshot {
         }
     }
 
-    /// 伸懒腰：素材契约 + 走一遍时间轴。
-    static func runStretchCheck() -> Bool {
+    /// 三条长动作：素材契约 + 走一遍真实时间轴。
+    ///
+    /// 一条动作有两种坏法，而它们在画面上长得一样（"她不动"）：素材没齐
+    /// 所以整套没启用，和素材齐了但时间轴写错。所以这两件事分开报。
+    static func runActionCheck() -> Bool {
         let assets = SceneAssets()
         assets.load()
         var ok = true
@@ -573,66 +647,86 @@ enum Snapshot {
             print("  " + (pass ? "✓ " : "✗ ") + label)
         }
 
-        let ready = assets.hasCompleteStretchMotion
-        check("伸懒腰 2× 素材契约完整（8 帧 + 终态 + 耳机 + 手层 + 9 套贴片）", ready)
-        if !ready {
-            print("  facestretch: \(assets.faceStretchFrames.count) 套贴片；"
-                  + "先跑 Blender/render_stretch.py 与 Scripts/stretch_frames.py")
-        }
-
-        // 手层到后面**只剩键盘**是对的（两只手都举起来了，第 60 条），
-        // 但它不能是空的——键盘一直在那一层里。空了就是渲染脚本把键盘也遮了。
-        if let set = assets.stretchAssetSet {
+        for kind in ActionKind.allCases {
+            print("== \(kind.label)（\(kind.rawValue)）==")
+            let set = assets.actionSets[kind]
+            let holds = set?.manifest.holdFrames ?? 0
+            check("2× 素材契约完整（8 帧 + 终态 + \(holds) 停留帧 + 耳机 + 手层 + "
+                  + "\((set?.manifest.poseCount).map(String.init) ?? "?") 套贴片）",
+                  set != nil)
+            guard let set else {
+                print("  先跑 Blender/render_action.py 和 Scripts/action_frames.py")
+                ok = false
+                continue
+            }
             let rect = set.manifest.handRect
             check("手层矩形和常态一致（\(rect.w)×\(rect.h)）",
                   rect.w == assets.hands.rect.w && rect.h == assets.hands.rect.h)
             check("上半身切得比常态深（\(set.manifest.bodyRect.h) > \(assets.legs.seam)）",
                   set.manifest.bodyRect.h > assets.legs.seam)
-        }
+            // 停留那一列是"举上去之后人还活着"的全部来源。没有它，动作就是
+            // 举起来冻两秒再放下——用户报的"像做操"正是这个。
+            check("有停留帧（\(holds) 张，循环播）", holds > 0)
+            check("每一档都有自己的一套面部贴片（\(set.faceSets.count) 套）",
+                  set.faceSets.count == set.manifest.poseCount)
+            // 停留期间桌面手层复用终态那一张：那段时间桌上那只手不动，
+            // 道具也早就高过手层裁切框了。
+            check("桌面手层：中间帧 \(set.handFrames.count) 张 + 终态一张",
+                  set.handFrames.count == set.manifest.frames)
 
-        // 自发节拍：5–10 分钟一次。这条只能验区间和"启动时不会立刻就伸"，
-        // 真等一轮要十分钟——但区间写错（比如少个零）是最容易犯的错，
-        // 而它恰恰是这个功能唯一的可调参数。
-        let range = StretchRig.idleRange
-        check("自发间隔 5–10 分钟（实际 \(Int(range.lowerBound))…"
-              + "\(Int(range.upperBound)) 秒）",
-              range.lowerBound == 300 && range.upperBound == 600)
-        let fresh = StretchRig()
-        fresh.startScheduling()
-        let due = fresh.secondsUntilNext
-        check("刚启动不会立刻伸（还有 \(Int(due)) 秒）",
-              due > range.lowerBound - 5 && due <= range.upperBound)
-        fresh.stopScheduling()
+            if let range = kind.idleRange {
+                let fresh = ActionRig(kind)
+                fresh.startScheduling()
+                let due = fresh.secondsUntilNext
+                check("自发间隔 \(Int(range.lowerBound))…\(Int(range.upperBound)) 秒，"
+                      + "刚启动不会立刻演（还有 \(Int(due)) 秒）",
+                      due > range.lowerBound - 5 && due <= range.upperBound)
+                fresh.stopScheduling()
+            } else {
+                check("不自发（等外部触发）", true)
+            }
 
-        // 走一遍真实时间轴。停留时长是随机的，所以盯着 `isActive` 采样。
-        let rig = StretchRig()
-        var sequence: [String] = []
-        let done = DispatchSemaphore(value: 0)
-        Task { @MainActor in
-            rig.begin(force: true)
-            while rig.isActive {
+            // 走一遍真实时间轴。停留圈数是随机的，所以盯着 `isActive` 采样。
+            let rig = ActionRig(kind)
+            rig.holdFrames = holds
+            var sequence: [String] = []
+            let done = DispatchSemaphore(value: 0)
+            Task { @MainActor in
+                rig.begin(force: true)
+                while rig.isActive {
+                    let label = rig.frame.map(String.init) ?? "nil"
+                    if sequence.last != label { sequence.append(label) }
+                    try? await Task.sleep(for: .milliseconds(8))
+                }
                 let label = rig.frame.map(String.init) ?? "nil"
                 if sequence.last != label { sequence.append(label) }
-                try? await Task.sleep(for: .milliseconds(8))
+                done.signal()
             }
-            let label = rig.frame.map(String.init) ?? "nil"
-            if sequence.last != label { sequence.append(label) }
-            done.signal()
+            while done.wait(timeout: .now()) == .timedOut {
+                RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+            }
+            print("  逐帧时间轴：" + sequence.joined(separator: " → "))
+            let final = ActionRig.transitionFrames
+            let forward = ["-1"] + (0...final).map(String.init)
+            let reverse = stride(from: final - 1, through: 0, by: -1)
+                .map(String.init) + ["-1", "nil"]
+            check("常态 base → 00…0\(final) 正放完整", sequence.starts(with: forward))
+            check("0\(final) → 倒放同一列 → base → 常态",
+                  sequence.suffix(reverse.count) == ArraySlice(reverse))
+            // 停留那一段必须**循环走完整圈**，而且首尾都回到终态：
+            // 停在半圈上再倒放，画面上就是从一个歪着的脖子硬切回正。
+            let holdLabels = sequence.dropFirst(forward.count)
+                .prefix(while: { Int($0).map { $0 > final } ?? false })
+            let cycleLength = holds
+            check("停留是整圈循环（\(holdLabels.count) 拍，每圈 \(cycleLength) 张）",
+                  holds == 0 || (holdLabels.count % cycleLength == 0
+                                 && holdLabels.count >= cycleLength))
+            check("停留结束回到终态再倒放",
+                  holds == 0 || sequence.dropFirst(forward.count + holdLabels.count)
+                    .first == String(final))
         }
-        while done.wait(timeout: .now()) == .timedOut {
-            RunLoop.main.run(until: Date().addingTimeInterval(0.02))
-        }
-        print("逐帧时间轴：" + sequence.joined(separator: " → "))
-        let forward = ["-1"] + (0...StretchRig.transitionFrames).map(String.init)
-        let reverse = stride(from: StretchRig.transitionFrames - 1, through: 0, by: -1)
-            .map(String.init) + ["-1", "nil"]
-        check("常态 base → 00…08 正放完整", sequence.starts(with: forward))
-        check("08 → 07…00 → base → 常态，倒放共用同一列",
-              sequence.suffix(reverse.count) == ArraySlice(reverse))
-        check("没有重复档位", Set(sequence).count == sequence.count
-              || sequence.count == forward.count + reverse.count)
 
-        print("STRETCH " + (ok ? "全部通过" : "有不合格项"))
+        print("ACTION " + (ok ? "全部通过" : "有不合格项"))
         return ok
     }
 

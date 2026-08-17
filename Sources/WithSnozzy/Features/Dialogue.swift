@@ -11,6 +11,8 @@ enum DialogueContext {
     /// 打瞌睡时被摸醒。
     case wokenUp
     case focusStarted, focusFinished, breakFinished
+    /// 她端起杯子喝一口、拿起手机回消息的时候。
+    case coffee, phone
     case taskAdded, taskCompleted, allTasksDone
     case rain, snow
     /// 连续专注很久了。
@@ -89,6 +91,18 @@ enum Dialogue {
             "我不吵你。",
             "这段时间交给你了。",
             "专心，我在旁边。",
+        ],
+        .coffee: [
+            "先喝一口。",
+            "热的，正好。",
+            "咖啡续上了，开工。",
+            "唔……有点烫。",
+        ],
+        .phone: [
+            "我看一眼消息。",
+            "有人找我。",
+            "回一句就放下。",
+            "嗯……先回这条。",
         ],
         .focusFinished: [
             "一段完成了，休息一下。",

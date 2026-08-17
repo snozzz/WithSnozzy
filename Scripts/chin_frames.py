@@ -124,14 +124,24 @@ def structural_mask(base, frames=(), alternate_base=None,
 
 
 def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, height,
-                alternate_base_path=None, alternate_raw_paths=()):
+                alternate_base_path=None, alternate_raw_paths=(),
+                hold_paths=(), alternate_hold_paths=(), peak_ratio=True):
+    """把一条动作的整列帧锁到同一张 base 上写出来。
+
+    `hold_paths` 是"到位之后停在那儿"的那一列（运行时循环播）。它和中间帧
+    共用同一条动作走廊，但**判据要分开**：中间帧是大动作，hold 是小幅摆动，
+    混在一起算相邻 XOR 峰值比，比值必然爆掉——而那不是毛病，是两段本来
+    就该有不同的速度（第 45 条：判据先问自己在量什么）。
+    """
     paths = raw_paths + [final_path]
     base = base_canvas(base_path, canvas, height)
     raws = [load(p, canvas, height=height) for p in paths]
+    holds = [load(p, canvas, height=height) for p in hold_paths]
     alternate_base = (base_canvas(alternate_base_path, canvas, height)
                       if alternate_base_path else None)
-    alternate = [load(p, canvas, height=height) for p in alternate_raw_paths]
-    mask = structural_mask(base, raws, alternate_base, alternate)
+    alternate = [load(p, canvas, height=height)
+                 for p in list(alternate_raw_paths) + list(alternate_hold_paths)]
+    mask = structural_mask(base, raws + holds, alternate_base, alternate)
     if not mask.any():
         raise SystemExit(f"{prefix} 没量到抬手差异")
 
@@ -142,16 +152,22 @@ def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, heigh
     prev_alpha = base[:, :, 3] > 4
     changes = []
     written_paths = []
-    for i, raw in enumerate(raws):
+    for i, raw in enumerate(raws + holds):
         out = base.copy()
         out[mask] = raw[mask]
-        name = f"{prefix}_{i:02d}.png" if i < len(raw_paths) else f"{prefix}.png"
+        if i < len(raw_paths):
+            name = f"{prefix}_{i:02d}.png"
+        elif i == len(raw_paths):
+            name = f"{prefix}.png"
+        else:
+            name = f"{prefix}_hold_{i - len(paths):02d}.png"
         written = os.path.join(out_dir, name)
         Image.fromarray(out).save(written, compress_level=6)
         written_paths.append(written)
         current_alpha = out[:, :, 3] > 4
-        changes.append(int((prev_alpha ^ current_alpha).sum()))
-        prev_alpha = current_alpha
+        if i <= len(raw_paths):
+            changes.append(int((prev_alpha ^ current_alpha).sum()))
+            prev_alpha = current_alpha
 
     # 区域外必须逐像素固定；不要只验证内存里的 `out`，而是重新读回
     # 每张 PNG。这样压缩、色彩模式或后续切图若改变了静止区，判据会真的
@@ -182,8 +198,25 @@ def compose_set(base_path, raw_paths, final_path, out_dir, prefix, canvas, heigh
     if any(v == 0 for v in changes):
         raise SystemExit("托腮过渡里有重复帧")
     pixel_scale = max(1, canvas[0] // 1536)
+    if holds:
+        # hold 是**循环**播的，所以要连成一个圈来验：终态 → hold 00 → …
+        # → hold 末 → 终态。少验最后那一步的话，"末帧回终态"那一跳
+        # 有多大就没人知道了——而循环里跳一下正是最扎眼的。
+        loop = [raws[-1]] + holds + [raws[-1]]
+        report = xor_report(loop, scale=pixel_scale, max_ratio=3.0)
+        print(f"  停留循环相邻变化 {report['changes']}"
+              f"  峰值比 {report['peakRatio']:.2f}（上限 3.00）")
+        if not report["ok"]:
+            raise SystemExit(f"{prefix} 停留那一列有重复帧或跳变")
     report = xor_report([base] + raws, scale=pixel_scale)
-    if pixel_scale == 2:
+    if not peak_ratio:
+        # 两段式动作（伸手 → 抓住 → 举起来）的前半段发生在**桌沿以下**，
+        # 上半身这张图上几乎什么都没变，而那一段是由桌面手层画的。
+        # 只量这一层，峰值比必然爆掉——量的不是它声称的那件事（第 45 条）。
+        # 连续性由调用方在"上半身 + 手层"的合成上验。
+        print(f"  上半身单层相邻 XOR 峰值比 {report['peakRatio']:.2f}"
+              "（不套用上限，两段式动作分层验）")
+    elif pixel_scale == 2:
         print(f"  相邻 XOR 峰值比 {report['peakRatio']:.2f}（上限 2.50）")
         if not report["ok"]:
             raise SystemExit("托腮过渡有重复帧或相邻 XOR 峰值比超过 2.5")
@@ -278,6 +311,9 @@ def main():
                      "w": logical_canvas[0], "h": logical_height},
         "handRect": r,
         "frames": len(raw),
+        # 托腮没有停留那一列，但键要写出来：运行时的清单结构是共用的，
+        # 少一个键会让"缺字段"这件事变成"整套素材停用"（见 ChinManifest）
+        "holdFrames": 0,
         "pixelScale": scale,
     }
     with open(os.path.join(a.out, "chin.json"), "w") as f:

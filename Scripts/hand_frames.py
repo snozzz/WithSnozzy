@@ -80,6 +80,26 @@ def main():
     if top is None:
         raise SystemExit("桌面层在手臂那一段上没有完全不透明的行，--desk 对吗？")
 
+    # 桌上的道具（杯子、手机）也在这一层里，而**杯子比桌沿高**：
+    # 按"从桌沿起画"这条为手臂定的规矩裁，杯子会被削掉上面一截。
+    #
+    # 往上撑到杯口是安全的：桌面层在那几行上根本没有像素（`desk_top` 就是
+    # 它第一次有值的那一行），所以那一段不存在"盖到桌子上面"这回事
+    # ——第 60 条防的是**桌沿以下**的东西被画到桌面之上。
+    # 顺带那几行里的小臂像素和角色层完全一样（同一台相机同一个姿势），
+    # 画两遍也看不出来。
+    props_path = os.path.join(a.src, "props_only.png")
+    props_box = None
+    if os.path.exists(props_path):
+        pm = np.asarray(Image.open(props_path).convert("RGBA"))[:, :, 3] > 4
+        pys, pxs = np.where(pm)
+        if len(pys):
+            props_box = (int(pxs.min()), int(pys.min()),
+                         int(pxs.max()), int(pys.max()))
+            top = min(top, props_box[1])
+            print(f"道具占 x {props_box[0]}…{props_box[2]}  "
+                  f"y {props_box[1]}…{props_box[3]}，裁切上沿收到 y={top}")
+
     # 起始行以下的手臂像素并集
     x0, x1, y1 = 10**9, -1, -1
     for m in rect_masks:
@@ -90,6 +110,9 @@ def main():
         y1 = max(y1, int(ys.max()) + top)
     if x1 < 0:
         raise SystemExit(f"桌板上沿 y={top} 以下一个手臂像素都没有——手是不是没伸到桌上？")
+    if props_box is not None:
+        x0 = min(x0, props_box[0]); x1 = max(x1, props_box[2])
+        y1 = max(y1, props_box[3])
 
     # PAD is a logical-pixel margin.  At 2× the raw alpha bbox can end on an
     # odd physical pixel because of antialiasing; align all crop edges to the

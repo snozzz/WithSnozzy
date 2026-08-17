@@ -205,7 +205,7 @@ private struct SceneStack: View {
                                                celebration: celebration),
                                            headphones: state.isPlaying,
                                            chinFrame: state.closeUp.chinFrame,
-                                           stretchFrame: state.stretch.frame,
+                                           action: state.activeAction,
                                            t: t)
                                 .equatable()
                         } else {
@@ -255,7 +255,7 @@ private struct SceneStack: View {
                                                 ? state.sceneAssets.hands.chin : nil,
                                             activity: activity),
                                         chinFrame: state.closeUp.chinFrame,
-                                        stretchFrame: state.stretch.frame)
+                                        action: state.activeAction)
                                 .equatable()
                         }
 

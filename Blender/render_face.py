@@ -42,28 +42,37 @@
   眯眼笑的时候本来就看不出瞳孔朝哪。`FaceOverlay` 按这个顺序叠，
   驱动那一层负责让眼型强的时候把视线收掉。
 """
-import bpy, json, os, sys
+import bpy, json, math, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Scripts"))
 import snozzy_lib as S, pose as P
+import action_defs as AD
 
 args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[-2:]
 VRM, OUT = args[:2]
 SCALE = int(args[2]) if len(args) > 2 else 1
-# 第 4 个参数给动作名（`chin` / `stretch`）时，在**那条动作的每一档**上
-# 出贴片。头一动，眼嘴的矩形就跟着脸走了，常态那套贴片贴上去就是错位；
-# 而手/胳膊挡不挡得住无所谓——贴片和底图是同一个姿势渲的，
-# 矩形里的像素两边完全一致，盖上去等于没盖。
-# 切片用 `face_patches.py --prefix facechin2x --chin`（伸懒腰同理换前缀）。
+# 第 4 个参数给动作名（`chin` / `stretch` / `coffee` / `phone`）时，
+# 在**那条动作的每一档**上出贴片。头一动，眼嘴的矩形就跟着脸走了，
+# 常态那套贴片贴上去就是错位；而手/胳膊/道具挡不挡得住无所谓——贴片和底图
+# 是同一个姿势、同一套道具渲的，矩形里的像素两边完全一致，盖上去等于没盖。
+# **道具因此必须在这里也建出来**：杯子举到嘴边那几档，贴片矩形里有半个
+# 杯子，不建的话盖上去等于把杯子擦掉一块。
+# 切片用 `face_patches.py --prefix facechin2x --action`（别的动作同理换前缀）。
 ACTION = args[3] if len(args) > 3 else None
 os.makedirs(OUT, exist_ok=True)
 W, H = 1536 * SCALE, 1024 * SCALE
 
 
 # 动作名 → `pose.py` 里那个摆姿势的函数。加新动作只在这里登记一行，
-# 下面那段逐帧循环不用改。
-ACTIONS = {"chin": P.chin_rest, "stretch": P.stretch}
+# 下面那段逐帧循环不用改；帧数和道具从 `Scripts/action_defs.py` 读。
+ACTIONS = {"chin": P.chin_rest, "stretch": P.stretch,
+           "coffee": P.coffee, "phone": P.phone}
 if ACTION is not None and ACTION not in ACTIONS:
     raise SystemExit(f"不认识的动作 {ACTION!r}，可选：{sorted(ACTIONS)}")
+# 托腮不在 `action_defs` 里（它走的是自己那条更老的管线），所以给个默认。
+FRAMES = AD.face_frames(ACTION) if ACTION in AD.ACTIONS else 9
+HOLDS = AD.spec(ACTION)["holds"] if ACTION in AD.ACTIONS else 0
 
 
 def shape(meshes, name, value):
@@ -123,16 +132,25 @@ VARIANTS = {
 }
 
 
-def build(variant=None, action_amount=None):
+def build(variant=None, action_amount=None, hold_phase=None):
     meshes = S.load(VRM)
     scene = S.setup_scene(res=W)
     scene.render.resolution_x, scene.render.resolution_y = W, H
+    if ACTION in AD.ACTIONS and AD.spec(ACTION)["prop"]:
+        # 道具要在 `toon_materials` 之前建好才跟着走同一套卡通着色，
+        # 而 `toon_materials` 只能跑一次。和别的渲染脚本一致。
+        import props as PR
+        PR.build()
     S.toon_materials(); S.room_lights()
     arm = next(o for o in bpy.data.objects if o.type == 'ARMATURE')
     S.scene_camera(scene)
     P.settle(scene, arm)
-    if action_amount is not None:
-        ACTIONS[ACTION](arm, scene, amount=action_amount)
+    if action_amount is not None or hold_phase is not None:
+        if ACTION in AD.ACTIONS:
+            ACTIONS[ACTION](arm, scene, amount=action_amount or 1.0,
+                            hold_phase=hold_phase)
+        else:
+            ACTIONS[ACTION](arm, scene, amount=action_amount)
     if variant:
         for k, v in variant.get("shapes", {}).items():
             shape(meshes, k, v)
@@ -145,17 +163,32 @@ def build(variant=None, action_amount=None):
 
 
 channels = {k: v["ch"] for k, v in VARIANTS.items()}
+def action_pose(frame):
+    """第 `frame` 档对应的姿势参数。
+
+    前九档是八张中间姿势加终态，和 `render_action.py` 逐格对齐
+    （t=(i+1)/9）；之后是停留那一段的相位，同样和它对齐（相位不踩 0，
+    从半格开始铺满一圈）。**两边必须用同一条公式**，错开一格的话
+    贴片会贴在隔壁那一帧的脸上。
+    """
+    if frame < 9:
+        return (frame + 1) / 9.0, None
+    i = frame - 9
+    return 1.0, 2 * math.pi * (i + 0.5) / HOLDS
+
+
 if ACTION:
-    # 长动作的时间轴是八张中间姿势加一个终态。**每一档各出一套 13 块**——
-    # 头在动，一套贴片盖不住整段；淡出再硬切也不行（脸转到一半没有表情）。
-    for frame in range(9):
-        amount = (frame + 1) / 9.0
-        scene = build(action_amount=amount)
+    # 长动作的时间轴是八张中间姿势 + 终态 + 停留那一段。**每一档各出一套
+    # 13 块**——头在动，一套贴片盖不住整段；淡出再硬切也不行
+    # （脸转到一半没有表情）。
+    for frame in range(FRAMES):
+        amount, hold = action_pose(frame)
+        scene = build(action_amount=amount, hold_phase=hold)
         scene.render.filepath = os.path.join(OUT, f"_base_{frame:02d}.png")
         bpy.ops.render.render(write_still=True)
-        print(f"FACE {ACTION} base {frame:02d} amount={amount:.4f}")
+        print(f"FACE {ACTION} base {frame:02d} amount={amount:.4f} hold={hold}")
         for name, spec in VARIANTS.items():
-            scene = build(spec, action_amount=amount)
+            scene = build(spec, action_amount=amount, hold_phase=hold)
             scene.render.filepath = os.path.join(OUT, f"_{frame:02d}_{name}.png")
             bpy.ops.render.render(write_still=True)
             print(f"FACE {ACTION} {frame:02d} {name}")
@@ -174,4 +207,5 @@ else:
 # 通道表交给切片脚本，让它检查跨通道重叠
 with open(os.path.join(OUT, "channels.json"), "w") as f:
     json.dump(channels, f, indent=2)
-print(f"FACE 共 {len(VARIANTS)} 个变体" + (f" × 9 帧（{ACTION}）" if ACTION else ""))
+print(f"FACE 共 {len(VARIANTS)} 个变体"
+      + (f" × {FRAMES} 帧（{ACTION}）" if ACTION else ""))

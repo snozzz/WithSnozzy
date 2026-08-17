@@ -1,5 +1,62 @@
 import SwiftUI
 
+/// 渲染版的半身像。迷你播放器和桌宠都用它。
+///
+/// 这两个形态原来画的是**矢量简笔版**（`CharacterView`）——完整窗口早就换成
+/// Blender 渲染的她了，这两处一直没跟上，于是同一个 app 里存在两个长得
+/// 完全不一样的 Snozzy。这是第 70 条的另一种形式：**没人画的那份不会有人
+/// 发现它旧了**，这次是反过来——有人画，但画的是另一个人。
+///
+/// 做法不是重新渲一套半身素材，而是**把整幅画布放大、裁出胸像那一块**。
+/// 素材是 1536×1024 的整幅图，胸像只占其中 430×430 左右；放大之后角色那
+/// 一层是 2× 密度的（`snozzy_body*2x`、`face2x`），裁出来仍然清楚。
+struct RenderedBust: View {
+    let assets: SceneAssets
+    let palette: Palette
+    let t: Double
+    let kick: Double
+    let playing: Bool
+    let mood: Double
+    let drowsy: Double
+    /// 桌宠比迷你播放器再紧一点：桌面上那个小人本来就该只剩头和肩。
+    var tight = false
+
+    /// 胸像在画布上的位置（0…1）。头骨在 (0.533, 0.392)，双马尾往两边
+    /// 各甩出去一截，所以横向要比脸宽不少；下沿切在胸口，再往下就是桌子了。
+    private var bust: CGRect {
+        tight ? CGRect(x: 0.404, y: 0.196, width: 0.262, height: 0.392)
+              : CGRect(x: 0.396, y: 0.185, width: 0.280, height: 0.420)
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let canvas = CGSize(width: assets.legs.canvasW, height: assets.legs.canvasH)
+            // 按"填满"取缩放：留白比裁掉一点更糟——桌宠模式里空白就是
+            // 桌面上一块透明的方，看着像她站在一个看不见的盒子里。
+            let scale = max(geo.size.width / (bust.width * canvas.width),
+                            geo.size.height / (bust.height * canvas.height))
+            let full = CGSize(width: canvas.width * scale,
+                              height: canvas.height * scale)
+            RenderedSnozzy(assets: assets, palette: palette,
+                           pose: SnozzyRig.pose(time: t, kick: kick,
+                                                playing: playing, mood: mood,
+                                                drowsy: drowsy),
+                           face: FaceRig.expression(t: t, playing: playing,
+                                                    mood: mood, drowsy: drowsy,
+                                                    working: false,
+                                                    speaking: false),
+                           headphones: playing,
+                           t: t)
+                .equatable()
+                .frame(width: full.width, height: full.height)
+                .offset(x: geo.size.width / 2 - bust.midX * full.width,
+                        y: geo.size.height / 2 - bust.midY * full.height)
+        }
+        .clipped()
+        .allowsHitTesting(false)
+    }
+}
+
 /// 迷你播放器：只留 Snozzy、曲名和三个按钮。
 struct MiniView: View {
     @Environment(AppState.self) private var state
@@ -14,17 +71,27 @@ struct MiniView: View {
             GeometryReader { geo in
                 TimelineView(.animation(minimumInterval: state.frameInterval,
                                         paused: !state.isVisible)) { tl in
-                    CharacterView(palette: pal,
-                                  t: tl.date.timeIntervalSinceReferenceDate,
-                                  kick: state.audio.kickPulse,
-                                  playing: state.isPlaying,
-                                  mood: state.mood,
-                                  drowsy: state.drowsy,
-                                  framing: .closeUp)
-                        // 半身像取景：头顶留一点余量，底部切在胸口。
-                        // 放太大只剩一张脸，放太小又看不清表情。
-                        .frame(width: geo.size.width, height: geo.size.width)
-                        .position(x: geo.size.width / 2, y: geo.size.height * 0.52)
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    // 半身像取景：头顶留一点余量，底部切在胸口。
+                    // 放太大只剩一张脸，放太小又看不清表情。
+                    if state.characterStyle == .rendered
+                        && state.sceneAssets.hasRenderedCharacter {
+                        RenderedBust(assets: state.sceneAssets, palette: pal, t: t,
+                                     kick: state.audio.kickPulse,
+                                     playing: state.isPlaying, mood: state.mood,
+                                     drowsy: state.drowsy)
+                            .frame(width: geo.size.width, height: geo.size.width)
+                            .position(x: geo.size.width / 2, y: geo.size.height * 0.52)
+                    } else {
+                        CharacterView(palette: pal, t: t,
+                                      kick: state.audio.kickPulse,
+                                      playing: state.isPlaying,
+                                      mood: state.mood,
+                                      drowsy: state.drowsy,
+                                      framing: .closeUp)
+                            .frame(width: geo.size.width, height: geo.size.width)
+                            .position(x: geo.size.width / 2, y: geo.size.height * 0.52)
+                    }
                 }
             }
 
@@ -98,18 +165,28 @@ struct PetView: View {
             GeometryReader { geo in
                 TimelineView(.animation(minimumInterval: state.frameInterval,
                                         paused: !state.isVisible)) { tl in
-                    CharacterView(palette: pal,
-                                  t: tl.date.timeIntervalSinceReferenceDate,
-                                  kick: state.audio.kickPulse,
-                                  playing: state.isPlaying,
-                                  mood: state.mood,
-                                  drowsy: state.drowsy,
-                                  framing: .closeUp)
-                        .frame(width: geo.size.width * 1.15, height: geo.size.width * 1.15)
-                        .position(x: geo.size.width / 2, y: geo.size.height * 0.478)
-                        // 一圈柔和的暗影，深色和浅色桌面上都能看清轮廓。
-                        .shadow(color: .black.opacity(0.35), radius: 14, y: 5)
-                        .onTapGesture { state.pet() }
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    Group {
+                        if state.characterStyle == .rendered
+                            && state.sceneAssets.hasRenderedCharacter {
+                            RenderedBust(assets: state.sceneAssets, palette: pal,
+                                         t: t, kick: state.audio.kickPulse,
+                                         playing: state.isPlaying, mood: state.mood,
+                                         drowsy: state.drowsy, tight: true)
+                        } else {
+                            CharacterView(palette: pal, t: t,
+                                          kick: state.audio.kickPulse,
+                                          playing: state.isPlaying,
+                                          mood: state.mood,
+                                          drowsy: state.drowsy,
+                                          framing: .closeUp)
+                        }
+                    }
+                    .frame(width: geo.size.width * 1.15, height: geo.size.width * 1.15)
+                    .position(x: geo.size.width / 2, y: geo.size.height * 0.478)
+                    // 一圈柔和的暗影，深色和浅色桌面上都能看清轮廓。
+                    .shadow(color: .black.opacity(0.35), radius: 14, y: 5)
+                    .onTapGesture { state.pet() }
                 }
             }
 

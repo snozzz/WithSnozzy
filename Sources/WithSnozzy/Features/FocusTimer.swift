@@ -96,6 +96,12 @@ final class FocusTimer {
     var onPhaseFinished: ((FocusPhase) -> Void)?
     /// 在 phase 真正改变前发出，让 AppState 冻结屏幕此刻的完整 ActivityCue。
     var onPhaseWillChange: ((FocusPhase, FocusPhase, Date) -> Void)?
+    /// 一个阶段**开始**时回调，第二个参数是"这次是不是计时器自己走到的"。
+    ///
+    /// 和 `onPhaseFinished` 分开是因为它们回答的是不同的问题：完成是"这一段
+    /// 做完了"（响铃、加心情），开始是"要干活了"（端起咖啡）。而手动 skip
+    /// 一路点过去时不该触发后者——那会让她一段一段地举杯，像在灌咖啡。
+    var onPhaseBegan: ((FocusPhase, Bool) -> Void)?
 
     private var deadline: Date?
     private var ticker: Timer?
@@ -121,7 +127,9 @@ final class FocusTimer {
     // MARK: - 控制
 
     func start() {
-        if phase == .idle { begin(.work) } else { resume() }
+        // 手点"开始"也算自然进入 work：这一下是"我要干活了"，
+        // 正是该端起咖啡的时候。不算的只有 skip 一路点过去。
+        if phase == .idle { begin(.work, automatic: true) } else { resume() }
     }
 
     func pause() {
@@ -163,12 +171,13 @@ final class FocusTimer {
         }
     }
 
-    private func begin(_ next: FocusPhase) {
+    private func begin(_ next: FocusPhase, automatic: Bool = false) {
         setPhase(next)
         remaining = duration(of: next)
         creditedMinutes = 0
         phaseStart = Date()
         resume()
+        onPhaseBegan?(next, automatic)
     }
 
     private func resume() {
@@ -235,7 +244,7 @@ final class FocusTimer {
         }
 
         if settings.autoContinue && completedNaturally {
-            begin(next)
+            begin(next, automatic: true)
         } else {
             stopTicker()
             setPhase(next)

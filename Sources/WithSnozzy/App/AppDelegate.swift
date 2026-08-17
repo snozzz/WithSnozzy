@@ -55,12 +55,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
+        if let path = Snapshot.compactStripPath {
+            Snapshot.runCompactStrip(path: path)
+            return
+        }
         if let path = Snapshot.actionPanelPath {
             Snapshot.runActionPanel(path: path)
             return
         }
-        if Snapshot.stretchCheck {
-            exit(Snapshot.runStretchCheck() ? 0 : 1)
+        if Snapshot.actionCheck {
+            exit(Snapshot.runActionCheck() ? 0 : 1)
         }
         if Snapshot.activityCheck {
             exit(ActivityRig.selfCheck() ? 0 : 1)

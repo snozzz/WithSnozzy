@@ -11,10 +11,11 @@
   },
   "handRect": {
     "x": 682,
-    "y": 602,
-    "w": 255,
-    "h": 89
+    "y": 591,
+    "w": 316,
+    "h": 100
   },
   "frames": 8,
-  "pixelScale": 2
+  "pixelScale": 2,
+  "holdFrames": 0
 }

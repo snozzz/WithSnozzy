@@ -3,12 +3,12 @@ import SwiftUI
 /// 动作面板：把她**所有能主动演的东西**列出来，点一下就演。
 ///
 /// 存在的理由是测试。这些动作平时都有自己的门槛——托腮要"离开半分钟再回来
-/// 且距上次超过四分钟"，伸懒腰是每 5–10 分钟自发一次，活动档位按 58 秒
-/// 一个槽位自己抽签。改完素材想验一眼，等这些门槛根本等不起
+/// 且距上次超过四分钟"，伸懒腰每 5–10 分钟自发一次、喝咖啡跟着番茄钟、
+/// 玩手机根本不自发（等外面戳），活动档位按 58 秒一个槽位自己抽签。改完素材想验一眼，等这些门槛根本等不起
 /// （近景当初加那个按钮就是这个理由，HANDOFF 第五节写着"这个入口是必须的"）。
 ///
 /// **不要在这里另造一条播放路径。** 每一行调的都是生产代码里那个入口
-/// （`CloseUp.begin`、`StretchRig.begin`、`AppState.forcedActivity`），
+/// （`CloseUp.begin`、`AppState.perform`、`AppState.forcedActivity`），
 /// 所以面板里看到的就是真实运行时的样子。判据和被判的东西各走一套，
 /// 判据永远是绿的——这个坑这个项目里踩过（第 69 条）。
 struct ActionPanel: View {
@@ -29,13 +29,15 @@ struct ActionPanel: View {
                 enabled: state.windowMode == .normal) {
                 state.closeUp.begin()
             }
-            row(symbol: "figure.arms.open",
-                title: "伸懒腰",
-                detail: stretchDetail,
-                running: state.stretch.isActive,
-                enabled: state.windowMode == .normal
-                    && state.sceneAssets.hasCompleteStretchMotion) {
-                state.stretch.begin(force: true)
+            ForEach(ActionKind.allCases, id: \.self) { kind in
+                row(symbol: symbol(kind),
+                    title: kind.label,
+                    detail: detail(kind),
+                    running: state.action(kind).isActive,
+                    enabled: state.windowMode == .normal
+                        && state.sceneAssets.hasCompleteMotion(kind)) {
+                    state.perform(kind, force: true)
+                }
             }
 
             Divider().overlay(.white.opacity(0.12))
@@ -72,11 +74,23 @@ struct ActionPanel: View {
         .onReceive(tick) { now = $0 }
     }
 
-    private var stretchDetail: String {
-        guard state.sceneAssets.hasCompleteStretchMotion else { return "素材不全" }
+    private func symbol(_ kind: ActionKind) -> String {
+        switch kind {
+        case .stretch: "figure.arms.open"
+        case .coffee: "cup.and.saucer.fill"
+        case .phone: "iphone.gen3"
+        }
+    }
+
+    private func detail(_ kind: ActionKind) -> String {
+        guard state.sceneAssets.hasCompleteMotion(kind) else { return "素材不全" }
         // `now` 没被用到值，但读一下它才能让倒计时每秒重算。
         _ = now
-        let left = Int(state.stretch.secondsUntilNext.rounded())
+        guard kind.idleRange != nil else {
+            // 手机那条不自发：它等的是"你在回消息"。
+            return "外部触发（回消息时）"
+        }
+        let left = Int(state.action(kind).secondsUntilNext.rounded())
         return left <= 0 ? "随时会自己来一个"
             : "自发：还有 \(left / 60) 分 \(left % 60) 秒"
     }

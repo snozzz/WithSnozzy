@@ -104,8 +104,9 @@ def main():
     ap.add_argument("--out", default="Assets")
     ap.add_argument("--prefix", default="face",
                     help="输出文件前缀；近景 2× 素材用 face2x")
-    ap.add_argument("--chin", action="store_true",
-                    help="处理 render_face.py … chin 输出的 00…08 九套姿势")
+    ap.add_argument("--chin", "--action", dest="chin", action="store_true",
+                    help="处理 render_face.py … <动作> 输出的逐档姿势"
+                         "（帧数从目录里的 _base_XX.png 数出来）")
     a = ap.parse_args()
 
     os.makedirs(a.out, exist_ok=True)
@@ -167,16 +168,22 @@ def main():
                 print(f"  {n}[{ca}] × {m}[{cb}]")
         return manifest, bad
 
-    if a.chin or a.prefix.startswith("facechin"):
-        # Nine independent sets are required: frame 00…08 each has a
-        # different head transform, so one terminal patch set cannot be
-        # faded across the motion without visibly drifting off the eyes.
+    if a.chin or a.prefix.startswith("face") and a.prefix != "face" \
+            and glob.glob(os.path.join(a.src, "_base_[0-9][0-9].png")):
+        # One independent set per frame: every frame has a different head
+        # transform, so one terminal patch set cannot be faded across the
+        # motion without visibly drifting off the eyes.  帧数从渲染输出里
+        # **数出来**，不写死——托腮是 9 档，带停留的那几条动作更多，
+        # 写死一个 9 只会在加动作那天悄悄少切一半（第 46 条）。
         if channels != EXPECTED_VARIANTS:
-            raise SystemExit("facechin channels.json 必须完整包含固定的 13 个变体")
+            raise SystemExit(f"{a.prefix} channels.json 必须完整包含固定的 13 个变体")
+        frame_count = len(glob.glob(os.path.join(a.src, "_base_[0-9][0-9].png")))
+        if frame_count < 9:
+            raise SystemExit(f"{a.prefix} 只找到 {frame_count} 档中性底图，至少要 9")
         sets = []
         all_bad = []
         expected_names = set(EXPECTED_VARIANTS)
-        for i in range(9):
+        for i in range(frame_count):
             tag = f"{i:02d}_"
             base_path = os.path.join(a.src, f"_base_{i:02d}.png")
             paths = sorted(glob.glob(os.path.join(a.src, f"_{i:02d}_*.png")))
@@ -186,16 +193,16 @@ def main():
             }
             actual_paths = set(paths)
             if not os.path.exists(base_path):
-                raise SystemExit(f"facechin 第 {i:02d} 帧缺少中性底图")
+                raise SystemExit(f"{a.prefix} 第 {i:02d} 帧缺少中性底图")
             if actual_paths != expected_paths:
                 missing = sorted(expected_paths - actual_paths)
                 extra = sorted(actual_paths - expected_paths)
-                raise SystemExit(f"facechin 第 {i:02d} 帧变体不完整："
+                raise SystemExit(f"{a.prefix} 第 {i:02d} 帧变体不完整："
                                  f"缺 {missing}，多 {extra}")
             manifest, bad = process(base_path, paths, frame_prefix=tag,
                                     required_names=expected_names)
             if set(manifest["patches"]) != expected_names:
-                raise SystemExit(f"facechin 第 {i:02d} 帧输出贴片不是完整 13 块")
+                raise SystemExit(f"{a.prefix} 第 {i:02d} 帧输出贴片不是完整 13 块")
             sets.append(manifest)
             all_bad.extend(bad)
         out_manifest = {"canvas": sets[0]["canvas"], "frames": len(sets),
@@ -204,7 +211,7 @@ def main():
                   open(os.path.join(a.out, f"{a.prefix}.json"), "w"), indent=2)
         total = sum(os.path.getsize(p) for p in glob.glob(
             os.path.join(a.out, f"{a.prefix}_??_*.png")))
-        print(f"FACE 托腮 {len(sets)} 帧 × {len(sets[0]['patches'])} 块贴片，"
+        print(f"FACE {a.prefix} {len(sets)} 帧 × {len(sets[0]['patches'])} 块贴片，"
               f"{total / 1024:.0f} KB")
         if all_bad:
             raise SystemExit(1)

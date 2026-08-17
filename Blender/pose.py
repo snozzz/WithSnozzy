@@ -5,6 +5,8 @@
 设 `pose_bone.matrix` 让 Blender 自己处理父子链，
 每根之后刷新一次依赖图，否则子骨骼拿到的还是旧的父变换。
 """
+import math
+
 import bpy
 from mathutils import Matrix, Vector
 
@@ -738,36 +740,81 @@ def chin_rest(arm, scene, side=CHIN_SIDE, amount=1.0):
 # 和托腮共用同一套机制（在骨骼局部变换之间插值 + 分组相位），但约束不同：
 #
 # - **两条胳膊一起动**，所以桌面那一层里一只手都不该留（第 60 条：那一层的
-#   前提是"里面的东西都在桌沿前面"，举起来的胳膊不满足）。只剩键盘。
+#   前提是"里面的东西都在桌沿前面"，举起来的胳膊不满足）。只剩键盘和道具。
 # - **脊柱和胯一根都不许动**，但**胸可以**。缝线在 y=600，而 `J_Bip_C_Chest`
 #   的支点在腰以上——绕它转，缝线那一行的像素一个都不动。判据不是"我觉得
 #   不会动"，是 `measure_stretch.py` 逐像素量缝线以下的漂移，必须是 0。
 # - 头抬起来了，所以**面部贴片要按这条动作逐帧重出**，和托腮一样
 #   （`render_face.py … stretch`）。
-STRETCH_SHOULDER = (1.0, 0.0, 0.30)
-# 大臂往斜上外方举。X 给太大是"投降"，太小是"举手发言"。
-STRETCH_UPPER_ARM = (0.62, -0.02, 0.78)
-# 小臂收回来一点，肘保持弯着——完全伸直的胳膊像被吊起来，不像自己在伸。
-STRETCH_LOWER_ARM = (0.22, -0.10, 0.97)
-STRETCH_HAND = (0.10, -0.16, 0.98)
-# 手指松松张开。伸懒腰的手是舒展的，不是握拳，也不是笔直的板。
-STRETCH_CURL = 0.30
-STRETCH_FINGER_SPLAY = {"Index": .16, "Middle": .05, "Ring": -.06, "Little": -.16}
+#
+# ## 第一版为什么像做广播体操
+#
+# 用户报"像某种做操动作，很僵硬"。渲出来一看就明白了（`/tmp/stretch_cand`）：
+# 两条胳膊**笔直**举成一个对称的 V，手掌摊开、五指张着，头是平的。
+# 这三样各自都能说出理由，凑在一起就是体操——真人伸懒腰是
+# **肘弯着把手送到脑后、手松松攥起来、下巴抬起来**，而且两条胳膊
+# 从来不是镜像的。
+#
+# 所以这一版改的是这四条，每条都对着渲出来的图挑过（一张 1× 三秒半，
+# 挑参数就该这么挑，别拿 2× 发布集去试）：
+#
+# 1. 肘弯到 60–75°，小臂朝**内后方**（`LOWER_ARM` 的 X 是负的），
+#    手落在头顶偏后；直臂那版肘只弯 26°
+# 2. 左右分开写。近镜头那条（L）举得开一点、弯得少一点，远的那条收一些
+# 3. 手指攥松拳（`CURL` 1.1/1.25）而不是张开（0.30），`SPLAY` 归零
+# 4. 胸、颈、头的后仰量翻倍，"挺胸抬头"才读得出来
+STRETCH_SHOULDER = {"L": (0.88, 0.24, 0.18), "R": (0.82, 0.28, 0.12)}
+# 大臂往斜上外后方举。X 给太大是"投降"，太小是"举手发言"；
+# Y 是往身后一点，肩胛跟着往后收——这是"伸懒腰"和"举手"的分水岭。
+STRETCH_UPPER_ARM = {"L": (0.68, 0.22, 0.70), "R": (0.60, 0.34, 0.62)}
+# 小臂往内后方收，肘保持弯着——完全伸直的胳膊像被吊起来，不像自己在伸。
+STRETCH_LOWER_ARM = {"L": (-0.26, 0.30, 0.92), "R": (-0.52, 0.44, 0.73)}
+STRETCH_HAND = {"L": (-0.52, 0.24, 0.82), "R": (-0.70, 0.30, 0.65)}
+# 手指松松攥起来。伸懒腰的手是松的，不是摊开的板，也不是硬拳。
+STRETCH_CURL = {"L": 1.10, "R": 1.25}
+# 攥起来之后就不该再张开了，留着只会让手指互相穿。
+STRETCH_FINGER_SPLAY = {"Index": .0, "Middle": .0, "Ring": .0, "Little": .0}
+# 掌心转向内侧：侧看就是一条边，不是一张摊开的板。
+STRETCH_HAND_ROLL = 0.90
 # 胸、脖子、头各自往后仰多少（弧度，负号是往上抬）。
 # 胸给太多会把缝线那一带也带起来——量出来为止，别凭感觉加。
-STRETCH_CHEST = -0.10
-STRETCH_UPPER_CHEST = -0.12
-STRETCH_NECK = -0.10
-STRETCH_HEAD = -0.13
+STRETCH_CHEST = -0.28
+STRETCH_UPPER_CHEST = -0.32
+STRETCH_NECK = -0.24
+STRETCH_HEAD = -0.34
+
+# ── 举到头顶之后那一段 ─────────────────────────────────────────────
+#
+# 用户的原话是"手伸到头顶之后停留一会儿，脖子晃一晃，胸向前挺，
+# 头略微向后仰"。停留**不能是一张静止的终态图**——那正是"僵硬"的来源：
+# 举上去、冻住两秒、放下来，读起来就是三拍的体操。
+#
+# 所以终态之外再出一列 `hold` 帧，运行时在停留期间循环播它们。
+# 一个完整的相位是一次"侧倾 + 挺胸"的呼吸周期：
+#
+# - `sin(phase)` → 脖子和头往两边晃（左右各一次）
+# - `cos(phase)` → 胸再挺一点、胳膊再往上够一点（吸气那一下）
+#
+# 幅度都很小，因为它叠在已经到位的终态上；大了就成了摇头。
+STRETCH_SWAY_NECK = 0.055      # 脖子侧倾（绕她的前后轴）
+STRETCH_SWAY_HEAD = 0.075      # 头再多一点，脖子和头分摊才不像木偶
+STRETCH_SWAY_YAW = 0.045       # 顺带转一点点，纯侧倾像钟摆
+STRETCH_BREATHE_CHEST = -0.045  # 吸气时胸再开一点
+STRETCH_BREATHE_ARM = 0.05      # 手再往上够一点
 
 
-def stretch(arm, scene, amount=1.0):
+def stretch(arm, scene, amount=1.0, hold_phase=None):
     """伸个懒腰。**在 `settle` 之后调**，用法和 `chin_rest` 一样。
 
     两条胳膊举过头顶、胸口打开、脸抬起来。`amount` 0…1 是动作进度，
     中间值就是真正的中间姿势（离线渲成帧，运行时播帧，不做位图淡入）。
+
+    `hold_phase` 给 0…2π 时是**停在头顶那一段**的第几拍：终态之上再叠
+    一点侧倾和呼吸，运行时循环播这一列。给了它就意味着 `amount=1`。
     """
     amount = max(0.0, min(1.0, float(amount)))
+    if hold_phase is not None:
+        amount = 1.0
     finger_names = {
         f"J_Bip_{side}_{finger}{seg}"
         for side in ("L", "R")
@@ -784,24 +831,38 @@ def stretch(arm, scene, amount=1.0):
               if n in arm.pose.bones]
     start = {pb.name: pb.matrix_basis.copy() for pb in moving}
 
+    sway = math.sin(hold_phase) if hold_phase is not None else 0.0
+    breathe = math.cos(hold_phase) if hold_phase is not None else 0.0
+
     # 胸口先打开，头跟着仰——顺序无所谓（都是绕自己的支点转），
     # 但**必须在摆胳膊之前**：肩膀挂在胸上，胸一转肩就跟着走了。
-    for name, angle in (("J_Bip_C_Chest", STRETCH_CHEST),
-                        ("J_Bip_C_UpperChest", STRETCH_UPPER_CHEST),
-                        ("J_Bip_C_Neck", STRETCH_NECK),
-                        ("J_Bip_C_Head", STRETCH_HEAD)):
+    for name, angle in (
+            ("J_Bip_C_Chest", STRETCH_CHEST + breathe * STRETCH_BREATHE_CHEST),
+            ("J_Bip_C_UpperChest", STRETCH_UPPER_CHEST),
+            ("J_Bip_C_Neck", STRETCH_NECK),
+            ("J_Bip_C_Head", STRETCH_HEAD)):
         _rotate_world(arm, name, (1, 0, 0), angle)
+    # 脖子晃一晃。绕 +Y（她的前后轴）是侧倾，绕 +Z 是转头，两个一起才像
+    # "松一松脖子"而不是节拍器。
+    for bone, share in (("J_Bip_C_Neck", STRETCH_SWAY_NECK),
+                        ("J_Bip_C_Head", STRETCH_SWAY_HEAD)):
+        if sway:
+            _rotate_world(arm, bone, (0, 1, 0), sway * share)
+            _rotate_world(arm, bone, (0, 0, 1), sway * STRETCH_SWAY_YAW)
 
     for side in ("L", "R"):
         sx = 1 if side == "L" else -1
-        for bone, d in (("Shoulder", STRETCH_SHOULDER),
-                        ("UpperArm", STRETCH_UPPER_ARM),
-                        ("LowerArm", STRETCH_LOWER_ARM)):
-            aim(arm, f"J_Bip_{side}_{bone}", (sx * d[0], d[1], d[2]))
-        aim(arm, f"J_Bip_{side}_Hand",
-            (sx * STRETCH_HAND[0], STRETCH_HAND[1], STRETCH_HAND[2]),
-            prefer="Middle")
-        curl(arm, side, STRETCH_CURL)
+        for bone, spec in (("Shoulder", STRETCH_SHOULDER),
+                           ("UpperArm", STRETCH_UPPER_ARM),
+                           ("LowerArm", STRETCH_LOWER_ARM)):
+            d = spec[side]
+            # 吸气那一下把方向往上抬一点点，两条胳膊一起
+            aim(arm, f"J_Bip_{side}_{bone}",
+                (sx * d[0], d[1], d[2] + breathe * STRETCH_BREATHE_ARM))
+        d = STRETCH_HAND[side]
+        aim(arm, f"J_Bip_{side}_Hand", (sx * d[0], d[1], d[2]), prefer="Middle")
+        roll(arm, f"J_Bip_{side}_Hand", sx * STRETCH_HAND_ROLL, prefer="Middle")
+        curl(arm, side, STRETCH_CURL[side])
         for finger, angle in STRETCH_FINGER_SPLAY.items():
             pb = arm.pose.bones.get(f"J_Bip_{side}_{finger}1")
             if pb is not None:
@@ -832,6 +893,323 @@ def stretch(arm, scene, amount=1.0):
         pb.matrix_basis = Matrix.LocRotScale(a_loc.lerp(b_loc, phase),
                                              a_rot.slerp(b_rot, phase),
                                              a_scale.lerp(b_scale, phase))
+    bpy.context.view_layer.update()
+
+
+# ── 带道具的两段式动作：喝咖啡、玩手机 ──────────────────────────────
+#
+# 和托腮/伸懒腰的区别只有一条，但这条决定了实现方式：**桌上有个东西要被
+# 拿起来**。托腮那套是"算出终态，再在起点和终态之间插值"，中途姿势是插
+# 出来的、并不真的经过任何一个具体姿势。放到道具上就不成立了——手必须
+# **真的经过**"扣住杯子"那一姿势，否则杯子只能从桌上瞬移到手里。
+#
+# 所以这两条动作是两段：
+#
+#   常态（手在键盘上） --第一段--> 抓握姿势 --第二段--> 举起来用
+#
+# 道具在第一段里待在桌上不动，从抓握那一刻起**刚性跟着手走**（用抓握时
+# 那一帧的手腕矩阵求出偏移，之后 `道具 = 当前手 × 偏移`）。于是接缝处
+# 天然连续：`amount` 刚过抓握点时手还在抓握姿势上，算出来的道具位置
+# 就是它在桌上的位置。
+#
+# 用**她的左手**（画面右侧那只）——相机在她左前方，左手是近侧的那只，
+# 和托腮同一个理由。右手全程留在键盘上，桌面那一层因此始终有一只手，
+# 不像伸懒腰那样整层只剩道具（第 60 条）。
+PROP_SIDE = "L"
+
+# 手扣住杯子那一刻在整段动作里的位置。八张中间帧要摊在两段上，
+# 0.28 大约是 2 : 6。
+#
+# **不是"两段各一半"**：伸手那一段手在桌面上挪十几厘米，举起来那一段
+# 要跨过大半个上半身，后者在画面上远得多。第一版给 0.45（4:4），
+# `action_frames.py` 在合成层量出来相邻变化是 [772, 712, 664, 1243,
+# 3607, 3331, 2658, 1243]——峰值比 2.90，读起来就是"先慢慢摸过去，
+# 然后嗖一下举起来"。摊成 2:6 之后每一步的位移才差不多。
+COFFEE_GRIP_AT = 0.28
+# 抓握时手指朝哪。她从**近侧**握杯身（见 `props.mug_grip` 的理由），
+# 所以手指朝里（+Y 是杯子那边）、略微朝下。
+COFFEE_GRIP_DIR = (-0.22, 0.94, -0.26)
+COFFEE_GRIP_ROLL = 0.55
+COFFEE_GRIP_CURL = 1.05
+# 肘往外下方拐。和键盘那套一样，肘留在身侧，别拐进胸口（第 43 条）。
+# 举到嘴边那一档腕只伸出 29% 臂长（胳膊是折回来的），这时候肘的位置几乎
+# 完全由 pole 决定——Z 给得不够狠，肘就往外翘成鸡翅膀。
+COFFEE_ELBOW = (0.75, 0.25, -2.2)
+# 杯口停在嘴的**下方偏外**多少米。**别真的怼到嘴上**：面部贴片是整块
+# 覆盖的，杯子压住嘴那一块，`face_patches.py` 会直接报"这个变体无变化"
+# （13 块必须块块有变化），整套贴片就出不来。停在下唇下方三厘米，
+# 画面上读到的仍然是"举到嘴边"，嘴却还露着。
+COFFEE_RIM_OFFSET = (0.062, -0.014, -0.030)
+# 杯子倾多少度（正数是杯口朝她那边倒）。真喝是 40–50°，但那样杯底会翘到
+# 眼睛那一块去，这个机位下 32° 已经读得出"在喝"。
+COFFEE_TILT = math.radians(32.0)
+# 喝的时候头略微低一点点迎上去。脖子和头分摊。
+COFFEE_HEAD_PITCH = 0.05
+# 停留那一段：小口啜两下——杯子再倾一点、下巴再收一点。
+COFFEE_SIP_TILT = math.radians(7.0)
+COFFEE_SIP_PITCH = 0.028
+
+PHONE_GRIP_AT = 0.28
+# 手机是平躺在桌上的，手从近侧兜住机身下缘：手指朝里、略向下。
+PHONE_GRIP_DIR = (-0.14, 0.90, -0.41)
+PHONE_GRIP_ROLL = 0.30
+PHONE_GRIP_CURL = 0.62
+PHONE_ELBOW = (1.05, 0.30, -1.5)
+# 举起来看的时候，手机屏幕中心停在哪（相对头骨的偏移）。
+# 在她胸口偏左前方、下巴下面一截——**不能挡脸**，同 `COFFEE_RIM_OFFSET`。
+PHONE_SCREEN_OFFSET = (0.105, -0.085, -0.170)
+# 屏幕朝她仰多少度（0 是平躺，90 是立起来正对她）。
+PHONE_PITCH = math.radians(58.0)
+# 拿在手里会稍微斜一点，正得像标本反而假。
+PHONE_ROLL = math.radians(-12.0)
+# 看手机时头略低。
+PHONE_HEAD_PITCH = 0.07
+# 敲屏幕：拇指点下去多少。四指是托着机身的，不参与。
+PHONE_TAP_THUMB = 0.62
+# 敲的时候手腕、小臂和头都跟着动一点点。**只动拇指是不够的**：
+# 拇指在画面上只有几个像素，第一版切出来直接被判据抓到——停留那一列里
+# 有两帧的剪影**逐像素相同**（`相邻变化 [274, 274, 303, 0, 303, 274, 274]`）。
+#
+# 而且不能只是"加大幅度"：六张帧是按 sin 采样的，正负对称的两个相位算出来
+# 除了符号什么都一样，剪影上看不出区别。所以三个通道各带一个**不同的相移**，
+# 六个相位上的组合两两不同：
+PHONE_TAP_ROLL = 0.09      # 手腕绕小臂轴拧（相移 0.9）
+PHONE_TAP_NOD = 0.026      # 头跟着屏幕点（二倍频，相移 0.4）
+PHONE_TAP_DIP = 0.052      # 小臂跟着按下去沉一点——剪影变化主要靠它
+
+
+def _hand_world(arm, side):
+    """手骨的**世界**矩阵。
+
+    `pose_bone.matrix` 是骨架空间的，而道具的 `matrix_world` 是世界空间的——
+    `place_hip` 会平移整个骨架对象，两者差着 `arm.matrix_world`。
+    混着用的话杯子会整整偏掉一个胯高，而且看上去"参数没生效"。
+    """
+    return arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_Hand"].matrix
+
+
+def _set_bone_world(arm, name, matrix):
+    """把骨骼摆成给定的世界朝向，位置不动。`_rotate_world` 的绝对版。"""
+    pb = arm.pose.bones.get(name)
+    if pb is None:
+        return
+    m = arm.matrix_world.inverted() @ matrix
+    m.translation = pb.matrix.translation.copy()
+    pb.matrix = m
+    bpy.context.view_layer.update()
+
+
+def _grip_prop(arm, side, wrist, direction, roll_amount, curl_amount, elbow):
+    """伸手扣住桌上的一件东西。摆完手腕正好落在 `wrist`。"""
+    sx = 1 if side == "L" else -1
+    shoulder = arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_UpperArm"].head
+    n = (Vector(wrist) - shoulder).normalized()
+    d = Vector((sx * elbow[0], elbow[1], elbow[2])).normalized()
+    p = d - n * d.dot(n)
+    if p.length < 1e-6:
+        p = Vector((0, 0, -1))
+    reach(arm, side, Vector(wrist), Vector(wrist) + p.normalized())
+    aim(arm, f"J_Bip_{side}_Hand",
+        Vector((sx * direction[0], direction[1], direction[2])), prefer="Middle")
+    roll(arm, f"J_Bip_{side}_Hand", sx * roll_amount, prefer="Middle")
+    curl(arm, side, curl_amount)
+
+
+def _carry_prop(arm, side, prop_rest, target, hand_at_grip, elbow):
+    """道具已经在手里了，把**道具**搬到 `target`，手跟着走。
+
+    反过来算：先求把道具从抓握时的位置（`prop_rest`）刚性搬到目标要的那个
+    世界变换，再把同一个变换作用到手腕的位置和朝向上。这样道具落在哪是
+    **指定**的，不是摆完手再看杯子飞到哪儿去了——后者调三轮也对不准。
+
+    `hand_at_grip` 是抓握那一刻手骨的**世界**矩阵。
+    """
+    sx = 1 if side == "L" else -1
+    delta = target @ prop_rest.inverted()
+    wrist = delta @ hand_at_grip.translation
+    shoulder = arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_UpperArm"].head
+    n = (wrist - shoulder).normalized()
+    d = Vector((sx * elbow[0], elbow[1], elbow[2])).normalized()
+    p = d - n * d.dot(n)
+    if p.length < 1e-6:
+        p = Vector((0, 0, -1))
+    reach(arm, side, wrist, wrist + p.normalized())
+    _set_bone_world(arm, f"J_Bip_{side}_Hand", delta @ hand_at_grip)
+    return delta
+
+
+def _two_stage(arm, amount, grip_at, start, grip, use, moving,
+               finger_names, head_names):
+    """在 起点 → 抓握 → 使用 三个姿势之间插值，并返回当前段。
+
+    分组相位和托腮同一个用意：全部骨骼同一拍到位读起来是"换了个姿势"，
+    不是"做了个动作"。这里手指比手腕晚一点收拢（够到了才合上），
+    头则完全留在第二段（举起来之后才低头迎上去）。
+    """
+    if amount <= grip_at:
+        u = _eased_phase(amount / max(grip_at, 1e-6), 0.0, 1.0)
+        for pb in moving:
+            if pb.name in head_names:
+                phase = 0.0
+            elif pb.name in finger_names:
+                phase = _eased_phase(amount / max(grip_at, 1e-6), 0.35, 1.0)
+            else:
+                phase = u
+            _blend_bone(pb, start[pb.name], grip[pb.name], phase)
+    else:
+        v = (amount - grip_at) / max(1.0 - grip_at, 1e-6)
+        for pb in moving:
+            if pb.name in head_names:
+                phase = _eased_phase(v, 0.25, 1.0)
+            elif pb.name in finger_names:
+                phase = _eased_phase(v, 0.0, 0.55)
+            else:
+                phase = _eased_phase(v, 0.0, 1.0)
+            _blend_bone(pb, grip[pb.name], use[pb.name], phase)
+    bpy.context.view_layer.update()
+
+
+def _blend_bone(pb, a, b, phase):
+    a_loc, a_rot, a_scale = a.decompose()
+    b_loc, b_rot, b_scale = b.decompose()
+    pb.matrix_basis = Matrix.LocRotScale(a_loc.lerp(b_loc, phase),
+                                         a_rot.slerp(b_rot, phase),
+                                         a_scale.lerp(b_scale, phase))
+
+
+def _prop_bones(arm, side):
+    finger_names = {
+        f"J_Bip_{side}_{finger}{seg}"
+        for finger in ("Thumb", "Index", "Middle", "Ring", "Little")
+        for seg in (1, 2, 3)
+    }
+    head_names = {"J_Bip_C_Neck", "J_Bip_C_Head"}
+    names = ([f"J_Bip_{side}_{b}" for b in ("UpperArm", "LowerArm", "Hand")]
+             + sorted(finger_names) + sorted(head_names))
+    moving = [arm.pose.bones[n] for n in names if n in arm.pose.bones]
+    return moving, finger_names, head_names
+
+
+def coffee(arm, scene, amount=1.0, hold_phase=None):
+    """端起杯子喝一口。**在 `settle` 之后调**，而且场景里得先有杯子
+    （`props.build_mug()`）。
+
+    `hold_phase` 给 0…2π 时是**举到嘴边之后**那一段：小口啜两下，
+    运行时循环播这一列。给了它就意味着 `amount=1`。
+    """
+    import props as PR
+    amount = max(0.0, min(1.0, float(amount)))
+    if hold_phase is not None:
+        amount = 1.0
+    side = PROP_SIDE
+    mug = bpy.data.objects.get("Mug")
+    if mug is None:
+        raise SystemExit("场景里没有 Mug，先调 props.build_mug()")
+    # 静置矩阵取常量、并且先把杯子放回去：读"它现在在哪"的话，同一个场景里
+    # 摆第二次就会拿上一次留在手里的位置当静置（见 `props.REST`）。
+    PR.reset("Mug")
+    mug_rest = PR.rest_matrix("Mug")
+
+    moving, finger_names, head_names = _prop_bones(arm, side)
+    start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    # 1. 抓握姿势
+    _grip_prop(arm, side, PR.mug_grip(), COFFEE_GRIP_DIR, COFFEE_GRIP_ROLL,
+               COFFEE_GRIP_CURL, COFFEE_ELBOW)
+    grip = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    hand_at_grip = _hand_world(arm, side)
+    offset = hand_at_grip.inverted() @ mug_rest
+
+    # 2. 举到嘴边的姿势：先说清楚**杯子**要停在哪，再反推手
+    sip = math.sin(hold_phase) * 0.5 + 0.5 if hold_phase is not None else 0.0
+    head = arm.matrix_world @ arm.pose.bones["J_Bip_C_Head"].head
+    rim = head + Vector(COFFEE_RIM_OFFSET)
+    tilt = Matrix.Rotation(-(COFFEE_TILT + sip * COFFEE_SIP_TILT), 4, 'X')
+    # 杯口在杯子的局部 (0, 0, MUG_H)；要它落在 rim 上
+    target = Matrix.Translation(rim - tilt.to_3x3() @ Vector((0, 0, PR.MUG_H))) @ tilt
+    _carry_prop(arm, side, mug_rest, target, hand_at_grip, COFFEE_ELBOW)
+    for bone, share in (("J_Bip_C_Neck", 0.35), ("J_Bip_C_Head", 0.65)):
+        _rotate_world(arm, bone, (1, 0, 0),
+                      (COFFEE_HEAD_PITCH + sip * COFFEE_SIP_PITCH) * share)
+    use = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    _two_stage(arm, amount, COFFEE_GRIP_AT, start, grip, use, moving,
+               finger_names, head_names)
+
+    # 3. 杯子：抓住之前留在桌上，之后跟着手走
+    if amount <= COFFEE_GRIP_AT:
+        mug.matrix_world = mug_rest
+    else:
+        mug.matrix_world = _hand_world(arm, side) @ offset
+    bpy.context.view_layer.update()
+
+
+def phone(arm, scene, amount=1.0, hold_phase=None):
+    """拿起手机敲两下屏幕。**在 `settle` 之后调**，场景里得先有手机
+    （`props.build_phone()`）。
+
+    `hold_phase` 给 0…2π 时是**举起来之后**那一段：拇指在屏幕上点。
+    这一段是这条动作的主体（回消息就是一直在点），所以帧数比另外两条多。
+    """
+    import props as PR
+    amount = max(0.0, min(1.0, float(amount)))
+    if hold_phase is not None:
+        amount = 1.0
+    side = PROP_SIDE
+    dev = bpy.data.objects.get("Phone")
+    if dev is None:
+        raise SystemExit("场景里没有 Phone，先调 props.build_phone()")
+    PR.reset("Phone")
+    rest = PR.rest_matrix("Phone")
+
+    moving, finger_names, head_names = _prop_bones(arm, side)
+    start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    _grip_prop(arm, side, PR.phone_grip(), PHONE_GRIP_DIR, PHONE_GRIP_ROLL,
+               PHONE_GRIP_CURL, PHONE_ELBOW)
+    grip = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    hand_at_grip = _hand_world(arm, side)
+    offset = hand_at_grip.inverted() @ rest
+
+    head = arm.matrix_world @ arm.pose.bones["J_Bip_C_Head"].head
+    centre = head + Vector(PHONE_SCREEN_OFFSET)
+    tilt = (Matrix.Rotation(-PHONE_PITCH, 4, 'X')
+            @ Matrix.Rotation(PHONE_ROLL, 4, 'Y'))
+    target = Matrix.Translation(centre) @ tilt
+    _carry_prop(arm, side, rest, target, hand_at_grip, PHONE_ELBOW)
+    for bone, share in (("J_Bip_C_Neck", 0.35), ("J_Bip_C_Head", 0.65)):
+        _rotate_world(arm, bone, (1, 0, 0), PHONE_HEAD_PITCH * share)
+    use = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    _two_stage(arm, amount, PHONE_GRIP_AT, start, grip, use, moving,
+               finger_names, head_names)
+
+    # 敲屏幕那一段：小臂、手腕和头先动，**再**把手机挂上去（它是刚性跟着
+    # 手腕的，顺序反了手机就留在原地不动）；拇指最后点，它不影响手机。
+    tap = 0.0
+    if hold_phase is not None:
+        sx = 1 if side == "L" else -1
+        # 一圈点一次：cos 从 0 涨到 1 再回来，峰值落在相位半圈处。
+        tap = 0.5 - 0.5 * math.cos(hold_phase)
+        _rotate_world(arm, f"J_Bip_{side}_LowerArm", (1, 0, 0),
+                      (0.35 + 0.65 * tap) * PHONE_TAP_DIP)
+        roll(arm, f"J_Bip_{side}_Hand",
+             sx * math.sin(hold_phase + 0.9) * PHONE_TAP_ROLL, prefer="Middle")
+        for bone, share in (("J_Bip_C_Neck", 0.4), ("J_Bip_C_Head", 0.6)):
+            _rotate_world(arm, bone, (1, 0, 0),
+                          math.sin(hold_phase * 2 + 0.4) * PHONE_TAP_NOD * share)
+
+    if amount <= PHONE_GRIP_AT:
+        dev.matrix_world = rest
+    else:
+        dev.matrix_world = _hand_world(arm, side) @ offset
+
+    if tap:
+        for seg, weight in ((1, 0.55), (2, 0.45)):
+            pb = arm.pose.bones.get(f"J_Bip_{side}_Thumb{seg}")
+            if pb is not None:
+                pb.rotation_mode = 'XYZ'
+                pb.rotation_euler[0] -= tap * PHONE_TAP_THUMB * weight
     bpy.context.view_layer.update()
 
 

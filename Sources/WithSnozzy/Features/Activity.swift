@@ -139,25 +139,25 @@ enum ActivityRig {
         case .typing:
             return ActivityCue(activity: activity,
                                lookX: -0.42, lookY: -0.38, lookWeight: 0.72,
-                               typingChance: 94, typingBurst: 0.82,
+                               typingChance: 96, typingBurst: 0.90,
                                screenLevel: 1.0, steamLevel: 0.16, phoneLevel: 0,
                                playerMotion: playerMotion)
         case .researching:
             return ActivityCue(activity: activity,
                                lookX: -0.78, lookY: -0.10, lookWeight: 0.82,
-                               typingChance: 46, typingBurst: 0.42,
+                               typingChance: 68, typingBurst: 0.58,
                                screenLevel: 0.92, steamLevel: 0.20, phoneLevel: 0,
                                playerMotion: playerMotion)
         case .planning:
             return ActivityCue(activity: activity,
                                lookX: -0.08, lookY: -0.78, lookWeight: 0.76,
-                               typingChance: 18, typingBurst: 0.24,
+                               typingChance: 38, typingBurst: 0.36,
                                screenLevel: 0.72, steamLevel: 0.28, phoneLevel: 0,
                                playerMotion: playerMotion)
         case .resting:
             return ActivityCue(activity: activity,
                                lookX: 0.34, lookY: 0.10, lookWeight: 0.28,
-                               typingChance: 7, typingBurst: 0.18,
+                               typingChance: 22, typingBurst: 0.28,
                                screenLevel: playing ? 0.48 : 0.30,
                                steamLevel: 0.48, phoneLevel: 0,
                                playerMotion: playerMotion)

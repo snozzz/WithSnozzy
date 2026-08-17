@@ -93,7 +93,7 @@ struct Dock: View {
             // 一次、活动档位按槽位抽签），改完素材想验一眼等不起。
             // 面板里每一行调的都是生产入口，不另开一条播放路径（第 69 条）。
             IconButton(symbol: "figure.wave", size: 14,
-                       isOn: showActions || state.stretch.isActive,
+                       isOn: showActions || state.activeAction != nil,
                        tint: palette.accent, help: "动作面板：让她做点什么") {
                 showActions.toggle()
             }

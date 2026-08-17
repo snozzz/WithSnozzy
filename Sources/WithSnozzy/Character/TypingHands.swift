@@ -17,40 +17,36 @@ struct TypingHands: View, Equatable {
     let frame: Int
     /// 托腮动作档位；-1 是常态起点，终态才换成专用单手层。
     var chinFrame: Int? = nil
-    /// 伸懒腰档位。语义同上，但那一层到后面**只剩键盘**——两只手都举起来了，
-    /// 一只都不该留在桌面之上（第 60 条）。空不是漏渲。
-    var stretchFrame: Int? = nil
+    /// 长动作档位。语义同上。伸懒腰那一层到后面**只剩键盘和桌上的道具**
+    /// ——两只手都举起来了，一只都不该留在桌面之上（第 60 条）。空不是漏渲。
+    var action: (kind: ActionKind, frame: Int)? = nil
 
     static func == (a: TypingHands, b: TypingHands) -> Bool {
         a.frame == b.frame && a.chinFrame == b.chinFrame
-            && a.stretchFrame == b.stretchFrame && a.palette == b.palette
+            && a.action?.kind == b.action?.kind
+            && a.action?.frame == b.action?.frame && a.palette == b.palette
     }
 
     var body: some View {
         GeometryReader { geo in
             let m = assets.hands
             // 播哪条动作由 `SceneAssets` 解析，这一层只管画（第 46 条）。
-            let action = assets.activeAction(chin: chinFrame, stretch: stretchFrame)
-            let motionReady = action != nil
-            let moving = action.flatMap { set, frame in
-                set.handFrames.indices.contains(frame) ? set.handFrames[frame] : nil
-            }
-            let final = action.flatMap { set, frame in
-                frame >= set.manifest.frames ? set.handFinal : nil
-            }
+            let active = assets.activeAction(chin: chinFrame, action: action)
+            let motionReady = active != nil
+            let moving = active.flatMap { set, frame in set.hand(frame) }
             // -1 只换成近景的高清底图，手仍保留启动那一刻的真实
             // 打字帧。若在这里强制归到 frame 0，镜头还没开始动，手指
             // 就会先硬切一次；第一张真骨骼帧自然负责收手动作。
             let stillFrame = motionReady ? frame : min(max(frame, 0), max(0, m.frames - 1))
             let still = assets.handFrames.indices.contains(stillFrame)
                 ? assets.handFrames[stillFrame] : nil
-            if let image = moving ?? final ?? still,
+            if let image = moving ?? still,
                m.isUsable, let w = m.canvas.first, w > 0,
                m.canvas.count > 1, m.canvas[1] > 0 {
                 let sx = geo.size.width / CGFloat(w)
                 let sy = geo.size.height / CGFloat(m.canvas[1])
-                let r = (moving != nil || final != nil)
-                    ? (action?.set.manifest.handRect ?? m.rect) : m.rect
+                let r = moving != nil
+                    ? (active?.set.manifest.handRect ?? m.rect) : m.rect
                 Image(nsImage: image)
                     .resizable()
                     .interpolation(.high)
@@ -73,16 +69,22 @@ enum TypingRig {
     ///
     /// 和 `LegPose.frameTime` 同一条约束：必须**比 app 的动画 tick 长**
     /// （空闲档 1/15 秒），相等都不行，否则一次卡顿就跳帧。
-    /// 1/8 秒是四帧一轮 0.5 秒，也就是每秒四次击键——放松打字就是这个速度。
-    static let frameTime: Double = 1.0 / 8.0
+    /// 1/12 秒是四帧一轮 1/3 秒，也就是每秒三轮左右手交替、六次击键——
+    /// 上一版是 1/8（每秒四次），用户报"敲得不明显"，量下来问题有两半：
+    /// 频率慢了一档，而且**大部分时间根本没在敲**（见下面两个概率）。
+    /// 再快就不行了：1/15 是 tick 本身，卡一下就丢帧（第 18 条）。
+    static let frameTime: Double = 1.0 / 12.0
 
     /// 一段"打字"持续多久，以及每档掷一次要不要打。
-    static let slot: Double = 9.0
+    ///
+    /// 槽位从 9 秒收到 6 秒：一次"敲一阵"本来就不该长达九秒，而槽位越长，
+    /// 骰子掷输那一次的沉默也越长——实测最坏情况是十几秒一动不动。
+    static let slot: Double = 6.0
     /// 不在专注阶段时，每档开打的概率（百分数）。
-    /// 她本来就坐在电脑前，偶尔敲两下比一直不动像活人。
-    static let idleChance: UInt64 = 30
-    /// 专注阶段的概率。工作时大部分时间在敲。
-    static let workChance: UInt64 = 78
+    /// 她本来就坐在电脑前，**敲键盘是常态**，不是偶尔为之。
+    static let idleChance: UInt64 = 62
+    /// 专注阶段的概率。工作时基本一直在敲。
+    static let workChance: UInt64 = 92
 
     /// 此刻画第几帧。0 号是"手搭在键上不动"。
     ///
@@ -95,9 +97,12 @@ enum TypingRig {
         let slotIndex = Int64(floor(t / slot))
         let chance = activity?.typingChance ?? (working ? workChance : idleChance)
         guard hash(slotIndex) % 100 < chance else { return 0 }
-        // 每档只敲前面一段，剩下的时间手停着——一直敲不像人，像打字机
+        // 每档只敲前面一段，剩下的时间手停着——一直敲不像人，像打字机。
+        // 但**留白也不能太多**：0.38 那一版平时只有三成时间在敲，
+        // 加上四成的槽位根本没抽中，算下来一分钟里手动的时间不到十秒，
+        // 用户看到的就是"手基本不动"。
         let into = t - Double(slotIndex) * slot
-        let burst = slot * (activity?.typingBurst ?? (working ? 0.72 : 0.38))
+        let burst = slot * (activity?.typingBurst ?? (working ? 0.88 : 0.62))
         guard into < burst else { return 0 }
         return 1 + Int(into / frameTime) % (frames - 1)
     }

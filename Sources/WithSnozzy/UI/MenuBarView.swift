@@ -119,14 +119,14 @@ struct MenuBarView: View {
             // 所以和近景一样必须留一个绕过冷却的入口。
             Button {
                 state.revealWindow?()
-                state.stretch.begin(force: true)
+                state.perform(.stretch, force: true)
             } label: {
                 Label("让她伸个懒腰", systemImage: "figure.arms.open")
                     .font(.system(size: 11))
             }
             .disabled(state.windowMode != .normal
-                      || !state.sceneAssets.hasCompleteStretchMotion)
-            .help(state.sceneAssets.hasCompleteStretchMotion
+                      || !state.sceneAssets.hasCompleteMotion(.stretch))
+            .help(state.sceneAssets.hasCompleteMotion(.stretch)
                   ? "举起双臂舒展一下，专注段结束时她会自己来一个"
                   : "还没出伸懒腰的素材")
 

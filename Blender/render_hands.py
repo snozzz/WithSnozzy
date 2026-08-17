@@ -18,7 +18,7 @@
 """
 import bpy, json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import snozzy_lib as S, pose as P, keyboard as K
+import snozzy_lib as S, pose as P, keyboard as K, props as PR
 
 args = sys.argv[sys.argv.index("--") + 1:]
 VRM, OUT = args[:2]
@@ -39,6 +39,7 @@ for i, (press, first) in enumerate(P.TYPING_FRAMES):
     #    `toon_materials` 只能跑一次，跑两遍会把角色的材质再接一层。
     # 2. 手要在键盘**之后**摆——落点是问键盘要的（`keyboard.home_row`）。
     kbd = K.build()
+    PR.build()                       # 杯子和手机也在这一层里
     S.toon_materials(); S.room_lights()
     P.settle(scene, arm, press=press, side_first=first)
     kbd.hide_render = False          # 只有这一层画键盘
@@ -49,6 +50,18 @@ for i, (press, first) in enumerate(P.TYPING_FRAMES):
     scene.render.filepath = os.path.join(OUT, f"hand_{i:02d}.png")
     bpy.ops.render.render(write_still=True)
     print(f"HAND {i:02d} press={press} first={first}")
+
+    if i == 0:
+        # 只有道具的一张。切片脚本要拿它把裁切矩形往上撑到杯子顶——
+        # 杯子有九厘米高，顶端在桌沿那条线**以上**，而这一层默认从桌沿
+        # 起画（那是为手臂定的规矩）。不撑的话桌上那个杯子是被削掉一截的。
+        # 从像素量，不在 Blender 里算画布坐标：量的就是最终上屏的东西。
+        for o in bpy.data.objects:
+            if o.type == 'MESH' and o.name not in ("Mug", "Phone"):
+                o.hide_render = True
+        scene.render.filepath = os.path.join(OUT, "props_only.png")
+        bpy.ops.render.render(write_still=True)
+        print("HAND 道具单独一张（给切片脚本量矩形用）")
 
 with open(os.path.join(OUT, "hands_meta.json"), "w") as f:
     json.dump({"frames": len(P.TYPING_FRAMES)}, f, indent=2)
