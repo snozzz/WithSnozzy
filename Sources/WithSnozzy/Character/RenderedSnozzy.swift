@@ -127,11 +127,11 @@ struct RenderedSnozzy: View, Equatable {
             // 打瞌睡时整个人往前倾一点：只往下挪的话像被压扁，
             // 加一点前倾才读得出"要栽下去了"。惊醒那一下往回带。
             .rotationEffect(.degrees(pose.bodySway * 0.8
-                                     + pose.doze * 1.6 - pose.wake * 0.7),
+                                     + pose.doze * 2.0 - pose.wake * 0.9),
                             anchor: .bottom)
             // 点头下沉的幅度比呼吸大一个量级——它是这一段唯一在动的东西，
-            // 小了根本看不出来（1024 高的画布上 doze=1 大约是 12 像素）。
-            .offset(x: 0, y: pose.headBob * h * 0.008 + pose.doze * h * 0.012)
+            // 小了根本看不出来（1024 高的画布上 doze=1 大约是 17 像素）。
+            .offset(x: 0, y: pose.headBob * h * 0.008 + pose.doze * h * 0.017)
             .allowsHitTesting(false)
         }
     }

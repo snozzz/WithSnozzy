@@ -1347,6 +1347,18 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 - 过渡帧动没动、匀不匀：逐帧算剪影异或的像素数。有零就是卡住了，
   有尖峰就是跳了。别拿"最低点的坐标"当锚——它会在两只脚之间跳来跳去，
   而且只动一条腿的姿势（tucked）根本量不到
+- **深夜她到底有没有在打瞌睡**：`--drowsystrip out.png`。量的是**角色剪影
+  最上一行**在一轮 11 秒里怎么走：往下沉行号变大，惊醒那一下一格之内弹回去。
+  实测最深 8 像素（半分辨率，画布上 16），一轮之内回到起点。
+  只看 `drowsy` 那个数是看不出问题的——第一版那个数也是满的，
+  画面上却只是闭着眼一动不动（第 80 条）
+- **迷你/桌宠里她长什么样**：`--compactstrip out.png`。照**真实窗口尺寸**渲
+  （340×280 / 300×320，第 72 条），桌宠那一格垫格子底——不透明的背景
+  在纯色底上看不出来，在桌面上就是一个方块
+- **一条长动作从头到尾对不对**：`--actioncheck`。素材契约和时间轴分开报：
+  "素材没齐所以整套没启用"和"素材齐了但时间轴写错"在画面上长得一样
+  （都是她不动）。停留那一段还要验**整圈循环**再回终态——停在半圈上
+  倒放，画面上是脖子从歪着硬切回正
 - **表情丰不丰富**：`--facestrip out.png`。背后的客观量是
   **一段时间里她的脸出现过多少种不同的样子**——把每档的表情压成一句描述
   再统计。现在 600 档里有 16 种，最高频的一种占 21.7%。
@@ -2045,6 +2057,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actioncheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip /tmp/compact.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip /tmp/drowsy.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel /tmp/panel.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitystrip /tmp/activity.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --celebrationstrip /tmp/celebration.png

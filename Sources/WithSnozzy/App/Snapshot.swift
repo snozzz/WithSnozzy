@@ -129,6 +129,13 @@ enum Snapshot {
     /// ```
     static var compactStripPath: String? { arg("--compactstrip") }
 
+    /// 深夜打瞌睡那一轮沉没沉下去。
+    ///
+    /// ```
+    /// WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip out.png
+    /// ```
+    static var drowsyStripPath: String? { arg("--drowsystrip") }
+
     /// 动作面板长什么样。
     ///
     /// ```
@@ -539,6 +546,88 @@ enum Snapshot {
             print("写入失败: \(error.localizedDescription)")
             exit(1)
         }
+    }
+
+    /// 深夜打瞌睡那一轮：她到底有没有沉下去，用像素量。
+    ///
+    /// **这条判据量的是"她动没动"，不是"代码算出了什么数"**。第一版困倦
+    /// 只是把眨眼拉到底，画面上就是闭着眼一动不动——那时候 `drowsy` 这个
+    /// 数也是满的，只看数字完全看不出问题。所以这里照真实视图渲一整轮，
+    /// 逐格量**角色剪影的最上一行**：往下沉就是行号变大，猛地惊醒就是
+    /// 一格之内弹回去。
+    static func runDrowsyStrip(path: String) {
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.hasRenderedCharacter else {
+            print("没有渲染版角色素材")
+            exit(1)
+        }
+        let cells = 10
+        let cycle = DrowsyRig.cycle
+        // 相位从 0 铺到一整轮，最后一格落在惊醒之后
+        let times = (0..<cells).map { Double($0) / Double(cells) * cycle }
+        var tops: [Int] = []
+        var images: [NSImage] = []
+        for t in times {
+            let pose = SnozzyRig.pose(time: t, kick: 0, playing: false,
+                                      mood: 0.5, drowsy: 1)
+            let face = FaceRig.expression(t: t, playing: false, mood: 0.5,
+                                          drowsy: 1, working: false, speaking: false)
+            let view = RenderedSnozzy(assets: assets, palette: .night, pose: pose,
+                                      face: face, headphones: false, t: t)
+                .frame(width: assets.legs.canvasW / 2, height: assets.legs.canvasH / 2)
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff) else {
+                print("渲染失败"); exit(1)
+            }
+            images.append(image)
+            // 剪影最上一行：她整个人一起往下挪，头顶那一行就是最灵敏的探针
+            var top = rep.pixelsHigh
+            outer: for y in 0..<rep.pixelsHigh {
+                for x in stride(from: 0, to: rep.pixelsWide, by: 3) {
+                    if let c = rep.colorAt(x: x, y: y), c.alphaComponent > 0.35 {
+                        top = y
+                        break outer
+                    }
+                }
+            }
+            tops.append(top)
+        }
+        let sink = tops.map { Double($0 - tops[0]) }
+        print("逐格头顶行 \(tops)")
+        print("相对第一格下沉 \(sink.map { String(format: "%.0f", $0) }.joined(separator: " "))")
+        let maxSink = sink.max() ?? 0
+        let recovered = (sink.last ?? 0) < maxSink * 0.5
+        print("最深 \(String(format: "%.0f", maxSink)) 像素  "
+              + (maxSink >= 4 ? "✓ 真的沉下去了" : "✗ 没动，等于没做"))
+        print("一轮之内弹回来  " + (recovered ? "✓" : "✗ 只沉不抬，那是睡着不是打盹"))
+
+        // 只取头和肩那一块，下沉那几像素才看得出来。
+        // **`NSImage.draw(from:)` 的原点在左下**，画布坐标要翻过来：
+        // 头骨在画布 y≈400（半分辨率 200），从下往上就是 512−200−高。
+        let cell = NSSize(width: 150, height: 190)
+        let crop = NSRect(x: 320, y: assets.legs.canvasH / 2 - 200 - 150,
+                          width: 150, height: 190)
+        let strip = NSImage(size: NSSize(width: Double(cells) * cell.width,
+                                         height: cell.height))
+        strip.lockFocus()
+        for (i, image) in images.enumerated() {
+            image.draw(in: NSRect(x: Double(i) * cell.width, y: 0,
+                                  width: cell.width, height: cell.height),
+                       from: crop, operation: .sourceOver, fraction: 1)
+        }
+        strip.unlockFocus()
+        guard let tiff = strip.tiffRepresentation,
+              let rep = NSBitmapImageRep(data: tiff),
+              let png = rep.representation(using: .png, properties: [:]),
+              (try? png.write(to: URL(fileURLWithPath: path))) != nil else {
+            print("写入失败"); exit(1)
+        }
+        print("已写入 \(path)")
+        exit(maxSink >= 4 && recovered ? 0 : 1)
     }
 
     /// 判据专用的透明底格子。桌宠模式**任何一层不透明的背景都会在桌面上

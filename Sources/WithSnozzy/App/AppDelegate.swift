@@ -55,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Snapshot.runCloseUp(path: path)
             return
         }
+        if let path = Snapshot.drowsyStripPath {
+            Snapshot.runDrowsyStrip(path: path)
+            return
+        }
         if let path = Snapshot.compactStripPath {
             Snapshot.runCompactStrip(path: path)
             return
