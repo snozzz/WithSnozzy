@@ -1976,6 +1976,13 @@ codex exec --cd 工作目录 --dangerously-bypass-approvals-and-sandbox "$(cat �
 python3 Scripts/scene_drift.py Art/scene_empty_clean.png Art/scene_rich.png
 python3 Scripts/cut_scene.py Art/scene_rich.png --out Assets
 
+# 抹掉画上去的马克杯（她够不着，改用 3D 道具，第 73 条）→ 重切层 → 量漂移
+# `Art/scene_*.png` 是 .gitignore 掉的中间产物，入库的只有切出来的 Assets/
+python3 Scripts/dewatermark.py Art/scene_rich.png --box 984 612 1082 706 \
+        --dx -150 --edge 8 --ring 60 --out Art/scene_props.png
+python3 Scripts/cut_scene.py Art/scene_props.png --out Assets
+python3 Scripts/scene_drift.py Art/scene_rich.png Art/scene_props.png
+
 # 换了用户交付的房间图之后，整套要走一遍（见第二节开头那条路）
 python3 Scripts/install_scene.py Art/scene_delivered.png --gamma 0.77 --sat 0.87
 python3 Scripts/desk_mask.py --out Art/blocking --check Art/scene_delivered.png
