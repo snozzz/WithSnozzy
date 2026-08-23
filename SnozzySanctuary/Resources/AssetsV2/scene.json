@@ -1,0 +1,13 @@
+{
+  "roomFit": "fill",
+  "roomAnchorX": 0.5,
+  "deskBottom": 1.0,
+  "deskSurface": 0.0,
+  "source": "painted",
+  "room_window": {
+    "x": 0.20378,
+    "y": 0.10645,
+    "width": 0.28646,
+    "height": 0.33887
+  }
+}

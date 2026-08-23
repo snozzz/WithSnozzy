@@ -39,6 +39,18 @@ public final class WorldStore {
         send(.focusButtonPressed(at: WorldInstant(rawValue: milliseconds)))
     }
 
+    public func chooseFocusIntent(_ intent: FocusIntent, title: String, atMilliseconds milliseconds: Int64) {
+        send(.focusIntentSelected(intent, title: title, at: WorldInstant(rawValue: milliseconds)))
+    }
+
+    public func skipFocus(atMilliseconds milliseconds: Int64) {
+        send(.focusSkipped(at: WorldInstant(rawValue: milliseconds)))
+    }
+
+    public func setWindowVisible(_ visible: Bool, atMilliseconds milliseconds: Int64) {
+        send(.windowVisibilityChanged(visible, at: WorldInstant(rawValue: milliseconds)))
+    }
+
     public func selectNextActivity(atMilliseconds milliseconds: Int64) {
         let activities = Activity.allCases
         let current = activities.firstIndex(of: state.companion.activity) ?? 0
@@ -52,7 +64,9 @@ public final class WorldStore {
 
     public func toggleCloseMoment(atMilliseconds milliseconds: Int64) {
         let instant = WorldInstant(rawValue: milliseconds)
-        if state.companion.isCloseMomentActive {
+        let isRequested = state.performance.active?.action == .closeMoment
+            || state.performance.queued.contains { $0.action == .closeMoment }
+        if isRequested {
             send(.closeMomentDismissed(at: instant))
         } else {
             send(.closeMomentRequested(at: instant))
@@ -68,6 +82,13 @@ public final class WorldStore {
     }
 
     public var focusButtonLabel: String {
-        state.focus.isRunning ? "暂停专注" : "开始专注"
+        switch state.focus.phase {
+        case .idle: "开始专注"
+        case .preparing: "现在开始"
+        case .work: "暂停专注"
+        case .paused: "继续专注"
+        case .review: "开始休息"
+        case .break: "结束休息"
+        }
     }
 }

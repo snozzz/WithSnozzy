@@ -1,12 +1,1376 @@
 {
-  "logicalHeight" : 1024,
-  "logicalWidth" : 1536,
-  "records" : [
+  "schemaVersion": 2,
+  "logicalWidth": 1536,
+  "logicalHeight": 1024,
+  "records": [
     {
-      "id" : "storylets.phase-one",
-      "kind" : "storylet",
-      "relativePath" : "Storylets/phase-one.json"
+      "id": "scene.room",
+      "kind": "room",
+      "role": "room",
+      "relativePath": "AssetsV2/room.png",
+      "sha256": "1e892cc6199d3bc449b373f1e1ed3c599b966adf10b017a8b76a5e723aa436b3",
+      "pixelWidth": 1536,
+      "pixelHeight": 1024,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1536,
+        "height": 1024
+      },
+      "pixelScale": 1,
+      "packID": "scene.v2"
+    },
+    {
+      "id": "scene.desk",
+      "kind": "foreground",
+      "role": "desk",
+      "relativePath": "AssetsV2/desk.png",
+      "sha256": "42a7694934792bac81798460f125fa735f457c452c4b41695e5b8a95a03f6a02",
+      "pixelWidth": 1536,
+      "pixelHeight": 1024,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1536,
+        "height": 1024
+      },
+      "pixelScale": 1,
+      "packID": "scene.v2"
+    },
+    {
+      "id": "scene.layout",
+      "kind": "manifest",
+      "role": "sceneManifest",
+      "relativePath": "AssetsV2/scene.json",
+      "sha256": "a8722e3f3f841e8f6b88e1e7c7bb75f22a07f41d6ffd34a78e739614ddbed145",
+      "packID": "scene.v2"
+    },
+    {
+      "id": "snozzy.legs.manifest",
+      "kind": "manifest",
+      "role": "legManifest",
+      "relativePath": "AssetsLegacy/legs.json",
+      "sha256": "68d0fb2876949d22d6ed1ee55827a618f9ae2e75df5129a1a7eb6d3cfad6ae26",
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.body",
+      "kind": "character",
+      "role": "body",
+      "relativePath": "AssetsLegacy/snozzy_body.png",
+      "sha256": "285737e20bed8d9a276175116e1e100d102c83412841d0e251ee88cc99d530a8",
+      "pixelWidth": 1536,
+      "pixelHeight": 600,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1536,
+        "height": 600
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.body.headphones",
+      "kind": "character",
+      "role": "bodyHeadphones",
+      "relativePath": "AssetsLegacy/snozzy_body_headphones.png",
+      "sha256": "40dcbcf6c8fb2dc824bf2d31f82c847252119905b69bf3fdf15b114f47c24adc",
+      "pixelWidth": 1536,
+      "pixelHeight": 600,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1536,
+        "height": 600
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.legs.together",
+      "kind": "character",
+      "role": "legs",
+      "relativePath": "AssetsLegacy/snozzy_legs_together.png",
+      "sha256": "adafc32e810550331d1d6f7d1fa4a3bde7b629007afdf179ce3a4a5df96d0b18",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.legs.angled",
+      "kind": "character",
+      "role": "legs",
+      "relativePath": "AssetsLegacy/snozzy_legs_angled.png",
+      "sha256": "80c3c6bdacbba71704ec09493a5ef1bc80430f969fe78610f8b05cee462334f5",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.legs.crossL",
+      "kind": "character",
+      "role": "legs",
+      "relativePath": "AssetsLegacy/snozzy_legs_crossL.png",
+      "sha256": "5fd1218ac81627ab2f480cb16615aa3da3c15995abf92b8eb39dda0f85abe5b1",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.legs.crossR",
+      "kind": "character",
+      "role": "legs",
+      "relativePath": "AssetsLegacy/snozzy_legs_crossR.png",
+      "sha256": "def49ee88c84439da36b7b1ff565207a1526b85545dcc1abc63c6c53abc3d117",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.legs.tucked",
+      "kind": "character",
+      "role": "legs",
+      "relativePath": "AssetsLegacy/snozzy_legs_tucked.png",
+      "sha256": "e04157cb4988f388fe7e71b310050d191edfe8a744667880bfa42fede34e0043",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.00",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_00.png",
+      "sha256": "70e7cfd8b357b2ed42d21b349e88ec7ee600e2596c5dcc5296379a4d8f743247",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.01",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_01.png",
+      "sha256": "963da4438b619b54daf274eb04ecf9596c83a90bfbf1738fa9084329bac26744",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.02",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_02.png",
+      "sha256": "57190ed38882bcca6ae2d9f982050fc29e769ff9bab3b00e2db4bac1d0f5a3b5",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.03",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_03.png",
+      "sha256": "4925e1c870d2e8342b15c373ee19cabfed760aa17b0e492026e05a1b3c9ea491",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.04",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_04.png",
+      "sha256": "441ccaabca9937157cb6a20739b5261b40f36c626e558d4ddc6982262dc48077",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.05",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_05.png",
+      "sha256": "3cad74804cde4dd005fa0df0e3aea0517ed1e28b89dfad03e72fd59b6f1a9abb",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.06",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_06.png",
+      "sha256": "ad6b342cc765a6a02eb0d9b52a4eadd20a3762d6d1fca3c10b6dedeb5123a6ea",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.angled.07",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_angled_07.png",
+      "sha256": "0d28351e73ac96da037b53e3fbcb0705b6be15433574bb625a20aa607f95e6bb",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.00",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_00.png",
+      "sha256": "f25e295ec8a03e83025041d44defef80e8b031a6f83c7959f9e41e0090ecad4d",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.01",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_01.png",
+      "sha256": "d901cc03ac90fad595e6290650014f64a93e4dedb362dd5fc239475c81fbfd79",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.02",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_02.png",
+      "sha256": "373697a91fd70751629aa9b9181acf58e61669c3abe460b869388404450cfa4e",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.03",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_03.png",
+      "sha256": "1c14ba05bfb90e566d211c910c94af34427109a10a7a0ae982c0b1387e1c81fa",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.04",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_04.png",
+      "sha256": "e568c83ce90189cf86ca2d5e81fde1c28aa3772f317ca8dd6c0c98933622a9de",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.05",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_05.png",
+      "sha256": "6149509a73198b43d4870d2ea9e6c08a418a0f8652cc2a8851086e12733a264f",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.06",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_06.png",
+      "sha256": "8df6e164ee1c951fdf23a71101306fc0bb7f0ca7d03823056de53623dba1e7c7",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossL.07",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossL_07.png",
+      "sha256": "c7d8caf9f3f4dc7dedd5c1fcc29b892401904abda7821da9fb45a21dee1d4a92",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.00",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_00.png",
+      "sha256": "209a30fecb6e2b192d23e6563542ef3646fc81830d6a2ba25fcaadc857f98d9d",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.01",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_01.png",
+      "sha256": "594266f40a650c351659a4c2c148858c5695bb4ec674b4fe17542aa07f1699ad",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.02",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_02.png",
+      "sha256": "00a577bf18a5c88b7998f8d2c51339632a4ced9809ec84fd0378bb4ffe029ce0",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.03",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_03.png",
+      "sha256": "cac0a4f55809d119cfa080b9224c87576a7c55be4429336e4160d1f7ebeafc91",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.04",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_04.png",
+      "sha256": "ee6a6d54a7f914e96812be7bd8217cd011201514418c91247245bc467a815570",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.05",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_05.png",
+      "sha256": "7e71c8e5f7a0504e43275c8c919025a27e97ecf5a2cdef9b85519c425d97fd31",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.06",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_06.png",
+      "sha256": "afa2ed05657692215588e115f97202a44f3eda13016307ec49a0f1d6293852a4",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.crossR.07",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_crossR_07.png",
+      "sha256": "0b24312af49c7898bb802b9ca4688860bb8a2f2d3e20ff5c1d3a5ff4f88eabff",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.00",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_00.png",
+      "sha256": "7eb3e36b76ad8ca5afab6d9bef16ab5736d0493a1bf93e60393ff690043b6a51",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.01",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_01.png",
+      "sha256": "b88458ee62aed34509f12fe04fb7bafd38f9300846467ebfd590f6beaf12b410",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.02",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_02.png",
+      "sha256": "8ed53c08e22ea8356507e69c05916bf14186a1413f410b7225cd2e312b3a79fb",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.03",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_03.png",
+      "sha256": "5505ad2f0cc86d1146c3425821e9cab7e1e96865bf68104473e9a651e59f55ee",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.04",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_04.png",
+      "sha256": "400070de2d3c171b4fc1a734bed9d0b2d30d9f93b72c78fa6bca26833e931177",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.05",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_05.png",
+      "sha256": "d509604ef4a64709f6413e3716535aa91e85f0dd8414ae0c1ddb4a26bc10ff66",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.06",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_06.png",
+      "sha256": "3696c10befb575182c2eef8063d5c93d195b650a320458eb80a82e49f6380776",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.move.tucked.07",
+      "kind": "animation",
+      "role": "legTransition",
+      "relativePath": "AssetsLegacy/snozzy_move_tucked_07.png",
+      "sha256": "75cda406ecb747a8054d5b8c82e25de498d4bd15f2ceaae99f2eb1247939b807",
+      "pixelWidth": 329,
+      "pixelHeight": 424,
+      "logicalRect": {
+        "x": 626,
+        "y": 600,
+        "width": 329,
+        "height": 424
+      },
+      "pixelScale": 1,
+      "packID": "snozzy.base"
+    },
+    {
+      "id": "snozzy.hands.manifest",
+      "kind": "manifest",
+      "role": "handManifest",
+      "relativePath": "AssetsLegacy/hands.json",
+      "sha256": "bf05302b081327ef1d836ae2418e00ecc1dc08a178f154dd8fad2730c889143e",
+      "packID": "snozzy.hands2x"
+    },
+    {
+      "id": "snozzy.hands.00",
+      "kind": "animation",
+      "role": "hands",
+      "relativePath": "AssetsLegacy/snozzy_hand2x_00.png",
+      "sha256": "97397db6a12a52441aa01e3f99990b1c3aaf3296da2646510dd49ac389b86305",
+      "pixelWidth": 632,
+      "pixelHeight": 200,
+      "logicalRect": {
+        "x": 682,
+        "y": 591,
+        "width": 316,
+        "height": 100
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.hands2x"
+    },
+    {
+      "id": "snozzy.hands.01",
+      "kind": "animation",
+      "role": "hands",
+      "relativePath": "AssetsLegacy/snozzy_hand2x_01.png",
+      "sha256": "8c0bfa817156b28180be8e207a86f71cef0345bef5d85985a7a88c13eba7825e",
+      "pixelWidth": 632,
+      "pixelHeight": 200,
+      "logicalRect": {
+        "x": 682,
+        "y": 591,
+        "width": 316,
+        "height": 100
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.hands2x"
+    },
+    {
+      "id": "snozzy.hands.02",
+      "kind": "animation",
+      "role": "hands",
+      "relativePath": "AssetsLegacy/snozzy_hand2x_02.png",
+      "sha256": "97397db6a12a52441aa01e3f99990b1c3aaf3296da2646510dd49ac389b86305",
+      "pixelWidth": 632,
+      "pixelHeight": 200,
+      "logicalRect": {
+        "x": 682,
+        "y": 591,
+        "width": 316,
+        "height": 100
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.hands2x"
+    },
+    {
+      "id": "snozzy.hands.03",
+      "kind": "animation",
+      "role": "hands",
+      "relativePath": "AssetsLegacy/snozzy_hand2x_03.png",
+      "sha256": "0fe3f9cf82c9dfdf18baa7c92795157fbbd17f468fa9c9567babbc17767ab386",
+      "pixelWidth": 632,
+      "pixelHeight": 200,
+      "logicalRect": {
+        "x": 682,
+        "y": 591,
+        "width": 316,
+        "height": 100
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.hands2x"
+    },
+    {
+      "id": "snozzy.face.manifest",
+      "kind": "manifest",
+      "role": "faceManifest",
+      "relativePath": "AssetsLegacy/face2x.json",
+      "sha256": "b4939b81320e141185a09a20c6719f706f80e8c16eb7959b80625d0e9dc35916",
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.blink_half",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_blink_half.png",
+      "sha256": "bbfd90e06313eb1eb0b11aff3d17f6095a65a829b89ef15067ffd37db9748025",
+      "pixelWidth": 154,
+      "pixelHeight": 65,
+      "logicalRect": {
+        "x": 771.5,
+        "y": 363.0,
+        "width": 77.0,
+        "height": 32.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.blink_shut",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_blink_shut.png",
+      "sha256": "bd0f787845e311505d973c820d9b23ff02c300eedd3930b88ced3bb2f7a6a0b0",
+      "pixelWidth": 155,
+      "pixelHeight": 72,
+      "logicalRect": {
+        "x": 771.5,
+        "y": 359.5,
+        "width": 77.5,
+        "height": 36.0
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.eye_sad",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_eye_sad.png",
+      "sha256": "d92585f61ae2098074ce5ae9cc2ed0dc763dc6d76a5d26009262bac31624d783",
+      "pixelWidth": 154,
+      "pixelHeight": 59,
+      "logicalRect": {
+        "x": 771.5,
+        "y": 366.0,
+        "width": 77.0,
+        "height": 29.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.eye_smile",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_eye_smile.png",
+      "sha256": "d67d94fe9cbd3617b9a58ffb174d28b632d8f54cf5f0242a9a610149494d0aee",
+      "pixelWidth": 147,
+      "pixelHeight": 66,
+      "logicalRect": {
+        "x": 771.5,
+        "y": 362.5,
+        "width": 73.5,
+        "height": 33.0
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.eye_soft",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_eye_soft.png",
+      "sha256": "262b369aaf9683507aba0036b27d08003f146db2121393df6e29ab29a49f4120",
+      "pixelWidth": 146,
+      "pixelHeight": 59,
+      "logicalRect": {
+        "x": 772.0,
+        "y": 366.0,
+        "width": 73.0,
+        "height": 29.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.eye_wide",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_eye_wide.png",
+      "sha256": "f80148265ecda4720cb771648dc76deb0df994c4ebdcf31b6b33f7d0438f7267",
+      "pixelWidth": 144,
+      "pixelHeight": 63,
+      "logicalRect": {
+        "x": 772.5,
+        "y": 364.0,
+        "width": 72.0,
+        "height": 31.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.look_down",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_look_down.png",
+      "sha256": "ec795c72f40a8db5a673660466ff27c9c3fbe0641e752c0ac11ccf451dd1b5b5",
+      "pixelWidth": 137,
+      "pixelHeight": 44,
+      "logicalRect": {
+        "x": 776.0,
+        "y": 373.5,
+        "width": 68.5,
+        "height": 22.0
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.look_left",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_look_left.png",
+      "sha256": "326cc4930fbc42ee6d93b766c52450e895848fe5a0c313dcbb7ba9af861b2f4a",
+      "pixelWidth": 138,
+      "pixelHeight": 44,
+      "logicalRect": {
+        "x": 775.5,
+        "y": 373.5,
+        "width": 69.0,
+        "height": 22.0
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.look_right",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_look_right.png",
+      "sha256": "f36a89130f07acdbc104e3399bb09c1f167f03bf91791ac5a04d0eb29741013e",
+      "pixelWidth": 137,
+      "pixelHeight": 43,
+      "logicalRect": {
+        "x": 776.5,
+        "y": 374.0,
+        "width": 68.5,
+        "height": 21.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.look_up",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_look_up.png",
+      "sha256": "07fceb9a6a3292e7338c55f51953f0a40087efb68d8fcbf756a650f4c0dc12fb",
+      "pixelWidth": 138,
+      "pixelHeight": 44,
+      "logicalRect": {
+        "x": 775.5,
+        "y": 373.5,
+        "width": 69.0,
+        "height": 22.0
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.mouth_o",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_mouth_o.png",
+      "sha256": "97f81aa98d2367b0d02faea7415406be094fa39e01c3b1c219a84049b95b7eb1",
+      "pixelWidth": 46,
+      "pixelHeight": 35,
+      "logicalRect": {
+        "x": 797.0,
+        "y": 406.5,
+        "width": 23.0,
+        "height": 17.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.mouth_open",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_mouth_open.png",
+      "sha256": "56467dd51686d7e277d784b2547784407d42db6e5295a8263575996de22e995f",
+      "pixelWidth": 46,
+      "pixelHeight": 33,
+      "logicalRect": {
+        "x": 797.0,
+        "y": 406.5,
+        "width": 23.0,
+        "height": 16.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "snozzy.face.smile",
+      "kind": "animation",
+      "role": "facePatch",
+      "relativePath": "AssetsLegacy/face2x_smile.png",
+      "sha256": "77162f05f1e3cbb6645d580910fd193888f15120c7ace3cf33c366e547b42b7a",
+      "pixelWidth": 63,
+      "pixelHeight": 35,
+      "logicalRect": {
+        "x": 789.5,
+        "y": 407.0,
+        "width": 31.5,
+        "height": 17.5
+      },
+      "pixelScale": 2,
+      "packID": "snozzy.face2x"
+    },
+    {
+      "id": "companion.cat.00",
+      "kind": "animation",
+      "role": "cat",
+      "relativePath": "AssetsLegacy/cats_0.png",
+      "sha256": "515e606dadb45196f4a021355861aa84c2645239f1ed54864007f18658cb4446",
+      "pixelWidth": 66,
+      "pixelHeight": 50,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 66,
+        "height": 50
+      },
+      "pixelScale": 1,
+      "packID": "companions.cats"
+    },
+    {
+      "id": "companion.cat.01",
+      "kind": "animation",
+      "role": "cat",
+      "relativePath": "AssetsLegacy/cats_1.png",
+      "sha256": "738b2f16305c370dd1442125cb6bfb047fc4ba5910a2c093b8bb1986071006e8",
+      "pixelWidth": 313,
+      "pixelHeight": 183,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 313,
+        "height": 183
+      },
+      "pixelScale": 1,
+      "packID": "companions.cats"
+    },
+    {
+      "id": "companion.cat.02",
+      "kind": "animation",
+      "role": "cat",
+      "relativePath": "AssetsLegacy/cats_2.png",
+      "sha256": "f39749c068d4930f27849feee9720225a515010226c96d09e22a496d2d54fec0",
+      "pixelWidth": 503,
+      "pixelHeight": 165,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 503,
+        "height": 165
+      },
+      "pixelScale": 1,
+      "packID": "companions.cats"
+    },
+    {
+      "id": "companion.cat.03",
+      "kind": "animation",
+      "role": "cat",
+      "relativePath": "AssetsLegacy/cats_3.png",
+      "sha256": "a46361bb88f1a00bf1fdabfbdae7b42af8689fe39676e83e6fe6fa664fc78a85",
+      "pixelWidth": 302,
+      "pixelHeight": 188,
+      "logicalRect": {
+        "x": 0,
+        "y": 0,
+        "width": 302,
+        "height": 188
+      },
+      "pixelScale": 1,
+      "packID": "companions.cats"
     }
   ],
-  "schemaVersion" : 1
+  "packs": [
+    {
+      "id": "scene.v2",
+      "atomic": true,
+      "records": [
+        "scene.room",
+        "scene.desk",
+        "scene.layout"
+      ]
+    },
+    {
+      "id": "snozzy.base",
+      "atomic": true,
+      "records": [
+        "snozzy.legs.manifest",
+        "snozzy.body",
+        "snozzy.body.headphones",
+        "snozzy.legs.together",
+        "snozzy.legs.angled",
+        "snozzy.legs.crossL",
+        "snozzy.legs.crossR",
+        "snozzy.legs.tucked",
+        "snozzy.move.angled.00",
+        "snozzy.move.angled.01",
+        "snozzy.move.angled.02",
+        "snozzy.move.angled.03",
+        "snozzy.move.angled.04",
+        "snozzy.move.angled.05",
+        "snozzy.move.angled.06",
+        "snozzy.move.angled.07",
+        "snozzy.move.crossL.00",
+        "snozzy.move.crossL.01",
+        "snozzy.move.crossL.02",
+        "snozzy.move.crossL.03",
+        "snozzy.move.crossL.04",
+        "snozzy.move.crossL.05",
+        "snozzy.move.crossL.06",
+        "snozzy.move.crossL.07",
+        "snozzy.move.crossR.00",
+        "snozzy.move.crossR.01",
+        "snozzy.move.crossR.02",
+        "snozzy.move.crossR.03",
+        "snozzy.move.crossR.04",
+        "snozzy.move.crossR.05",
+        "snozzy.move.crossR.06",
+        "snozzy.move.crossR.07",
+        "snozzy.move.tucked.00",
+        "snozzy.move.tucked.01",
+        "snozzy.move.tucked.02",
+        "snozzy.move.tucked.03",
+        "snozzy.move.tucked.04",
+        "snozzy.move.tucked.05",
+        "snozzy.move.tucked.06",
+        "snozzy.move.tucked.07"
+      ]
+    },
+    {
+      "id": "snozzy.hands2x",
+      "atomic": true,
+      "records": [
+        "snozzy.hands.manifest",
+        "snozzy.hands.00",
+        "snozzy.hands.01",
+        "snozzy.hands.02",
+        "snozzy.hands.03"
+      ]
+    },
+    {
+      "id": "snozzy.face2x",
+      "atomic": true,
+      "records": [
+        "snozzy.face.manifest",
+        "snozzy.face.blink_half",
+        "snozzy.face.blink_shut",
+        "snozzy.face.eye_sad",
+        "snozzy.face.eye_smile",
+        "snozzy.face.eye_soft",
+        "snozzy.face.eye_wide",
+        "snozzy.face.look_down",
+        "snozzy.face.look_left",
+        "snozzy.face.look_right",
+        "snozzy.face.look_up",
+        "snozzy.face.mouth_o",
+        "snozzy.face.mouth_open",
+        "snozzy.face.smile"
+      ]
+    },
+    {
+      "id": "companions.cats",
+      "atomic": true,
+      "records": [
+        "companion.cat.00",
+        "companion.cat.01",
+        "companion.cat.02",
+        "companion.cat.03"
+      ]
+    }
+  ],
+  "hotspots": [
+    {
+      "id": "window",
+      "label": "轨道窗",
+      "polygon": [
+        [
+          313,
+          109
+        ],
+        [
+          753,
+          109
+        ],
+        [
+          753,
+          456
+        ],
+        [
+          313,
+          456
+        ]
+      ]
+    },
+    {
+      "id": "sideScreens",
+      "label": "侧屏",
+      "polygon": [
+        [
+          48,
+          354
+        ],
+        [
+          397,
+          343
+        ],
+        [
+          402,
+          594
+        ],
+        [
+          48,
+          637
+        ]
+      ]
+    },
+    {
+      "id": "cassette",
+      "label": "磁带观测台",
+      "polygon": [
+        [
+          1105,
+          356
+        ],
+        [
+          1287,
+          356
+        ],
+        [
+          1287,
+          427
+        ],
+        [
+          1105,
+          427
+        ]
+      ]
+    },
+    {
+      "id": "stardust",
+      "label": "星屑记忆",
+      "polygon": [
+        [
+          985,
+          648
+        ],
+        [
+          1083,
+          648
+        ],
+        [
+          1083,
+          706
+        ],
+        [
+          985,
+          706
+        ]
+      ]
+    },
+    {
+      "id": "journal",
+      "label": "记录册",
+      "polygon": [
+        [
+          1182,
+          690
+        ],
+        [
+          1321,
+          690
+        ],
+        [
+          1321,
+          771
+        ],
+        [
+          1182,
+          771
+        ]
+      ]
+    },
+    {
+      "id": "snozzy",
+      "label": "Snozzy",
+      "polygon": [
+        [
+          596,
+          268
+        ],
+        [
+          991,
+          268
+        ],
+        [
+          1030,
+          765
+        ],
+        [
+          566,
+          765
+        ]
+      ]
+    },
+    {
+      "id": "focusTimer",
+      "label": "专注计时器",
+      "polygon": [
+        [
+          1095,
+          608
+        ],
+        [
+          1174,
+          608
+        ],
+        [
+          1174,
+          708
+        ],
+        [
+          1095,
+          708
+        ]
+      ]
+    },
+    {
+      "id": "lamp",
+      "label": "星灯",
+      "polygon": [
+        [
+          1432,
+          525
+        ],
+        [
+          1525,
+          525
+        ],
+        [
+          1525,
+          877
+        ],
+        [
+          1432,
+          877
+        ]
+      ]
+    }
+  ],
+  "provenance": {
+    "roomPrompt": "ArtSource/room_imagegen_prompt.txt",
+    "driftReport": "ArtSource/room_imagegen_drift.json",
+    "windowWorstEdgeDeltaPixels": 0,
+    "deskMedianDeltaPixels": 0,
+    "monitorRightEdgeDeltaPixels": 1
+  }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import SnozzyAssets
@@ -29,24 +30,36 @@ public struct SceneGeometry: Equatable, Sendable {
     }
 }
 
-public struct SceneAssets: Equatable, Sendable {
-    public let catalog: AssetCatalog
-    public let isFallback: Bool
+@MainActor
+public final class SceneAssets {
+    public let library: AssetLibrary?
+    public let loadError: String?
 
-    public init(catalog: AssetCatalog, isFallback: Bool = false) {
-        self.catalog = catalog
-        self.isFallback = isFallback
+    private init(library: AssetLibrary?, loadError: String?) {
+        self.library = library
+        self.loadError = loadError
     }
 
-    public static let fallback = SceneAssets(catalog: .empty, isFallback: true)
-
     public static func bundled(bundle: Bundle = .main) -> SceneAssets {
-        guard
-            let resourceURL = bundle.resourceURL,
-            let catalog = try? AssetCatalogLoader.load(
-                manifestURL: resourceURL.appending(path: "AssetCatalog.json")
-            )
-        else { return .fallback }
-        return SceneAssets(catalog: catalog)
+        do {
+            return SceneAssets(library: try AssetLibrary(bundle: bundle), loadError: nil)
+        } catch {
+            return SceneAssets(library: nil, loadError: error.localizedDescription)
+        }
+    }
+
+    public static func verifiedDirectory(_ root: URL) throws -> SceneAssets {
+        SceneAssets(library: try AssetLibrary(validatingRoot: root), loadError: nil)
+    }
+
+    public var isAvailable: Bool { library != nil }
+    public var hotspots: [Hotspot] { library?.catalog.manifest.hotspots ?? [] }
+
+    public func image(_ id: String) -> NSImage? {
+        library?.image(for: id)
+    }
+
+    public func record(_ id: String) -> AssetRecord? {
+        library?.catalog.record(for: id)
     }
 }

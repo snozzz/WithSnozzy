@@ -2,7 +2,11 @@
 
 ## Addressing
 
-Runtime code addresses assets only by IDs declared in `Resources/AssetCatalog.json`. It must not glob directories or infer related frames from filenames. `relativePath` is resolved from the resource root after the catalog is decoded.
+Runtime code addresses assets only by IDs declared in `Resources/AssetCatalog.json`. It must not glob directories or infer related frames from filenames. `relativePath` is resolved from the verified app-bundle resource root after the catalog is decoded.
+
+Every record carries a SHA-256 digest. Raster records must carry non-optional exact physical dimensions, logical rect, and a positive pixel scale. Every atomic pack lists exactly the same IDs as the records that name that pack. A missing field, file, symlink, traversal path, digest mismatch, dimension mismatch, or partial pack fails the complete load.
+
+Production uses `AssetLibrary(bundle:)` only. The explicit-root initializer exists solely for tests and SnozzyLab; there is no executable-relative or current-working-directory fallback.
 
 ## Coordinate contract
 
@@ -32,4 +36,6 @@ Before adding a production raster set, its manifest must cover:
 - Pixel-difference screenshots at real supported window sizes.
 - Explicit negative probes proving every important gate can fail.
 
-The phase-one programmatic fallback is intentionally marked `isFallback`; it is a boot/smoke surface, not final character art.
+The approved import is a closed whitelist in `Scripts/import_legacy_assets.py`. It contains the Blender body/headphones, five leg poses and transitions, 2× hands, 2× face patches, and four cat frames. It explicitly excludes Live2D, realtime 3D, vector Snozzy, obsolete 1× hands, and unvalidated optional action packs.
+
+The V2 room source, exact final prompt, mask, and drift report live in `ArtSource`. Reported drift is window 0 px, desk-edge median 0 px, and monitor-right-edge 1 px.

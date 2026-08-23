@@ -14,6 +14,7 @@ case "$CONFIGURATION" in
 esac
 
 cd "$PROJECT_ROOT"
+"$PROJECT_ROOT/Scripts/verify_assets.py"
 swift build -c "$CONFIGURATION" --product SnozzySanctuary
 BIN_DIR="$(swift build -c "$CONFIGURATION" --show-bin-path)"
 

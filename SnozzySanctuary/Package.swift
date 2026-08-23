@@ -13,6 +13,7 @@ let package = Package(
         .library(name: "SnozzyAssets", targets: ["SnozzyAssets"]),
         .library(name: "SnozzyAudio", targets: ["SnozzyAudio"]),
         .library(name: "SnozzyPlatform", targets: ["SnozzyPlatform"]),
+        .library(name: "SnozzyRuntime", targets: ["SnozzyRuntime"]),
         .library(name: "SnozzyScene", targets: ["SnozzyScene"]),
         .library(name: "SnozzyUI", targets: ["SnozzyUI"]),
         .executable(name: "SnozzySanctuary", targets: ["SnozzySanctuaryApp"]),
@@ -41,12 +42,16 @@ let package = Package(
             dependencies: ["SnozzyDomain"]
         ),
         .target(
+            name: "SnozzyRuntime",
+            dependencies: ["SnozzyDomain", "SnozzyWorld", "SnozzyData", "SnozzyAudio", "SnozzyPlatform"]
+        ),
+        .target(
             name: "SnozzyScene",
             dependencies: ["SnozzyDomain", "SnozzyWorld", "SnozzyAssets"]
         ),
         .target(
             name: "SnozzyUI",
-            dependencies: ["SnozzyWorld", "SnozzyScene", "SnozzyPlatform"]
+            dependencies: ["SnozzyDomain", "SnozzyWorld", "SnozzyScene", "SnozzyPlatform"]
         ),
         .executableTarget(
             name: "SnozzySanctuaryApp",
@@ -57,17 +62,38 @@ let package = Package(
                 "SnozzyAssets",
                 "SnozzyAudio",
                 "SnozzyPlatform",
+                "SnozzyRuntime",
                 "SnozzyScene",
                 "SnozzyUI"
             ]
         ),
         .executableTarget(
             name: "SnozzyLab",
-            dependencies: ["SnozzyWorld", "SnozzyScene", "SnozzyUI"]
+            dependencies: ["SnozzyDomain", "SnozzyWorld", "SnozzyScene", "SnozzyUI"]
         ),
         .testTarget(
             name: "SnozzyWorldTests",
             dependencies: ["SnozzyDomain", "SnozzyWorld"]
+        ),
+        .testTarget(
+            name: "SnozzyDataTests",
+            dependencies: ["SnozzyData", "SnozzyDomain"]
+        ),
+        .testTarget(
+            name: "SnozzyAssetsTests",
+            dependencies: ["SnozzyAssets"]
+        ),
+        .testTarget(
+            name: "SnozzySceneTests",
+            dependencies: ["SnozzyAssets", "SnozzyScene", "SnozzyWorld"]
+        ),
+        .testTarget(
+            name: "SnozzyUITests",
+            dependencies: ["SnozzyDomain", "SnozzyScene", "SnozzyUI", "SnozzyWorld"]
+        ),
+        .testTarget(
+            name: "SnozzyRuntimeTests",
+            dependencies: ["SnozzyAudio", "SnozzyData", "SnozzyDomain", "SnozzyRuntime", "SnozzyWorld"]
         ),
         .testTarget(name: "SnozzyArchitectureTests")
     ],

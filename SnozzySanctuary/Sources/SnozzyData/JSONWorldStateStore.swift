@@ -1,28 +1,59 @@
 import Foundation
 import SnozzyDomain
 
+/// Domain-specific adapter kept intentionally thin so WorldState can evolve
+/// without pushing its fields into the persistence implementation.
 public actor JSONWorldStateStore: WorldStatePersisting {
-    private let fileURL: URL
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
+    public typealias Migration = JSONCodableStore<WorldState>.Migration
+    public static let fileName = "world-state.json"
 
-    public init(fileURL: URL) {
+    public nonisolated let fileURL: URL
+    private let store: JSONCodableStore<WorldState>
+
+    public init(fileURL: URL, migration: Migration? = nil) {
         self.fileURL = fileURL
-        encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        decoder = JSONDecoder()
+        store = JSONCodableStore(
+            fileURL: fileURL,
+            schemaVersion: WorldState.schemaVersion,
+            migration: migration,
+            schemaValidator: WorldStateMigration.validateSchema,
+            olderSchemaPolicy: .requireMigration,
+            unwrappedPayloadPolicy: .requireMigration(sourceSchemaVersion: 1)
+        )
+    }
+
+    public init(directoryURL: URL, migration: Migration? = nil) {
+        self.init(
+            fileURL: directoryURL.appendingPathComponent(Self.fileName),
+            migration: migration
+        )
+    }
+
+    /// Production construction always installs every supported migration.
+    public static func production(fileURL: URL) -> JSONWorldStateStore {
+        JSONWorldStateStore(fileURL: fileURL, migration: WorldStateMigration.migrate)
+    }
+
+    public static func live() throws -> JSONWorldStateStore {
+        production(
+            fileURL: try SnozzyDataLocation.defaultDirectory()
+                .appendingPathComponent(Self.fileName)
+        )
     }
 
     public func load() async throws -> WorldState? {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
-        let data = try Data(contentsOf: fileURL)
-        return try decoder.decode(WorldState.self, from: data)
+        try await store.load()
     }
 
     public func save(_ state: WorldState) async throws {
-        let directory = fileURL.deletingLastPathComponent()
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let data = try encoder.encode(state)
-        try data.write(to: fileURL, options: .atomic)
+        try await store.save(state)
+    }
+
+    public func mode() async -> StoreAccessMode {
+        await store.mode()
+    }
+
+    public func metadata() async -> StoreMetadata {
+        await store.metadata()
     }
 }

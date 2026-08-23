@@ -8,6 +8,7 @@ final class WorldReducerTests: XCTestCase {
             .launched(at: WorldInstant(rawValue: 1_000)),
             .randomResolved(.ambientVariant, value: 42, at: WorldInstant(rawValue: 1_001)),
             .focusButtonPressed(at: WorldInstant(rawValue: 1_100)),
+            .focusButtonPressed(at: WorldInstant(rawValue: 1_100)),
             .heartbeat(at: WorldInstant(rawValue: 61_100)),
             .activitySelected(.researching, at: WorldInstant(rawValue: 61_200)),
             .moodAdjusted(0.07, at: WorldInstant(rawValue: 61_300)),
@@ -30,11 +31,12 @@ final class WorldReducerTests: XCTestCase {
         let result = replay([
             .launched(at: .zero),
             .focusButtonPressed(at: .zero),
+            .focusButtonPressed(at: .zero),
             .heartbeat(at: WorldInstant(rawValue: duration))
         ])
 
         XCTAssertEqual(result.state.completedFocusSessions, 1)
-        XCTAssertEqual(result.state.focus.phase, .shortBreak)
+        XCTAssertEqual(result.state.focus.phase, .review)
         XCTAssertFalse(result.state.focus.isRunning)
         XCTAssertEqual(result.state.companion.activity, .takingBreak)
         XCTAssertTrue(result.effects.contains(.playAudio(.focusCompleted)))

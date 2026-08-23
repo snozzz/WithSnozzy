@@ -22,6 +22,8 @@ public struct SystemRandomSource: RandomSource, Sendable {
 }
 
 public struct AppPaths: Sendable {
+    public static let worldStateFileName = "world-state.json"
+
     public let applicationSupport: URL
     public let worldState: URL
     public let logs: URL
@@ -34,7 +36,7 @@ public struct AppPaths: Sendable {
             create: true
         )
         applicationSupport = base.appending(path: "SnozzySanctuary", directoryHint: .isDirectory)
-        worldState = applicationSupport.appending(path: "world.json")
+        worldState = applicationSupport.appending(path: Self.worldStateFileName)
         logs = applicationSupport.appending(path: "Logs", directoryHint: .isDirectory)
     }
 

@@ -9,13 +9,14 @@ final class DependencyDirectionTests: XCTestCase {
         "SnozzyAssets": ["SnozzyDomain"],
         "SnozzyAudio": ["SnozzyDomain"],
         "SnozzyPlatform": ["SnozzyDomain"],
+        "SnozzyRuntime": ["SnozzyAudio", "SnozzyData", "SnozzyDomain", "SnozzyPlatform", "SnozzyWorld"],
         "SnozzyScene": ["SnozzyDomain", "SnozzyWorld", "SnozzyAssets"],
-        "SnozzyUI": ["SnozzyWorld", "SnozzyScene", "SnozzyPlatform"],
+        "SnozzyUI": ["SnozzyDomain", "SnozzyWorld", "SnozzyScene", "SnozzyPlatform"],
         "SnozzySanctuaryApp": [
             "SnozzyDomain", "SnozzyWorld", "SnozzyData", "SnozzyAssets",
-            "SnozzyAudio", "SnozzyPlatform", "SnozzyScene", "SnozzyUI"
+            "SnozzyAudio", "SnozzyPlatform", "SnozzyRuntime", "SnozzyScene", "SnozzyUI"
         ],
-        "SnozzyLab": ["SnozzyWorld", "SnozzyScene", "SnozzyUI"]
+        "SnozzyLab": ["SnozzyDomain", "SnozzyWorld", "SnozzyScene", "SnozzyUI"]
     ]
 
     func testSourceImportsFollowDependencyDirection() throws {

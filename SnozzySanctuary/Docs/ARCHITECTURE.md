@@ -7,7 +7,8 @@ external input
     -> AppEvent
     -> WorldReducer (pure)
     -> WorldState + [Effect]
-    -> boundary handlers
+    -> SnozzyRuntime drains effects to stability
+    -> one heartbeat / coalesced save / random / audio / performance
 
 WorldState + one tick
     -> SceneSnapshot
@@ -16,9 +17,13 @@ WorldState + one tick
 
 Business code never calls `Date`, system randomness, or constructs a timer. Platform code supplies `Clock` and `RandomSource`; event payloads carry their resolved values. The reducer is therefore replayable byte-for-byte from the same initial state and event stream.
 
+`PerformanceState` is process-local even though it remains in reducer state for coordination. Runtime strips active/queued performances from every durable save and sanitizes older saves on launch. Lifecycle generations isolate cancelled drains, so a stopped generation cannot recreate heartbeat or performance tasks. Persistence failures become observable ready/starting/read-only/failed state consumed by production UI.
+
 The scene receives one immutable `SceneSnapshot` per UI tick. Face, body, light, particles, focus feedback, and future action rigs must read that same snapshot. A scene subview must never read a clock independently.
 
-`SceneSurface` is the only production scene composition. The app and `SnozzyLab` instantiate it directly. Diagnostic views may frame or annotate it, but may not recreate its room/character/foreground layers.
+`SceneSurface` is the only production scene composition. The app and `SnozzyLab --scenesnapshot` instantiate it directly. `--rootsnapshot` renders the real `SanctuaryRootView` with a fixed clock and side-effect-free injected sink. Diagnostic views may frame or annotate the production surface, but may not recreate its room/character/foreground layers.
+
+The immutable production layer order is `window → room → legs → body → desk → hands/props → face → feedback`. Complete-room and floating-companion presentations both consume `CharacterComposite` and one `SceneSnapshot`; the compact surface only changes the crop. All layers share one 1536×1024 canvas transform, preserving 3:2 without stretching at every window ratio.
 
 ## Dependency direction
 
@@ -26,6 +31,9 @@ The scene receives one immutable `SceneSnapshot` per UI tick. Face, body, light,
 SnozzyDomain
   <- SnozzyWorld
   <- SnozzyData / SnozzyAssets / SnozzyAudio / SnozzyPlatform
+
+SnozzyWorld + SnozzyData + SnozzyAudio + SnozzyPlatform
+  <- SnozzyRuntime
 
 SnozzyDomain + SnozzyWorld + SnozzyAssets
   <- SnozzyScene
@@ -36,7 +44,7 @@ SnozzyWorld + SnozzyScene + SnozzyPlatform
 all modules
   <- SnozzySanctuaryApp
 
-SnozzyWorld + SnozzyScene + SnozzyUI
+SnozzyDomain + SnozzyWorld + SnozzyScene + SnozzyUI
   <- SnozzyLab
 ```
 
