@@ -1,0 +1,12 @@
+{
+  "logicalHeight" : 1024,
+  "logicalWidth" : 1536,
+  "records" : [
+    {
+      "id" : "storylets.phase-one",
+      "kind" : "storylet",
+      "relativePath" : "Storylets/phase-one.json"
+    }
+  ],
+  "schemaVersion" : 1
+}
