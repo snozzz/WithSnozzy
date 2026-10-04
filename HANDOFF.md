@@ -1374,6 +1374,11 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 同一类还有：自检一律配 `WITHSNOZZY_DATA_DIR`——改 `HOME` 没用，Application
 Support 按账户解析；`--storysmoke` 不设它直接拒跑。
 
+**86. 垫在不透明层后面的东西，等于没画。** `SkyView` 一直在城市后面画一层 `Stars`，
+而 `CyberCity` 的 `.background` 是不透明的天空渐变——那层星星从来没上过屏，
+夜空一直是空的。和第 70 条是一类：**没有读者的那份不会有人发现它不对**。
+现在星星由城市自己在天空和楼之间画；`--storystrip` 量它确实改了窗洞里的像素。
+
 ## 四、验证纪律
 
 这个项目里"看着对"和"真的对"经常不是一回事，所以**把主观的东西做成可测的**：
@@ -1405,6 +1410,9 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
 - **主线在真实 AppState 里接没接上**：`WITHSNOZZY_DATA_DIR=临时目录 --storysmoke`。
   不开窗口，按真实接线走：开场问候 → 序章 → 写完第一首（懒腰、凑近、笑）→
   专辑播放列表 +1 → 专注中写完的那首等休息才演
+- **主线在房间里的痕迹**：`--storystrip out.png`。昼/黄昏/夜对照，量三件事：
+  夜里 0→12 颗星只改窗洞里的像素（实测 822 个，全在窗洞内）、白天 0 像素、
+  写歌卷帘只画在侧屏多边形里
 - **「她的专辑」面板长什么样**：`--storypanel out.png`。系统 `Toggle(.switch)`
   在 `ImageRenderer` 里画成一个黄底禁止符占位，app 里是正常开关，不是 bug
 - **长动作撞上的时候有没有硬切**：`--performcheck`。用真实 `CloseUp`/`ActionRig`/
@@ -1593,6 +1601,10 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
     不念待办）。序章在第一次打开时问候之后演
   - **日子**：一起的第 7/30/100/365 天各有一拍；隔三天以上再见说"好久不见"；
     节日（含农历，用系统农历日历算，不写死日期表）开口第一句换掉普通问候
+  - **画面里看得见**：不专注的时候她有两成时间在"写歌"（第六档活动，侧屏
+    叠一层钢琴卷帘：琴键、音符块、扫过去的播放线，扫到的音符亮一下）；
+    夜里窗外按写完的首数亮星，十二颗连成一条上行再回落的旋律线，
+    画在楼**之前**（被楼挡住）、白天看不见、雨雪天压掉大半
   - 闲聊时三成概率念叨正在写的那首；对话的上下文、MCP 状态、菜单栏都知道
     专辑写到哪儿；控制条上专辑图标有新页没看时亮一个小点
   - 存档 `story.json` 手写 `init(from:)`；读不出来先备份成 `story-unreadable-*.json`
@@ -2141,6 +2153,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actioncheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --performcheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storypanel /tmp/story.png
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storystrip /tmp/storystrip.png
 WITHSNOZZY_DATA_DIR=$(mktemp -d) dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storysmoke
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip /tmp/compact.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip /tmp/drowsy.png

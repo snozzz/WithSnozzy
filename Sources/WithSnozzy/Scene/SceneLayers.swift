@@ -97,10 +97,12 @@ struct SceneLayers<Room: View, Figure: View>: View {
 extension SceneLayers where Room == SceneRoomLayer, Figure == SceneFigureLayers {
     /// 判据用：一帧固定输入，整张画出来。
     init(assets: SceneAssets, frame: SceneFrame, size: CGSize,
-         weather: Weather = .clear, roomT: Double? = nil, zoom: CGFloat = 1) {
+         weather: Weather = .clear, roomT: Double? = nil, constellation: Int = 0,
+         zoom: CGFloat = 1) {
         self.zoom = zoom
         self.room = SceneRoomLayer(assets: assets, palette: frame.palette,
-                                   weather: weather, t: roomT ?? frame.t)
+                                   weather: weather, t: roomT ?? frame.t,
+                                   constellation: constellation)
         self.figure = SceneFigureLayers(assets: assets, frame: frame, size: size)
     }
 }
@@ -112,10 +114,13 @@ struct SceneRoomLayer: View {
     let palette: Palette
     let weather: Weather
     let t: Double
+    /// 她的专辑写完了几首：夜里窗外亮几颗星。
+    var constellation = 0
 
     var body: some View {
         if assets.isAvailable {
-            PaintedRoomBackdrop(assets: assets, palette: palette, weather: weather, t: t)
+            PaintedRoomBackdrop(assets: assets, palette: palette, weather: weather, t: t,
+                                constellation: constellation)
         } else {
             RoomBackdrop(palette: palette, weather: weather, t: t)
         }

@@ -74,16 +74,16 @@ struct SkyView: View {
     let palette: Palette
     let weather: Weather
     var t: Double = 0
+    var constellation = 0
 
     var body: some View {
-        ZStack {
-            if palette.star > 0.01 {
-                Stars(opacity: palette.star * 0.6)
-            }
-            // 城市自带天空渐变和降水。之前是「渐变 + 灰色方块剪影」，
-            // 配暖色手绘房还行，配霓虹房间就整个出戏了。
-            CyberCity(palette: palette, weather: weather, t: t)
-        }
+        // 城市自带天空渐变、星星和降水。之前是「渐变 + 灰色方块剪影」，
+        // 配暖色手绘房还行，配霓虹房间就整个出戏了。
+        //
+        // 原来这里还在城市**后面**垫了一层 `Stars`——而 `CyberCity` 的背景是
+        // 不透明的天空渐变，那层星星从来没上过屏。星星现在由城市自己画，
+        // 夹在天空和楼之间。
+        CyberCity(palette: palette, weather: weather, t: t, constellation: constellation)
     }
 }
 

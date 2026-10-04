@@ -10,6 +10,8 @@ enum SnozzyActivity: String, CaseIterable, Hashable {
     case planning
     case resting
     case takingBreak
+    /// 写自己的歌。不专注的时候她会做这件事——主线那张专辑就是这么写出来的。
+    case composing
 
     /// 面板上显示的名字。放在枚举上而不是面板里——加一档活动时
     /// 编译器会直接指着这里说少了一个分支，写在面板里只会悄悄少一行。
@@ -20,6 +22,7 @@ enum SnozzyActivity: String, CaseIterable, Hashable {
         case .planning: "想事情"
         case .resting: "发会儿呆"
         case .takingBreak: "歇一歇"
+        case .composing: "写歌"
         }
     }
 
@@ -31,6 +34,7 @@ enum SnozzyActivity: String, CaseIterable, Hashable {
         case .planning: "lightbulb"
         case .resting: "cloud"
         case .takingBreak: "cup.and.saucer"
+        case .composing: "music.quarternote.3"
         }
     }
 }
@@ -168,6 +172,13 @@ enum ActivityRig {
                                screenLevel: playing ? 0.34 : 0.18,
                                steamLevel: 1.0, phoneLevel: 0,
                                playerMotion: playerMotion)
+        case .composing:
+            // 看着侧屏上的卷帘，一下一下地点音符：比敲代码稀，比发呆密。
+            return ActivityCue(activity: activity,
+                               lookX: -0.58, lookY: -0.26, lookWeight: 0.80,
+                               typingChance: 56, typingBurst: 0.42,
+                               screenLevel: 0.96, steamLevel: 0.26, phoneLevel: 0,
+                               playerMotion: playerMotion)
         }
     }
 
@@ -278,6 +289,7 @@ enum ActivityRig {
             case .idle:
                 ok = ok && counts[.resting, default: 0] > 0
                     && counts[.typing, default: 0] > 0
+                    && counts[.composing, default: 0] > 0
             }
 
             // 58 秒档位自身也必须从上一张完整 cue 连续过渡到下一张。
@@ -402,7 +414,8 @@ enum ActivityRig {
         case .longBreak:
             weights = [(.takingBreak, 44), (.resting, 56)]
         case .idle:
-            weights = [(.typing, 12), (.researching, 17), (.planning, 13), (.resting, 58)]
+            weights = [(.typing, 10), (.researching, 14), (.planning, 11),
+                       (.composing, 19), (.resting, 46)]
         }
 
         let total = weights.reduce(UInt64(0)) { $0 + $1.1 }

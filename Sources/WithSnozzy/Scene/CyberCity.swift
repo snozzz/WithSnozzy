@@ -14,6 +14,8 @@ struct CyberCity: View {
     let palette: Palette
     let weather: Weather
     var t: Double = 0
+    /// 她的专辑写完了几首。夜里窗外就亮几颗星，连成一条旋律线（见 `drawSky`）。
+    var constellation = 0
     /// Production keeps this at `.normal`. Offline citystrip probes use the
     /// other values to prove that the pixel gates catch known regressions.
     var diagnostic: CityDiagnosticVariant = .normal
@@ -68,6 +70,8 @@ struct CyberCity: View {
     private func draw(ctx: inout GraphicsContext, size: CGSize,
                       atmosphere: CityAtmosphere) {
         let W = size.width, H = size.height
+
+        drawSky(ctx: &ctx, size: size)
 
         for (index, layer) in Self.layers.enumerated() {
             // 越远的层越偏天空色、对比越低；近景只压暗轮廓，不参与全局洗色。
@@ -167,6 +171,60 @@ struct CyberCity: View {
                         .color(0.95 * atmosphere.flyerStrength)))
         }
     }
+
+    // MARK: - 星星
+
+    /// 夜空里的散星，以及她写完的那几首连成的"旋律线"。
+    ///
+    /// 画在楼**之前**：楼和塔尖自然把低处的星挡住。白天看不见，黄昏淡淡几颗，
+    /// 下雨下雪时被云压掉大半。旋律线的十二个点是一段上行再回落的音高轮廓——
+    /// 写完一首亮一颗，相邻两颗都亮了才连线。
+    private func drawSky(ctx: inout GraphicsContext, size: CGSize) {
+        let night = clamp(palette.star, 0, 1) * (weather == .clear ? 1 : 0.25)
+        guard night > 0.02 else { return }
+        let W = size.width, H = size.height
+
+        var dust = Path()
+        for (x, y, b) in Self.dust {
+            let r = 0.5 + b * 0.7
+            dust.addEllipse(in: CGRect(x: x * W - r, y: y * H - r, width: r * 2, height: r * 2))
+        }
+        ctx.fill(dust, with: .color(.white.opacity(0.55 * night)))
+
+        let lit = min(max(constellation, 0), Self.melody.count)
+        guard lit > 0 else { return }
+        let points = Self.melody.map { CGPoint(x: $0.x * W, y: $0.y * H) }
+        var line = Path()
+        for i in 1..<lit {
+            line.move(to: points[i - 1])
+            line.addLine(to: points[i])
+        }
+        ctx.stroke(line, with: .color(Palette.neonWarm.lighter(0.5).color(0.20 * night)),
+                   lineWidth: 0.8)
+        for i in 0..<lit {
+            let p = points[i]
+            let twinkle = 0.78 + 0.22 * sin(t * (0.8 + Double(i) * 0.11) + Double(i) * 1.7)
+            // 柔光用径向渐变：平涂的圆放大看是一圈光环，不像星。
+            ctx.fill(Path(ellipseIn: CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10)),
+                     with: .radialGradient(
+                        Gradient(colors: [Palette.neonWarm.color(0.38 * night * twinkle),
+                                          Palette.neonWarm.color(0)]),
+                        center: p, startRadius: 0, endRadius: 5))
+            ctx.fill(Path(ellipseIn: CGRect(x: p.x - 1.4, y: p.y - 1.4, width: 2.8, height: 2.8)),
+                     with: .color(Palette.neonWarm.lighter(0.7).color(0.95 * night * twinkle)))
+        }
+    }
+
+    /// 十二颗星的位置（0…1，y 从上往下）。都在最高的楼顶之上。
+    static let melody: [(x: Double, y: Double)] = [
+        (0.10, 0.19), (0.17, 0.13), (0.24, 0.16), (0.31, 0.09), (0.38, 0.12), (0.45, 0.06),
+        (0.52, 0.10), (0.59, 0.15), (0.66, 0.11), (0.73, 0.07), (0.80, 0.10), (0.88, 0.05),
+    ]
+
+    private static let dust: [(Double, Double, Double)] = {
+        let rnd = makeRandom(0x57A2_D057)
+        return (0..<26).map { _ in (rnd(), rnd() * 0.32, rnd()) }
+    }()
 
     // MARK: - 预生成的几何
 

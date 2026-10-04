@@ -434,6 +434,139 @@ enum StoryCheck {
         return ok
     }
 
+    // MARK: - 画面里的主线
+
+    static var stripPath: String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--storystrip"), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    /// 主线在房间里的两处痕迹：侧屏的"写歌"卷帘，夜里窗外的旋律星座。
+    /// 出一张对照图，再量三件事——星星只改窗洞里的像素、白天一颗都看不见、
+    /// 写歌的卷帘只画在侧屏里。
+    static func runStrip(path: String) -> Bool {
+        ok = true
+        let assets = SceneAssets()
+        assets.load()
+        guard assets.isAvailable, assets.hasRenderedCharacter else {
+            print("房间/角色素材没加载到")
+            return false
+        }
+        let size = CGSize(width: 720, height: 480)
+        struct Cell { let label: String; let palette: Palette; let weather: Weather
+                      let stars: Int; let activity: SnozzyActivity; let playing: Bool }
+        let cells = [
+            Cell(label: "DAY · 写歌", palette: .day, weather: .clear, stars: 3,
+                 activity: .composing, playing: false),
+            Cell(label: "DUSK · 写歌 · 放着歌", palette: .dusk, weather: .clear, stars: 5,
+                 activity: .composing, playing: true),
+            Cell(label: "NIGHT · 写完 5 首", palette: .night, weather: .clear, stars: 5,
+                 activity: .resting, playing: false),
+            Cell(label: "NIGHT · 十二首", palette: .night, weather: .clear, stars: 12,
+                 activity: .resting, playing: false),
+        ]
+        func scene(_ c: Cell, stars: Int? = nil) -> some View {
+            let t = 41.3
+            let cue = ActivityRig.preview(c.activity, playing: c.playing)
+            let frame = SceneFrame(
+                palette: c.palette, t: t,
+                pose: SnozzyRig.pose(time: t, kick: 0, playing: c.playing),
+                face: FaceRig.expression(t: t, playing: c.playing, mood: 0.6, drowsy: 0,
+                                         working: false, speaking: false, activity: cue),
+                headphones: c.playing, activity: cue, playing: c.playing,
+                typingFrame: TypingRig.frame(at: t, working: false,
+                                             frames: assets.hands.frames, activity: cue))
+            return SceneLayers(assets: assets, frame: frame, size: size,
+                               weather: c.weather, constellation: stars ?? c.stars)
+                .frame(width: size.width, height: size.height)
+        }
+        let sheet = VStack(spacing: 4) {
+            ForEach(0..<2, id: \.self) { row in
+                HStack(spacing: 4) {
+                    ForEach(0..<2, id: \.self) { col in
+                        let c = cells[row * 2 + col]
+                        scene(c).overlay(alignment: .topLeading) {
+                            Text(c.label)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(.black.opacity(0.4), in: Capsule())
+                                .padding(8)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(white: 0.1))
+        let r = ImageRenderer(content: sheet)
+        r.scale = 1
+        if let image = r.nsImage, let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path))
+            print("已写入 \(path)")
+        }
+
+        func pixels<V: View>(_ v: V) -> [UInt8] {
+            let r = ImageRenderer(content: v.frame(width: size.width, height: size.height))
+            r.scale = 1
+            guard let cg = r.cgImage, let data = cg.dataProvider?.data as Data? else { return [] }
+            return [UInt8](data)
+        }
+        /// 差异像素的个数和包围盒（窗口坐标）。
+        func diff(_ a: [UInt8], _ b: [UInt8]) -> (count: Int, box: CGRect) {
+            guard a.count == b.count, !a.isEmpty else { return (Int.max, .null) }
+            let w = Int(size.width)
+            var n = 0
+            var box = CGRect.null
+            for i in stride(from: 0, to: a.count - 3, by: 4) {
+                let d = max(abs(Int(a[i]) - Int(b[i])), abs(Int(a[i + 1]) - Int(b[i + 1])),
+                            abs(Int(a[i + 2]) - Int(b[i + 2])))
+                guard d > 6 else { continue }
+                n += 1
+                let p = i / 4
+                box = box.union(CGRect(x: p % w, y: p / w, width: 1, height: 1))
+            }
+            return (n, box)
+        }
+        func describe(_ r: CGRect) -> String {
+            r.isNull ? "无" : "(\(Int(r.minX)),\(Int(r.minY)))-(\(Int(r.maxX)),\(Int(r.maxY)))"
+        }
+
+        print("== 窗外的旋律星座")
+        let window = assets.windowFrame(in: size) ?? .zero
+        let night = cells[3]
+        let lit = diff(pixels(scene(night, stars: 0)), pixels(scene(night)))
+        print("  夜里 0 → 12 颗：\(lit.count) 像素变化，范围 \(describe(lit.box))，窗洞 \(describe(window))")
+        check("夜里亮得出来（> 60 像素）", lit.count > 60)
+        check("只改窗洞里的像素", window.insetBy(dx: -2, dy: -2).contains(lit.box))
+        let dayCell = Cell(label: "", palette: .day, weather: .clear, stars: 12,
+                           activity: .resting, playing: false)
+        let day = diff(pixels(scene(dayCell, stars: 0)), pixels(scene(dayCell)))
+        check("白天一颗都看不见（\(day.count) 像素）", day.count == 0)
+        let rainCell = Cell(label: "", palette: .night, weather: .rain, stars: 12,
+                            activity: .resting, playing: false)
+        let rainLit = diff(pixels(scene(rainCell, stars: 0)), pixels(scene(rainCell)))
+        print("  雨夜 0 → 12 颗：\(rainLit.count) 像素")
+
+        print("== 侧屏上的写歌卷帘")
+        func overlay(_ a: SnozzyActivity) -> some View {
+            PaintedRoomActivityOverlay(assets: assets, cue: ActivityRig.preview(a, playing: false),
+                                       palette: .day, playing: false, t: 41.3)
+        }
+        let compose = diff(pixels(overlay(.typing)), pixels(overlay(.composing)))
+        let screen = CGRect(x: 0.165 * size.width, y: 0.346 * size.height,
+                            width: 0.086 * size.width, height: 0.194 * size.height)
+        print("  敲代码 → 写歌：\(compose.count) 像素变化，范围 \(describe(compose.box))，"
+              + "侧屏 \(describe(screen))")
+        check("卷帘只画在侧屏里", screen.insetBy(dx: -2, dy: -2).contains(compose.box)
+              && compose.count > 30)
+        print("STORYSTRIP " + (ok ? "全部通过" : "有不合格项"))
+        return ok
+    }
+
     // MARK: - 面板截图
 
     /// 照真实视图渲「她的专辑」面板：写到第五首、今天陪了一会儿、展开一页日记。

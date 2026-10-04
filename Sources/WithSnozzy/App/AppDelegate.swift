@@ -73,6 +73,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if StoryCheck.requested {
             exit(StoryCheck.run() ? 0 : 1)
         }
+        if let path = StoryCheck.stripPath {
+            exit(StoryCheck.runStrip(path: path) ? 0 : 1)
+        }
         if StoryCheck.smokeRequested {
             exit(StoryCheck.runSmoke() ? 0 : 1)
         }

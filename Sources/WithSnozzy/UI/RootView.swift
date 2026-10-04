@@ -126,7 +126,8 @@ private struct SceneStack: View {
                                             paused: paused || weather == .clear)) { tl in
                         SceneRoomLayer(assets: state.sceneAssets, palette: palette,
                                        weather: weather,
-                                       t: tl.date.timeIntervalSinceReferenceDate)
+                                       t: tl.date.timeIntervalSinceReferenceDate,
+                                       constellation: state.story.state.playableTracks)
                     }
                 } figure: {
                     TimelineView(.animation(minimumInterval: interval, paused: paused)) { tl in

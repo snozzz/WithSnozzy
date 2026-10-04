@@ -10,6 +10,8 @@ struct PaintedRoomBackdrop: View {
     let palette: Palette
     let weather: Weather
     var t: Double = 0
+    /// 她的专辑写完了几首。夜里窗外就亮几颗星（`CyberCity`）。
+    var constellation = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -22,7 +24,8 @@ struct PaintedRoomBackdrop: View {
 
                 // 1. 天空 —— 塞进窗洞
                 if let win = assets.windowFrame(in: size) {
-                    SkyView(palette: palette, weather: weather, t: t)
+                    SkyView(palette: palette, weather: weather, t: t,
+                            constellation: constellation)
                         .frame(width: win.width, height: win.height)
                         // 玻璃：窗外的光往画面里渗一点，再压一道从左上来的反光。
                         // 不做这两笔的话天空像一块贴上去的补丁，边缘是刀切的。
@@ -213,6 +216,7 @@ struct PaintedRoomActivityOverlay: View {
         case .researching: tint = palette.accent
         case .planning: tint = Palette.neonPink
         case .resting, .takingBreak: tint = Palette.neonWarm
+        case .composing: tint = Palette.neonPink.lighter(0.15)
         }
         // 透明度完全跟交叉权重走；若保留固定底数，中点叠两份会突然更亮。
         ctx.fill(screen, with: .color(tint.color(0.115 * level)))
@@ -228,7 +232,45 @@ struct PaintedRoomActivityOverlay: View {
         case .researching: drawResearch(&ctx, size, tint, level)
         case .planning: drawPlan(&ctx, size, tint, level)
         case .resting, .takingBreak: drawPlayer(&ctx, size, tint, level)
+        case .composing: drawCompose(&ctx, size, tint, level)
         }
+    }
+
+    /// 写歌：左边一条琴键，右边是音符块，一根播放线从左往右扫，扫到的音符亮一下。
+    /// 音符的位置是一段固定的两小节，不随机——屏幕上的东西不该每帧换。
+    private static let composeNotes: [(start: Double, row: Int, length: Double)] = [
+        (0.00, 5, 0.11), (0.12, 3, 0.07), (0.20, 4, 0.10), (0.31, 2, 0.15),
+        (0.50, 5, 0.08), (0.59, 6, 0.06), (0.66, 4, 0.12), (0.80, 1, 0.16),
+        (0.04, 7, 0.40), (0.50, 7, 0.44),
+    ]
+
+    private func drawCompose(_ ctx: inout GraphicsContext, _ size: CGSize,
+                             _ tint: RGB, _ level: Double) {
+        let x0 = 0.174, y0 = 0.384, w = 0.066, h = 0.110
+        let keyW = 0.006, rows = 8
+        let rowH = h / Double(rows)
+        // 琴键：黑白相间的一条，只是"这是音乐软件"的暗示
+        for r in 0..<rows {
+            let black = [1, 3, 6].contains(r)
+            ctx.fill(Path(rect(x0, y0 + Double(r) * rowH, keyW, rowH * 0.86, size)),
+                     with: .color((black ? tint.darker(0.4) : tint.lighter(0.6))
+                        .color((black ? 0.18 : 0.30) * level)))
+        }
+        // 播放线：两小节一圈。正在放歌时跟着走，没放就慢慢挪（她在一格格看）
+        let loop = cue.playerMotion > 0.5 ? 4.8 : 14.0
+        let u = (t / loop).truncatingRemainder(dividingBy: 1)
+        let gridX = x0 + keyW + 0.003, gridW = w - keyW - 0.003
+        for n in Self.composeNotes {
+            let lit = u >= n.start && u <= n.start + n.length
+            ctx.fill(Path(roundedRect: rect(gridX + n.start * gridW,
+                                            y0 + Double(n.row) * rowH + rowH * 0.18,
+                                            n.length * gridW, rowH * 0.64, size),
+                          cornerRadius: 1),
+                     with: .color(tint.lighter(lit ? 0.55 : 0.25)
+                        .color((lit ? 0.62 : 0.30) * level)))
+        }
+        ctx.fill(Path(rect(gridX + u * gridW, y0, 0.0009, h, size)),
+                 with: .color(.white.opacity(0.42 * level)))
     }
 
     private func drawCode(_ ctx: inout GraphicsContext, _ size: CGSize,
