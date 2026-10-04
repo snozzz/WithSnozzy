@@ -17,3 +17,9 @@ __pycache__/
 Art/repaint_*.png
 Art/scene_*.png
 Art/blocking_for_repaint.png
+
+# 在仓库根目录误跑 swiftc 留下的编译中间文件
+*.o
+*.d
+*.swiftdeps
+*.swiftdeps~

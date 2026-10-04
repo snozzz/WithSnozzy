@@ -8,9 +8,20 @@ import Foundation
 enum Store {
 
     /// `~/Library/Application Support/WithSnozzy/`
+    ///
+    /// `WITHSNOZZY_DATA_DIR` 可以把它整个指到别处。给自检和截图用：
+    /// 改 `HOME` 没用（Application Support 按账户解析，不看环境变量），
+    /// 而自检写进用户真正的存档会污染被测对象（第 59 条）。
     static let directory: URL = {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent("WithSnozzy", isDirectory: true)
+        let dir: URL
+        if let custom = ProcessInfo.processInfo.environment["WITHSNOZZY_DATA_DIR"],
+           !custom.isEmpty {
+            dir = URL(fileURLWithPath: custom, isDirectory: true)
+        } else {
+            let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                                in: .userDomainMask)[0]
+            dir = base.appendingPathComponent("WithSnozzy", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()

@@ -158,11 +158,28 @@ enum MCPServer {
         let stamp = ISO8601DateFormatter().string(from: Date())
         let line = "\(stamp)  \(text)\n"
         let url = Store.directory.appendingPathComponent("mcp.log")
+        trimLog(at: url)
         if let h = try? FileHandle(forWritingTo: url) {
             h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close()
         } else {
             try? Data(line.utf8).write(to: url)
         }
         log(text)
+    }
+
+    /// 日志上限。ChatGPT 每开一个会话都会握手一次，这个文件只增不减——
+    /// 两个月攒到 187KB，全是 initialize/tools/list。超了只留后半截，按行切开。
+    /// 几个 MCP 进程同时轮转最多丢一两行握手记录，换来不用加锁。
+    static let logLimit = 256 * 1024
+
+    static func trimLog(at url: URL) {
+        guard let size = try? FileManager.default
+                .attributesOfItem(atPath: url.path)[.size] as? Int,
+              size > logLimit,
+              let data = try? Data(contentsOf: url) else { return }
+        let tail = data.suffix(logLimit / 2)
+        let start = tail.firstIndex(of: UInt8(ascii: "\n")).map { tail.index(after: $0) }
+            ?? tail.startIndex
+        try? Data(tail[start...]).write(to: url, options: .atomic)
     }
 }
