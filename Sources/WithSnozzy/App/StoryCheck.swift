@@ -59,7 +59,8 @@ enum StoryCheck {
 
         // 气泡：12 号圆体、最宽 210 点（左右各 13 点内边距）、最多两行。
         // 用真实 SwiftUI 排版量行数，不数字数——标点、全半角宽度都不一样。
-        var beats: [StoryBeat] = [.prologue, .demo(0), .demo(37)]
+        var beats: [StoryBeat] = [.prologue, .demo(0), .demo(37),
+                                  .note(String(repeating: "写", count: StoryEngine.noteLimit))]
         beats += (0..<Story.chapterCount).map(StoryBeat.chapter)
         beats += Story.anniversaries.keys.map(StoryBeat.anniversary)
         var bubbleLines = beats.flatMap(\.lines)
@@ -214,6 +215,20 @@ enum StoryCheck {
         }
         check("相伴天数按天算（\(m.metDays) 天），第七天纪念日只出现一次",
               m.metDays == 8 && anniversaries == [.anniversary(7)])
+
+        // 给明天留一句：当天不念，第二天第一次在电脑前时念，念过就清掉
+        var n = StoryEngine.fresh(at: day0, focusMinutes: 0)
+        n.pending = []
+        StoryEngine.leaveNote(&n, "  记得把导出模块\n写完，然后早点睡觉别熬了  ", at: day0)
+        let sameDay = StoryEngine.credit(&n, .minute(focusing: false), at: day0.addingTimeInterval(60))
+        let nextDay = StoryEngine.credit(&n, .minute(focusing: false), at: day0.addingTimeInterval(86400))
+        let noteBeat = nextDay.first { if case .note = $0 { true } else { false } }
+        check("留言截到 \(StoryEngine.noteLimit) 字、去掉换行（「\(n.pending.first.map { "\($0.lines.last ?? "")" } ?? "")」）",
+              noteBeat.map { $0.lines.last!.count <= StoryEngine.noteLimit + 2 } ?? false)
+        check("当天不念、第二天念一次，念完清掉",
+              sameDay.isEmpty && noteBeat != nil && n.note == nil
+                && StoryEngine.credit(&n, .minute(focusing: false),
+                                      at: day0.addingTimeInterval(86460)).isEmpty)
 
         let fresh = StoryEngine.fresh(at: day0, focusMinutes: 875)
         check("之前专注过的时间最多折一小时进来（\(Int(fresh.progress)) 分），序章排在第一拍",

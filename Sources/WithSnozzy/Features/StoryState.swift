@@ -10,6 +10,8 @@ enum StoryBeat: Codable, Hashable {
     case demo(Int)
     /// 一起度过的第 n 天。
     case anniversary(Int)
+    /// 昨天的你留给今天的一句话。
+    case note(String)
 
     /// 这一拍她说的三句（或两句）。
     var lines: [String] {
@@ -21,6 +23,7 @@ enum StoryBeat: Codable, Hashable {
              "以后写一段，就放给你听一段。"]
         case .demo(let n): Story.demoLines(n)
         case .anniversary(let d): Story.anniversaries[d]?.lines ?? []
+        case .note(let text): ["昨天的你，留了一句话。", "「\(text)」"]
         }
     }
 
@@ -28,7 +31,7 @@ enum StoryBeat: Codable, Hashable {
     var stretchesFirst: Bool {
         switch self {
         case .chapter, .demo: true
-        case .prologue, .anniversary: false
+        case .prologue, .anniversary, .note: false
         }
     }
 }
@@ -83,6 +86,9 @@ struct StoryState: Codable, Equatable {
     var pending: [StoryBeat] = []
     /// 面板里还没看过的新页数。控制条上那个小点。
     var unread = 0
+    /// 给明天留的一句话，和写下它的那天。第二天第一次见面时她念出来。
+    var note: String?
+    var noteDay: String?
 
     init() {}
 
@@ -105,6 +111,8 @@ struct StoryState: Codable, Equatable {
         lastSeenDay = get(.lastSeenDay, d.lastSeenDay)
         pending = get(.pending, d.pending)
         unread = max(get(.unread, d.unread), 0)
+        note = get(.note, d.note)
+        noteDay = get(.noteDay, d.noteDay)
     }
 
     static let storeName = "story"
@@ -176,6 +184,12 @@ enum StoryEngine {
             if focusing { d.focus += 1 }
             points = focusing ? focusWeight : 1
             s.lastSeenDay = day
+            // 新的一天第一次见到你：昨天留的那句话该念了。
+            if let note = s.note, let written = s.noteDay, day > written {
+                beats.append(.note(note))
+                s.note = nil
+                s.noteDay = nil
+            }
             if d.company == metMinutes, s.lastMetDay != day {
                 s.metDays += 1
                 s.lastMetDay = day
@@ -230,6 +244,17 @@ enum StoryEngine {
     private static func prune(_ s: inout StoryState) {
         guard s.days.count > keepDays else { return }
         for key in s.days.keys.sorted().dropLast(keepDays) { s.days[key] = nil }
+    }
+
+    /// 给明天留的一句话最多多长：念出来要装进两行气泡，引号还占两个字。
+    static let noteLimit = 18
+
+    /// 留一句（覆盖今天之前留的）。空的就是撤回。
+    static func leaveNote(_ s: inout StoryState, _ text: String, at date: Date) {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        s.note = clean.isEmpty ? nil : String(clean.prefix(noteLimit))
+        s.noteDay = clean.isEmpty ? nil : dayKey(date)
     }
 
     /// 上次见面隔了几天。nil 是第一次。

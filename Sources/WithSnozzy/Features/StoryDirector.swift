@@ -188,6 +188,25 @@ final class StoryDirector {
         playPending()
     }
 
+    /// 给明天留一句。她回一句"记下了"。
+    func leaveNote(_ text: String, at now: Date = Date()) {
+        StoryEngine.leaveNote(&state, text, at: now)
+        saver?.schedule()
+        if state.note != nil { say?("记下了。明天念给你听。") }
+    }
+
+    /// 电台放到她写的歌时，她偶尔认出来说一句。二十分钟最多一次——
+    /// 每首都说就成了报幕。
+    @ObservationIgnored private var lastListeningLine = Date.distantPast
+    func noticeListening(to track: Int, at now: Date = Date()) {
+        guard now.timeIntervalSince(lastListeningLine) > 1200,
+              Double.random(in: 0...1) < 0.5 else { return }
+        lastListeningLine = now
+        let title = Self.trackTitle(track)
+        say?(["这首是《\(title)》。", "你在听《\(title)》呀。",
+              "《\(title)》……被你听到了。"].randomElement()!)
+    }
+
     func markRead() {
         guard state.unread > 0 else { return }
         state.unread = 0

@@ -10,6 +10,7 @@ struct StoryPanel: View {
     @Environment(AppState.self) private var state
     /// 展开着哪一页日记。-1 是序。
     @State private var open: Int?
+    @State private var noteDraft = ""
 
     var body: some View {
         let story = state.story
@@ -19,6 +20,7 @@ struct StoryPanel: View {
             header(story)
             writing(story)
             todayRow(story.today)
+            noteField(st)
             albumToggle(st)
 
             section("曲目")
@@ -196,6 +198,45 @@ struct StoryPanel: View {
                 .foregroundStyle(.white.opacity(0.35))
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// 给明天留一句。第二天第一次见面时她念出来。
+    private func noteField(_ st: StoryState) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: "envelope")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.35))
+                TextField(st.note == nil ? "给明天留一句……" : "「\(st.note!)」",
+                          text: $noteDraft)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .onSubmit {
+                        state.story.leaveNote(noteDraft)
+                        noteDraft = ""
+                    }
+                    .onChange(of: noteDraft) { _, new in
+                        if new.count > StoryEngine.noteLimit {
+                            noteDraft = String(new.prefix(StoryEngine.noteLimit))
+                        }
+                    }
+                Text("\(noteDraft.count)/\(StoryEngine.noteLimit)")
+                    .font(.system(size: 9, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(noteDraft.isEmpty ? 0 : 0.3))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background {
+                RoundedRectangle(cornerRadius: Metrics.smallCorner, style: .continuous)
+                    .fill(.white.opacity(0.07))
+            }
+            Text(st.note == nil ? "明天第一次见面的时候，她会念给你听。"
+                 : "留好了。想改就重新写一句。")
+                .font(.system(size: 9, design: .rounded))
+                .foregroundStyle(.white.opacity(0.3))
+        }
     }
 
     private func albumToggle(_ st: StoryState) -> some View {

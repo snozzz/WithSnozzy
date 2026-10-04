@@ -728,6 +728,9 @@ final class AppState {
     private func refreshRadioInfo() {
         lastSongSerial = audio.songSerial
         let album = audio.albumTrack
+        if album >= 0, album != albumTrackPlaying, isPlaying {
+            story.noticeListening(to: album)
+        }
         albumTrackPlaying = album
         radioTitle = album >= 0 ? "《\(StoryDirector.trackTitle(album))》" : audio.trackTitle
         radioTempo = album >= 0 ? "Snozzy · \(audio.tempoText)" : audio.tempoText
