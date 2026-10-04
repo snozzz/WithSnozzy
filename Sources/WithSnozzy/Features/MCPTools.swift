@@ -307,6 +307,8 @@ struct SnozzyState: Codable {
     var todayMinutes = 0
     var todos: [Todo] = []
     var memories: [String] = []
+    /// 她的专辑写到哪儿了（"未命名 3/12"）。可选：旧 state.json 里没有这一项。
+    var album: String?
 
     /// 读一份此刻的状态。
     ///
@@ -345,6 +347,7 @@ struct SnozzyState: Codable {
         default: break
         }
         if todayMinutes > 0 { lines.append("他今天专注了 \(todayMinutes) 分钟。") }
+        if let album { lines.append("她的专辑：\(album) 首。") }
 
         let pending = todos.filter { !$0.done }.map(\.title)
         lines.append(pending.isEmpty

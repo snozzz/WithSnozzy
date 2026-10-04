@@ -119,7 +119,12 @@ final class ActionRig {
     /// 正在倒放让位（见 `release`）。
     private(set) var isReleasing = false
     /// 刚演完不久。自动请求要等它过去，手动的不管。
-    var isCoolingDown: Bool { Date().timeIntervalSince(lastFinished) <= kind.cooldown }
+    ///
+    /// 看的是**真正演过**的那次，不是 `lastFinished`：后者在开始自发节拍时
+    /// 被设成"现在"（免得一启动就演），拿它判冷却的话，启动后 90 秒内
+    /// 所有自动请求——包括主线写完一首时那一下懒腰——都会被丢掉。
+    var isCoolingDown: Bool { Date().timeIntervalSince(lastPerformed) <= kind.cooldown }
+    private var lastPerformed = Date.distantPast
     /// 距下一次自发还有多少秒。给动作面板显示，别的地方不用。
     var secondsUntilNext: Double {
         max(0, dueAfter - Date().timeIntervalSince(lastFinished))
@@ -248,6 +253,7 @@ final class ActionRig {
     /// 一次演完（或被打断）之后重新计时，并重新抽下一次的间隔。
     private func settle() {
         lastFinished = Date()
+        lastPerformed = lastFinished
         if let range = kind.idleRange { dueAfter = Double.random(in: range) }
     }
 

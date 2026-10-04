@@ -185,6 +185,8 @@ struct PanelHost: View {
                 FocusPanel(palette: palette)
             case .tasks:
                 TasksPanel(palette: palette)
+            case .story:
+                StoryPanel(palette: palette)
             case .chat:
                 ChatPanel(palette: palette)
             case .library:

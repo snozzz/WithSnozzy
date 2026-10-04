@@ -25,6 +25,8 @@ struct AppSettings: Codable {
     var speakAloud = true
     /// 她的嗓子用哪一把。
     var voiceEngine: VoiceEngine = .system
+    /// 电台放她的专辑。
+    var albumMode = false
 
     static let storeName = "settings"
 
@@ -59,6 +61,7 @@ struct AppSettings: Codable {
         chatBackend = get(.chatBackend, d.chatBackend)
         speakAloud = get(.speakAloud, d.speakAloud)
         voiceEngine = get(.voiceEngine, d.voiceEngine)
+        albumMode = get(.albumMode, d.albumMode)
     }
 
     init() {}

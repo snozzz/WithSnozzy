@@ -124,6 +124,15 @@ struct Dock: View {
                     symbol: p.symbol, size: 14,
                     isOn: state.panel == p, tint: palette.accent, help: p.title
                 ) { state.togglePanel(p) }
+                // 专辑有新的一页没看：右上角一个小点。不弹通知，不抢画面。
+                .overlay(alignment: .topTrailing) {
+                    if p == .story, state.story.state.unread > 0, state.panel != .story {
+                        Circle().fill(palette.accent.color)
+                            .frame(width: 6, height: 6)
+                            .offset(x: -3, y: 3)
+                            .allowsHitTesting(false)
+                    }
+                }
             }
         }
         .padding(.horizontal, 16)

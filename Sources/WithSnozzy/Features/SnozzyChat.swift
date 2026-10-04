@@ -122,6 +122,8 @@ final class SnozzyChat {
     var onInterrupted: (() -> Void)?
     /// 设置变了，该存盘了。
     var onChanged: (() -> Void)?
+    /// 你说了一句。主线把它记成一笔陪伴。
+    var onSent: (() -> Void)?
 
     /// 拼提示词时带上的实时状态。由 `AppState` 现给——
     /// 它知道几点了、在放什么、待办还剩什么，这个类不该去猜。
@@ -186,6 +188,7 @@ final class SnozzyChat {
             turns.append(reply)
             trimAndSave()
             failure = nil
+            onSent?()
             onReply?(acknowledgement)
             return
         }
@@ -197,6 +200,7 @@ final class SnozzyChat {
             failure = "对话后端已关闭；仍可使用“记住……”和“忘掉：……”。"
             return
         }
+        onSent?()
         activeTurnID = userTurn.id
         isThinking = true
         streaming = ""

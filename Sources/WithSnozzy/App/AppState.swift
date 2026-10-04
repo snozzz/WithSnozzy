@@ -3,7 +3,7 @@ import SwiftUI
 
 /// 侧边可展开的面板。`nil` 表示全部收起，此时只剩房间和 Snozzy。
 enum Panel: String, CaseIterable, Identifiable {
-    case mixer, focus, tasks, chat, library, settings
+    case mixer, focus, tasks, story, chat, library, settings
     var id: String { rawValue }
 
     var symbol: String {
@@ -11,6 +11,7 @@ enum Panel: String, CaseIterable, Identifiable {
         case .mixer: "slider.horizontal.3"
         case .focus: "timer"
         case .tasks: "checklist"
+        case .story: "opticaldisc"
         case .chat: "bubble.left.and.bubble.right"
         case .library: "music.note.list"
         case .settings: "gearshape"
@@ -22,6 +23,7 @@ enum Panel: String, CaseIterable, Identifiable {
         case .mixer: "环境音"
         case .focus: "专注"
         case .tasks: "待办"
+        case .story: "她的专辑"
         case .chat: "说话"
         case .library: "音乐库"
         case .settings: "设置"
@@ -103,6 +105,12 @@ final class AppState {
     func lookCloser() {
         performer.request(.closeUp, manual: true)
     }
+
+    /// 主线：她的第一张专辑。陪伴的时间一点点变成她写完的歌。
+    /// 之前用番茄钟专注过的时间折一点进去——新存档时才用得上。
+    let story = StoryDirector(
+        focusMinutes: Store.load(FocusHistory.storeName, as: FocusHistory.self)?
+            .minutesByDay.values.reduce(0, +) ?? 0)
 
     /// 外面戳一下她就拿起手机（回微信/TG 的时候用）。见 `PhoneNudge`。
     @ObservationIgnored let phoneNudge = PhoneNudge()
@@ -244,6 +252,7 @@ final class AppState {
         snap.track = trackTitle
         snap.focusPhase = String(describing: focus.phase)
         snap.todayMinutes = focus.todayMinutes
+        snap.album = "\(story.albumTitle) \(story.state.chapters)/\(Story.chapterCount)"
         // 长期记忆不复制进无查询词的 MCP 状态快照；本地聊天按当前问题检索。
         snap.memories = []
         Store.save(snap, as: MCPServer.stateName)
@@ -328,6 +337,16 @@ final class AppState {
                          + (pending.count > 5 ? " 等" : "") + "。")
         }
         if drowsy > 0.5 { lines.append("很晚了，她有点困。") }
+        let st = story.state
+        if st.albumComplete {
+            lines.append("她的第一张专辑《\(Story.albumTitle)》已经写完了，现在随手写小样（写了 \(st.demos) 段）。")
+        } else {
+            let done = st.chapters == 0 ? "还一首都没写完"
+                : "写完了 \(st.chapters) 首（最近一首《\(Story.chapters[st.chapters - 1].title)》）"
+            lines.append("她在写自己的第一张专辑，一共十二首，\(done)；"
+                         + "正在写的是《\(Story.chapters[st.chapters].title)》。"
+                         + "你在旁边陪着，她才写得下去。")
+        }
         return lines.joined(separator: "\n")
     }
 
@@ -388,6 +407,7 @@ final class AppState {
         s.chatBackend = chat.backend
         s.speakAloud = speaking.enabled
         s.voiceEngine = speaking.engine
+        s.albumMode = albumMode
         return s
     }
 
@@ -407,6 +427,7 @@ final class AppState {
         if characterStyle == .live2d { live2d.loadIfNeeded() }
         radioMood = saved.radioMood
         audio.radioMood = saved.radioMood
+        albumMode = saved.albumMode
         timeMode = saved.timeMode
         weather = saved.weather
         lowPower = saved.lowPower
@@ -430,6 +451,7 @@ final class AppState {
         focus.flush()
         tasks.flush()
         library.flush()
+        story.flush()
         settingsSaver?.flush()
     }
 
@@ -440,11 +462,13 @@ final class AppState {
         bridge?.invalidate()
         bridge = nil
         settingsSaver?.cancel()
+        story.stopPersisting()
         suppressPersistenceOnExit = true
 
         let exact: Set<String> = [
             "settings.json", "tasks.json", "focus-history.json", "focus-settings.json",
             "library.json", "chat.json", "memories.json", "state.json", "mcp.log",
+            "story.json",
         ]
         do {
             let files = try FileManager.default.contentsOfDirectory(
@@ -454,6 +478,7 @@ final class AppState {
                 let name = url.lastPathComponent
                 let managed = exact.contains(name)
                     || name == "memories-v0-backup.json"
+                    || (name.hasPrefix("story-unreadable-") && name.hasSuffix(".json"))
                     || (name.hasPrefix("memories-unreadable-") && name.hasSuffix(".json"))
                 guard managed else { return false }
                 return try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory != true
@@ -530,6 +555,34 @@ final class AppState {
             scheduleSave()
         }
     }
+
+    /// 电台放她的专辑（按顺序轮她写完的那几首），而不是现场生成。
+    var albumMode = false {
+        didSet {
+            guard albumMode != oldValue else { return }
+            syncAlbum()
+            scheduleSave()
+        }
+    }
+
+    /// 专辑多了一首、或者开关变了：合成器的播放列表跟着变。
+    func syncAlbum() {
+        audio.albumTracks = albumMode ? story.state.playableTracks : 0
+    }
+
+    /// 点名放专辑里的第 i 首。不在电台就切过去，没在放就开始放。
+    func playAlbumTrack(_ i: Int) {
+        if source != .radio { source = .radio }
+        audio.playAlbumTrack(i)
+        if !isPlaying { togglePlay() }
+    }
+
+    /// 合成器换了一首就刷新曲名。原来只在点"下一首"之后刷，电台自己
+    /// 32 小节换一首时，控制条上一直挂着上一首的名字——放专辑时尤其显眼。
+    @ObservationIgnored private var songWatcher: Timer?
+    @ObservationIgnored private var lastSongSerial = 0
+    /// 电台此刻在放专辑第几首（-1 不是专辑）。`audio` 不可观察，面板读这一份。
+    private(set) var albumTrackPlaying = -1
 
     /// 电台当前曲目的描述。
     ///
@@ -673,8 +726,11 @@ final class AppState {
     }
 
     private func refreshRadioInfo() {
-        radioTitle = audio.trackTitle
-        radioTempo = audio.tempoText
+        lastSongSerial = audio.songSerial
+        let album = audio.albumTrack
+        albumTrackPlaying = album
+        radioTitle = album >= 0 ? "《\(StoryDirector.trackTitle(album))》" : audio.trackTitle
+        radioTempo = album >= 0 ? "Snozzy · \(audio.tempoText)" : audio.tempoText
         nowPlaying.update(title: trackTitle, subtitle: subtitleText, isPlaying: isPlaying)
     }
 
@@ -827,7 +883,10 @@ final class AppState {
         }
 
         tasks.onAdded = { [weak self] in self?.chatter.say(.taskAdded) }
-        tasks.onCompleted = { [weak self] in self?.chatter.say(.taskCompleted) }
+        tasks.onCompleted = { [weak self] in
+            self?.chatter.say(.taskCompleted)
+            self?.story.creditTask()
+        }
         tasks.onAllDone = { [weak self] in self?.chatter.say(.allTasksDone) }
 
         // 近景：什么时候可以凑近，以及凑近之后说什么。
@@ -884,9 +943,11 @@ final class AppState {
             guard let self, phase == .work, automatic else { return }
             self.performer.request(.action(.coffee), patience: 30)
         }
-        // 你回来时她正举着杯子：喝完再看你，等太久就算了。
+        // 你回来了：有攒着的剧情就先演剧情（新歌写完了），否则凑近念待办。
+        // 她正举着杯子的话，喝完再看你，等太久就算了。
         closeUp.onNoticed = { [weak self] in
-            self?.performer.request(.closeUp, patience: 8)
+            guard let self, !self.story.playPending() else { return }
+            self.performer.request(.closeUp, patience: 8)
         }
         closeUp.onArrived = { [weak self] in self?.complainAboutWatching() }
 
@@ -928,11 +989,24 @@ final class AppState {
             self.speaking.feed(chunk)
         }
 
-        // 启动时按时段打个招呼，稍等一下再说，免得和窗口出现撞在一起。
+        wireStory()
+
+        // 启动时打个招呼，稍等一下再说，免得和窗口出现撞在一起。节日、好久不见
+        // 优先；问候说完再把攒着的剧情演出来（第一次打开就是序章）。
+        let greeting = story.greeting()
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(1200))
             guard let self else { return }
-            self.chatter.say(Dialogue.greetingContext(hour: self.sceneHour))
+            if let lines = greeting {
+                for (i, line) in lines.enumerated() {
+                    if i > 0 { try? await Task.sleep(for: .seconds(2.8)) }
+                    self.chatter.speak(line)
+                }
+            } else {
+                self.chatter.say(Dialogue.greetingContext(hour: self.sceneHour))
+            }
+            try? await Task.sleep(for: .seconds(7))
+            self.story.playPending()
         }
 
         // 开发用：`--panel mixer --source library` 启动时直接进入指定状态。
@@ -955,6 +1029,41 @@ final class AppState {
             Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(600))
                 self?.togglePlay()
+            }
+        }
+    }
+
+    /// 主线接线。`StoryDirector` 不认识窗口和番茄钟，这里告诉它。
+    private func wireStory() {
+        story.performer = performer
+        story.focusing = { [weak self] in
+            guard let self else { return false }
+            return self.focus.phase == .work && self.focus.isRunning
+        }
+        // 专注中不演、说着话不演、窗口不在不演——攒着，等你休息。
+        story.canPerform = { [weak self] in
+            guard let self else { return false }
+            return self.windowMode == .normal && self.isVisible
+                && self.focus.phase != .work
+                && !self.voice.isListening && !self.chat.isThinking
+        }
+        story.say = { [weak self] line in self?.chatter.speak(line) }
+        story.onHighlight = { [weak self] beat in
+            guard let self else { return }
+            self.celebrate()
+            if case .chapter = beat { self.audio.chime(rising: true) }
+        }
+        story.onTracksChanged = { [weak self] in self?.syncAlbum() }
+        chat.onSent = { [weak self] in self?.story.creditChat() }
+        chatter.extraIdle = { [weak self] in self?.story.idleHint() }
+        syncAlbum()
+        story.start()
+
+        songWatcher = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.source == .radio,
+                      self.audio.songSerial != self.lastSongSerial else { return }
+                self.refreshRadioInfo()
             }
         }
     }

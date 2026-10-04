@@ -29,11 +29,15 @@ final class Performer {
         let ignoresCooldown: Bool
         /// 这一次演到位时说什么。nil 用那条动作自己的默认台词。
         let arrival: (() -> Void)?
+        /// 演到位了（true），或者被丢掉、过期、没到位就被让掉了（false）。
+        let completion: ((Bool) -> Void)?
     }
 
     private let closeUp: CloseUp
     private let actions: [ActionKind: ActionRig]
     private var queue: [Request] = []
+    /// 正在演、还没到位的那条在等结果的人。
+    private var waiting: ((Bool) -> Void)?
 
     /// 环境允不允许演这一条（窗口形态、面板、素材齐不齐）。由 `AppState` 注入，
     /// 只管自动请求；手动请求一律放行。
@@ -61,14 +65,21 @@ final class Performer {
     var pending: Int { queue.count }
 
     func request(_ item: Item, manual: Bool = false, patience: TimeInterval = 20,
-                 ignoresCooldown: Bool = false, arrival: (() -> Void)? = nil) {
+                 ignoresCooldown: Bool = false, arrival: (() -> Void)? = nil,
+                 completion: ((Bool) -> Void)? = nil) {
         let req = Request(item: item, manual: manual,
                           deadline: Date().addingTimeInterval(patience),
-                          ignoresCooldown: ignoresCooldown, arrival: arrival)
+                          ignoresCooldown: ignoresCooldown, arrival: arrival,
+                          completion: completion)
         if manual {
             // 同一条正演着、也没在让位：什么都不用做。
-            if item == current, !isReleasing(item) { return }
-            queue.removeAll { $0.item == item }
+            if item == current, !isReleasing(item) {
+                completion?(false)
+                return
+            }
+            if let i = queue.firstIndex(where: { $0.item == item }) {
+                queue.remove(at: i).completion?(false)
+            }
             queue.insert(req, at: 0)
             if let playing = current {
                 release(playing)
@@ -76,43 +87,81 @@ final class Performer {
                 drain()
             }
         } else {
-            guard item != current, !queue.contains(where: { $0.item == item }) else { return }
+            guard item != current, !queue.contains(where: { $0.item == item }) else {
+                completion?(false)
+                return
+            }
             queue.append(req)
             drain()
         }
     }
 
+    /// 演一条并等它演到位：到位返回 true；被丢掉、过期、或者还没到位就被让掉了
+    /// 返回 false。主线剧情靠它把"伸懒腰 → 凑近 → 说话"串成一条时间轴。
+    func perform(_ item: Item, patience: TimeInterval, ignoresCooldown: Bool = false,
+                 arrival: (() -> Void)? = nil) async -> Bool {
+        await withCheckedContinuation { cont in
+            request(item, patience: patience, ignoresCooldown: ignoresCooldown,
+                    arrival: arrival, completion: { cont.resume(returning: $0) })
+        }
+    }
+
     /// 窗口切到迷你/桌宠：那个画面不在了，直接收掉，排着的也不要了。
     func reset() {
+        let dropped = queue
         queue.removeAll()
         closeUp.cancel()
         actions.values.forEach { $0.cancel() }
+        settleWaiting()
+        dropped.forEach { $0.completion?(false) }
     }
 
     /// 当前那条演完（或让完位）之后接下一条。
     func drain() {
         guard current == nil else { return }
+        // 上一条没演到位就收了（被让掉、被硬收）：等它的人得到 false。
+        settleWaiting()
         let now = Date()
         while !queue.isEmpty {
             let req = queue.removeFirst()
-            guard req.deadline > now else { continue }
-            if !req.manual {
-                guard allows?(req.item) ?? true else { continue }
-                if !req.ignoresCooldown, isCoolingDown(req.item) { continue }
+            var usable = req.deadline > now
+            if usable, !req.manual {
+                usable = (allows?(req.item) ?? true)
+                    && (req.ignoresCooldown || !isCoolingDown(req.item))
+            }
+            guard usable else {
+                req.completion?(false)
+                continue
             }
             start(req)
             return
         }
     }
 
+    private func settleWaiting() {
+        let pending = waiting
+        waiting = nil
+        pending?(false)
+    }
+
     private func start(_ req: Request) {
+        waiting = req.completion
+        // 没给专门的台词就说那条动作自己的（喝咖啡"先喝一口"、近景念待办）。
+        func arrived(_ fallback: (() -> Void)?) -> () -> Void {
+            { [weak self] in
+                (req.arrival ?? fallback)?()
+                let done = self?.waiting
+                self?.waiting = nil
+                done?(true)
+            }
+        }
         switch req.item {
         case .closeUp:
-            closeUp.nextArrival = req.arrival
+            closeUp.nextArrival = arrived(closeUp.onArrived)
             closeUp.begin()
         case .action(let kind):
             guard let rig = actions[kind] else { return }
-            rig.nextArrival = req.arrival
+            rig.nextArrival = arrived(rig.onArrived)
             rig.begin(force: true)
         }
     }

@@ -8,6 +8,12 @@ struct MenuBarView: View {
     @Environment(AppState.self) private var state
     private let palette = Palette.night
 
+    private var albumLine: String {
+        let st = state.story.state
+        if st.albumComplete { return "《\(Story.albumTitle)》写完了 · 小样 \(st.demos) 段" }
+        return "专辑 \(st.chapters)/\(Story.chapterCount) · 在写《\(Story.chapters[st.chapters].title)》"
+    }
+
     var body: some View {
         @Bindable var s = state
 
@@ -86,6 +92,15 @@ struct MenuBarView: View {
                     state.focus.toggle()
                 }
                 .font(.system(size: 11))
+            }
+
+            // ── 她的专辑 ──
+            HStack {
+                Image(systemName: "opticaldisc").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(albumLine)
+                    .font(.system(size: 11, design: .rounded))
+                    .lineLimit(1)
+                Spacer()
             }
 
             Divider()

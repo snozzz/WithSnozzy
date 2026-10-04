@@ -72,6 +72,23 @@ final class AudioEngine {
         set { synth.mood = newValue }
     }
 
+    /// 电台按顺序轮放她写完的前这么多首；0 是普通电台。
+    var albumTracks: Int {
+        get { synth.albumTracks }
+        set { synth.albumTracks = newValue }
+    }
+
+    /// 下一个小节线就换成专辑第 i 首。
+    func playAlbumTrack(_ i: Int) {
+        synth.albumRequest = i
+        synth.regenerateRequested = true
+    }
+
+    /// 正在放专辑里第几首；-1 是电台自己生成的。
+    var albumTrack: Int { synth.albumTrack }
+    /// 每换一首加一。
+    var songSerial: Int { synth.songSerial }
+
     // MARK: - 环境音
 
     func ambienceLevel(_ sound: Ambience) -> Double { ambience.level(sound) }
@@ -206,6 +223,7 @@ final class AudioEngine {
         let wasPlaying = isPlaying
         let savedVolume = volume
         let savedMood = synth.mood
+        let savedAlbum = synth.albumTracks
         let savedAmbience = Ambience.allCases.map { ambience.level($0) }
 
         engine.stop()
@@ -216,6 +234,7 @@ final class AudioEngine {
         let sampleRate = Self.hardwareSampleRate(engine)
         synth = LofiSynth(sampleRate: sampleRate)
         synth.mood = savedMood
+        synth.albumTracks = savedAlbum
         ambience = AmbienceMixer(sampleRate: sampleRate)
         for (i, s) in Ambience.allCases.enumerated() { ambience.setLevel(s, savedAmbience[i]) }
         volume = savedVolume

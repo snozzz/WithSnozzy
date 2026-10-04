@@ -1357,6 +1357,23 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 放行：`--performcheck` 按真实层序整张渲出来量，直接交接最多差 48 个像素，
 不比经过常态那两步（51 / 28）大。判据见第四节。
 
+**83. "冷却"和"自发节拍的起点"是两件事，混成一个时间戳就会吞掉请求。**
+`ActionRig.startScheduling()` 把 `lastFinished` 设成启动时刻，本意是"别一启动就
+伸懒腰"；冷却判断也读它。于是启动后 90 秒内所有自动请求都被当成"刚演完"丢掉——
+`--storysmoke` 里主线写完第一首，台词说了、近景演了，**懒腰没伸**。
+现在冷却看 `lastPerformed`（真正演过的那次），节拍起点仍是 `lastFinished`。
+
+**84. "开演"和"正在演"之间不能有空档。** `StoryDirector.playPending()` 第一版在
+子 Task 里才置 `isPerforming = true`，判据的等待循环在那一拍之前检查，看到
+"没在演、队列也空"就退出了——报告"一句都没说"。生产里同样的空档会让两个入口
+各起一拍。置位要在创建 Task 之前、同步完成。
+
+**85. 判据换存档要停掉存盘。** `StoryDirector.init` 会排一次保存（新存档要落盘），
+而那次保存读的是**触发时**的 `state`。判据和面板截图用 `preview()` 换成假存档，
+如果不先 `stopPersisting()`，0.8 秒后假存档就写进了用户真正的 `story.json`。
+同一类还有：自检一律配 `WITHSNOZZY_DATA_DIR`——改 `HOME` 没用，Application
+Support 按账户解析；`--storysmoke` 不设它直接拒跑。
+
 ## 四、验证纪律
 
 这个项目里"看着对"和"真的对"经常不是一回事，所以**把主观的东西做成可测的**：
@@ -1379,6 +1396,17 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 - **迷你/桌宠里她长什么样**：`--compactstrip out.png`。照**真实窗口尺寸**渲
   （340×280 / 300×320，第 72 条），桌宠那一格垫格子底——不透明的背景
   在纯色底上看不出来，在桌面上就是一个方块
+- **主线**：`--storycheck`。内容（96 句台词用真实 SwiftUI 排版量行数、歌名、
+  日记字数、每首歌的编曲参数）、节奏（合成时钟模拟三种用法：整天挂着 12 天、
+  每天 4 小时 22 天、每天 1.5 小时 73 天写完；第一首都在第一天；每天至多一首）、
+  边界（一天封顶 600 分、刷待办刷聊天封得住、时钟回拨不多写、纪念日只出一次）、
+  存档（原样读回、缺字段/越界/陌生字段）、演出（真实 Performer：三句顺序、先伸
+  懒腰再凑近、专注中不开演）、歌（同一首渲两遍逐样本相同、不削顶不静音）
+- **主线在真实 AppState 里接没接上**：`WITHSNOZZY_DATA_DIR=临时目录 --storysmoke`。
+  不开窗口，按真实接线走：开场问候 → 序章 → 写完第一首（懒腰、凑近、笑）→
+  专辑播放列表 +1 → 专注中写完的那首等休息才演
+- **「她的专辑」面板长什么样**：`--storypanel out.png`。系统 `Toggle(.switch)`
+  在 `ImageRenderer` 里画成一个黄底禁止符占位，app 里是正常开关，不是 bug
 - **长动作撞上的时候有没有硬切**：`--performcheck`。用真实 `CloseUp`/`ActionRig`/
   `Performer` 演七段碰撞（停留中换动作、动作中途凑近、近景里点动作、自动排队、
   排队过期、连点、冷却），每 4 毫秒记一次画面显示哪套素材第几档，要求每一步
@@ -1544,6 +1572,31 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
   promise / note，可固定、分类、删除；“记住……”与“忘掉……”本地即时执行。
   Claude 每轮按中文 bigram 检索相关记忆，冷会话还恢复最近 8 轮；记忆变化会
   重建热会话，删除后不会继续残留。MCP 收件箱用 `flock` + 处理后确认，日志不记正文
+
+- **主线：她的第一张专辑**（`Features/Story*.swift`、`UI/StoryPanel.swift`）：
+  Snozzy 硬盘里有四十多个停在第八小节的工程，你在旁边陪着，她才第一次把歌写完。
+  序章 + 十二首 + 后记，之后每攒够 8 小时写一段小样，没有尽头。
+
+  - **进度来自真实的陪伴**：每分钟看一次键盘鼠标（`Presence`，不要权限），
+    五分钟内动过、或番茄钟在专注，就记一分钟；专注 ×1.5，划掉一件待办 +10
+    （每天封顶 60），跟她说一句 +3（封顶 30），全天封顶 600。**按拍记不按时间差**，
+    睡眠醒来、改系统时间都补不出几小时。之前番茄钟专注过的时间最多折一小时进来
+  - **每天最多写完一首**，日期必须严格晚于上一首（时钟回拨不多写）。
+    门槛 90→900 分逐首加长，整天挂着约 12 天、每天 4 小时约 22 天写完整张
+  - **写完的歌真的能听**：每首是一组固定编曲参数 + 固定种子（`AlbumMusic`），
+    合成器放它时重置随机源，所以每次放都是同一首歌。面板或设置里打开
+    「电台放她的专辑」，电台按顺序轮放写完的几首；面板里每一首都能点名播放。
+    原来电台 32 小节自动换歌后曲名不刷新，顺手修了（`songSerial` 轮询）
+  - **演出**：写完一首时 伸懒腰（说第一句）→ 凑近（说出歌名，笑一下，响一声）→
+    再补一句。全走 `Performer`，和别的动作同一条队列。**专注中、说着话、窗口不在
+    时不演**，攒在存档里，等你休息或回到窗口（"你回来了"那一下优先演剧情，
+    不念待办）。序章在第一次打开时问候之后演
+  - **日子**：一起的第 7/30/100/365 天各有一拍；隔三天以上再见说"好久不见"；
+    节日（含农历，用系统农历日历算，不写死日期表）开口第一句换掉普通问候
+  - 闲聊时三成概率念叨正在写的那首；对话的上下文、MCP 状态、菜单栏都知道
+    专辑写到哪儿；控制条上专辑图标有新页没看时亮一个小点
+  - 存档 `story.json` 手写 `init(from:)`；读不出来先备份成 `story-unreadable-*.json`
+    再重开，不会被下一次存盘悄悄覆盖。"清空全部数据"一并删除
 
 **已知未做完的**：
 
@@ -2086,6 +2139,9 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actioncheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --performcheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storycheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storypanel /tmp/story.png
+WITHSNOZZY_DATA_DIR=$(mktemp -d) dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storysmoke
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip /tmp/compact.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip /tmp/drowsy.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel /tmp/panel.png

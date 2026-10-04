@@ -70,6 +70,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Snapshot.actionCheck {
             exit(Snapshot.runActionCheck() ? 0 : 1)
         }
+        if StoryCheck.requested {
+            exit(StoryCheck.run() ? 0 : 1)
+        }
+        if StoryCheck.smokeRequested {
+            exit(StoryCheck.runSmoke() ? 0 : 1)
+        }
+        if let path = StoryCheck.panelPath {
+            StoryCheck.runPanel(path: path)
+            return
+        }
         if PerformCheck.requested {
             exit(PerformCheck.run() ? 0 : 1)
         }

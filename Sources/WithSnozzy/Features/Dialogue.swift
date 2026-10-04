@@ -304,13 +304,21 @@ final class Chatter {
         spokeAt = Date()
     }
 
+    /// 正在写的那首歌，她偶尔念叨一句。由 `AppState` 接到主线上。
+    var extraIdle: (() -> String?)?
+
     /// 主动搭话。只有距离上次说话足够久、且掷骰子通过时才开口。
+    /// 三成的时候念叨正在写的歌，其余照旧——一直说剧情就成了广播。
     func idleChatter() {
         guard current == nil,
               Date().timeIntervalSince(lastSpoke) > idleGap,
               Double.random(in: 0...1) < idleChance
         else { return }
-        say(.idle)
+        if Double.random(in: 0...1) < 0.3, let hint = extraIdle?() {
+            speak(hint)
+        } else {
+            say(.idle)
+        }
     }
 
     private func heartbeat() {

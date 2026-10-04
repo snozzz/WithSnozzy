@@ -20,7 +20,17 @@ final class LofiSynth: @unchecked Sendable {
     /// 电台心情。改了之后下一首才会生效——不打断正在放的这首。
     var mood: RadioMood = .chill
 
+    /// 她的专辑：>0 时按顺序轮放前这么多首（`AlbumMusic.spec`），0 是普通电台。
+    var albumTracks = 0
+    /// 点名要第几首。下一首就放它，放完接着按顺序轮。
+    var albumRequest = -1
+
     // MARK: - 主线程可读的状态（供 UI 显示）
+
+    /// 正在放专辑里第几首；-1 是电台自己生成的。
+    private(set) var albumTrack = -1
+    /// 每换一首加一。界面拿它判断"该刷新曲名了"，不用猜什么时候换的。
+    private(set) var songSerial = 0
 
     private(set) var keyRoot = 0
     private(set) var isMinor = false
@@ -71,6 +81,9 @@ final class LofiSynth: @unchecked Sendable {
     private var density = 1.0
     /// 生成这一首时用的心情。中途改心情不影响已经开始的曲子。
     private var songMood: RadioMood = .chill
+    /// 专辑里的歌固定用哪套鼓（`DrumPatterns.all` 下标）；-1 是按心情随机。
+    private var songDrums = -1
+    private var albumCursor = -1
 
     /// 当前与上一个和弦的钢琴配置，用于声部连接。init 时一次性分配。
     private let voicing: UnsafeMutablePointer<Double>
@@ -282,21 +295,46 @@ final class LofiSynth: @unchecked Sendable {
 
     /// 换一首：新的调、新的进行、新的速度。
     private func newSong() {
-        songMood = mood
+        songSerial &+= 1
+        // 她的专辑：点名要哪首就放哪首，否则按顺序轮。
+        var album = -1
+        if albumRequest >= 0 {
+            album = albumRequest
+            albumRequest = -1
+        } else if albumTracks > 0 {
+            album = (albumCursor + 1) % albumTracks
+        }
+        albumTrack = album
 
-        // 从这个心情允许的进行里挑一个。
-        let pool = Progressions.byMood[songMood] ?? Array(Progressions.all.indices)
-        progressionIndex = pool[rng.int(pool.count)]
+        if album >= 0 {
+            // 写完的歌是一组固定参数 + 固定种子：每次放都是同一首。
+            albumCursor = album
+            let spec = AlbumMusic.spec(album)
+            rng = Noise(seed: spec.seed)
+            songMood = spec.mood
+            progressionIndex = spec.progression
+            keyRoot = spec.key
+            bpm = spec.bpm
+            swing = spec.swing
+            songDrums = spec.drums
+        } else {
+            songMood = mood
+            songDrums = -1
+
+            // 从这个心情允许的进行里挑一个。
+            let pool = Progressions.byMood[songMood] ?? Array(Progressions.all.indices)
+            progressionIndex = pool[rng.int(pool.count)]
+
+            // 避开极端调性，C…B 全都可以，但低音区太低会糊，所以根音统一落在 0…11。
+            keyRoot = rng.int(12)
+
+            let range = songMood.tempoRange
+            bpm = range.lowerBound + rng.unit() * (range.upperBound - range.lowerBound)
+            // 慢的曲子摇摆要收一点，否则会拖得散掉。
+            swing = (bpm < 68 ? 0.08 : 0.12) + rng.unit() * 0.10
+        }
         progression = Progressions.all[progressionIndex]
         isMinor = progression.isMinor
-
-        // 避开极端调性，C…B 全都可以，但低音区太低会糊，所以根音统一落在 0…11。
-        keyRoot = rng.int(12)
-
-        let range = songMood.tempoRange
-        bpm = range.lowerBound + rng.unit() * (range.upperBound - range.lowerBound)
-        // 慢的曲子摇摆要收一点，否则会拖得散掉。
-        swing = (bpm < 68 ? 0.08 : 0.12) + rng.unit() * 0.10
 
         // 音色亮度跟着心情走：困倦时把总线低通压得很低，整首曲子像隔了一层。
         toneL.lowpass(freq: songMood.toneCutoff, q: 0.7, sr: sr)
@@ -326,7 +364,7 @@ final class LofiSynth: @unchecked Sendable {
                 melodyOn = false
                 density = 0.55 * songMood.density
             } else {
-                drums = DrumPatterns.all[pool[rng.int(pool.count)]]
+                drums = DrumPatterns.all[songDrums >= 0 ? songDrums : pool[rng.int(pool.count)]]
                 // 困倦心情下旋律出现得更少，大段时间只剩和声和铺底。
                 melodyOn = songMood == .sleepy ? rng.unit() < 0.45 : true
                 density = songMood.density

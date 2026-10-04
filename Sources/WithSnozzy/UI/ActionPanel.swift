@@ -62,6 +62,17 @@ struct ActionPanel: View {
 
             Divider().overlay(.white.opacity(0.12))
 
+            section("主线", note: "伸懒腰 → 凑近说出歌名 → 再补一句，和别的动作同一条队列")
+            row(symbol: "opticaldisc", title: "重演最近写完的那首",
+                detail: state.story.state.chapters == 0 ? "还没写完，演序章"
+                    : "《\(StoryDirector.trackTitle(max(0, state.story.state.playableTracks - 1)))》",
+                running: state.story.isPerforming,
+                enabled: state.windowMode == .normal && !state.story.isPerforming) {
+                state.story.replayLatest()
+            }
+
+            Divider().overlay(.white.opacity(0.12))
+
             section("短反馈", note: "只改表情和侧屏，不换素材")
             row(symbol: "sparkles", title: "专注完成",
                 detail: "1.8 秒笑眼笑嘴 + 侧屏勾形",
