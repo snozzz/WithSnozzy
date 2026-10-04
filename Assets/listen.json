@@ -1,0 +1,21 @@
+{
+  "canvas": [
+    1536,
+    1024
+  ],
+  "bodyRect": {
+    "x": 0,
+    "y": 0,
+    "w": 1536,
+    "h": 611
+  },
+  "handRect": {
+    "x": 682,
+    "y": 591,
+    "w": 316,
+    "h": 100
+  },
+  "frames": 8,
+  "holdFrames": 6,
+  "pixelScale": 2
+}

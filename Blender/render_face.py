@@ -67,7 +67,7 @@ W, H = 1536 * SCALE, 1024 * SCALE
 # 动作名 → `pose.py` 里那个摆姿势的函数。加新动作只在这里登记一行，
 # 下面那段逐帧循环不用改；帧数和道具从 `Scripts/action_defs.py` 读。
 ACTIONS = {"chin": P.chin_rest, "stretch": P.stretch,
-           "coffee": P.coffee, "phone": P.phone}
+           "coffee": P.coffee, "phone": P.phone, "listen": P.listen}
 if ACTION is not None and ACTION not in ACTIONS:
     raise SystemExit(f"不认识的动作 {ACTION!r}，可选：{sorted(ACTIONS)}")
 # 托腮不在 `action_defs` 里（它走的是自己那条更老的管线），所以给个默认。

@@ -9,12 +9,15 @@ import Observation
 /// 而它们各有各的冷却、各有各的取消，迟早各错各的（第 46 条）。
 enum ActionKind: String, CaseIterable, Sendable {
     case stretch, coffee, phone
+    /// 按着耳机听。只在戴着耳机（放歌）时演；主线里她听自己写完的歌。
+    case listen
 
     var label: String {
         switch self {
         case .stretch: "伸懒腰"
         case .coffee: "喝咖啡"
         case .phone: "看手机"
+        case .listen: "按着耳机听"
         }
     }
 
@@ -28,6 +31,8 @@ enum ActionKind: String, CaseIterable, Sendable {
         case .stretch: 0.16
         case .coffee: 0.18
         case .phone: 0.13
+        // 一圈六张是一次点头：0.14 秒一张，0.84 秒一下，落在 lofi 的拍子附近
+        case .listen: 0.14
         }
     }
 
@@ -37,6 +42,7 @@ enum ActionKind: String, CaseIterable, Sendable {
         case .stretch: 2...3
         case .coffee: 2...3
         case .phone: 3...6
+        case .listen: 4...7
         }
     }
 
@@ -49,6 +55,8 @@ enum ActionKind: String, CaseIterable, Sendable {
         case .stretch: 300...600
         case .coffee: 900...1800
         case .phone: nil
+        // 放着歌的时候偶尔听入神一会儿；没放歌时 `Performer` 不放行
+        case .listen: 1200...2400
         }
     }
 

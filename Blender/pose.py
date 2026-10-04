@@ -1231,3 +1231,111 @@ def curl(arm, side, amount):
             # 指节沿自身 Z 轴弯曲，越靠指尖弯得越多
             pb.rotation_euler[0] = -amount * k * (0.6 + 0.25 * i)
     bpy.context.view_layer.update()
+
+
+# ── 按着耳机听：主线里她听自己写完的歌 ─────────────────────────────────
+#
+# 一只手抬起来按住耳罩，头往那边偏一点、微微低下去，停留那一段跟着拍子
+# 轻轻点头。和托腮同一只手（她的左手，画面右侧，近镜头那只）、同一套
+# "骨骼局部变换之间插值 + 分组相位"，区别是**手的落点挂在头上**：
+# 先把头摆好（含停留那一拍的点头），再按摆好之后的耳罩位置反推手腕。
+# 于是点头时手跟着头走——按着耳罩的手不该在耳罩上滑。
+#
+# 耳罩的位置不猜，照 `headphones.build` 的同一套量法从脸部网格现算
+# （第 7 条：同一个数只算一份）。没戴耳机的那一版手落在同一个地方，
+# 读起来是捂着耳朵听；运行时只在放歌（戴着耳机）时演这条。
+LISTEN_SIDE = "L"
+# 下面这组是 `render_listen_candidates.py` 的 m_tilt_more：手掌朝镜头那几组
+# 读成"挥手"，掌心转向耳罩（ROLL 2.1）、四指拢着（0.58）才读成"按着耳机"；
+# 手腕贴耳罩外表面下方，不往外让——让出 5 厘米就是举着手。实测大臂偏离竖直
+# 67°、肘比肩低 9cm（抬手按耳朵本来就这个高度，不是打字的 15–30°），
+# 挡眼 0、挡嘴 0、离眼区 8 像素。
+#
+# 头往手那侧偏、微微低头。
+LISTEN_HEAD_ROLL = 0.13
+LISTEN_HEAD_PITCH = 0.07
+# 手腕相对耳罩中心的偏移（米，她自己的方向：+X 往外、+Y 往后、+Z 往上）。
+# 手掌贴在耳罩外侧，手腕在耳罩下方偏外——手是从下面兜上去按住的。
+LISTEN_WRIST = (0.015, 0.005, -0.080)
+# 手指朝向：沿耳罩外侧往上、略往后。
+LISTEN_HAND_DIR = (0.00, 0.20, 0.98)
+# 掌心朝里（贴着耳罩）。
+LISTEN_HAND_ROLL = 2.1
+# 四指松松地拢着，不是摊平的板，也不是拳。
+LISTEN_CURL = 0.58
+# 肘往外下方：抬手按耳朵时肘自然垂在身侧外面，别抬成鸡翅膀（第 78 条）。
+LISTEN_ELBOW = (0.5, -0.4, -1.0)
+# 停留那一段：跟着拍子点头，同时身子带一点侧晃。两个通道相移不同，
+# 六个相位两两不重（第 76 条那一套：只动一个通道剪影上看不出来）。
+LISTEN_NOD = 0.045
+LISTEN_SWAY = 0.035
+
+
+def _ear_cup_world(arm, side):
+    """耳罩外侧中心的世界坐标。和 `headphones.build` 同一套量法。"""
+    import headphones as HP
+    meshes = [o for o in bpy.data.objects if o.type == 'MESH']
+    m = HP.head_metrics(meshes)
+    sx = 1 if side == "L" else -1
+    r = m["half_w"] * 1.20
+    return Vector((m["centre"].x + sx * (r * 0.92 + m["half_w"] * 0.10),
+                   m["centre"].y + m["depth"] * 0.10,
+                   m["centre"].z - m["half_w"] * 0.26))
+
+
+def listen(arm, scene, amount=1.0, hold_phase=None):
+    """按着耳机听。**在 `settle` 之后调**，用法和 `chin_rest` 一样。
+
+    `hold_phase` 给 0…2π 时是按住之后那一段：跟着拍子点头。给了就意味着 `amount=1`。
+    """
+    amount = max(0.0, min(1.0, float(amount)))
+    if hold_phase is not None:
+        amount = 1.0
+    side = LISTEN_SIDE
+    sx = 1 if side == "L" else -1
+    moving, finger_names, head_names = _prop_bones(arm, side)
+    start = {pb.name: pb.matrix_basis.copy() for pb in moving}
+
+    head_pb = arm.pose.bones["J_Bip_C_Head"]
+    head0 = arm.matrix_world @ head_pb.matrix
+    cup_local = head0.inverted() @ _ear_cup_world(arm, side)
+
+    nod = math.sin(hold_phase) if hold_phase is not None else 0.0
+    sway = math.sin(hold_phase + 1.3) if hold_phase is not None else 0.0
+    for bone, share in (("J_Bip_C_Neck", 0.35), ("J_Bip_C_Head", 0.65)):
+        _rotate_world(arm, bone, (0, 1, 0), sx * (LISTEN_HEAD_ROLL + sway * LISTEN_SWAY) * share)
+        _rotate_world(arm, bone, (1, 0, 0), (LISTEN_HEAD_PITCH + nod * LISTEN_NOD) * share)
+
+    # 头摆好之后，耳罩和"她自己的方向"都跟着头转了
+    head1 = arm.matrix_world @ head_pb.matrix
+    turn = head1.to_3x3() @ head0.to_3x3().inverted()
+    cup = head1 @ cup_local
+    wrist = cup + turn @ Vector((sx * LISTEN_WRIST[0], LISTEN_WRIST[1], LISTEN_WRIST[2]))
+
+    shoulder = arm.matrix_world @ arm.pose.bones[f"J_Bip_{side}_UpperArm"].head
+    n = (wrist - shoulder).normalized()
+    d = Vector((sx * LISTEN_ELBOW[0], LISTEN_ELBOW[1], LISTEN_ELBOW[2])).normalized()
+    p = d - n * d.dot(n)
+    if p.length < 1e-6:
+        p = Vector((0, 0, -1))
+    reach(arm, side, wrist, wrist + p.normalized())
+    aim(arm, f"J_Bip_{side}_Hand",
+        turn @ Vector((sx * LISTEN_HAND_DIR[0], LISTEN_HAND_DIR[1], LISTEN_HAND_DIR[2])),
+        prefer="Middle")
+    roll(arm, f"J_Bip_{side}_Hand", sx * LISTEN_HAND_ROLL, prefer="Middle")
+    curl(arm, side, LISTEN_CURL)
+    bpy.context.view_layer.update()
+
+    target = {pb.name: pb.matrix_basis.copy() for pb in moving}
+    # 分组相位：手先离开键盘，手指半路拢起来，头最后偏过去——
+    # 读起来是"把手送到耳边、然后侧过头去听"，不是换了个姿势。
+    for pb in moving:
+        if pb.name in head_names:
+            phase = _eased_phase(amount, 0.30, 1.00)
+        elif pb.name in finger_names:
+            phase = _eased_phase(amount, 0.20, 0.95)
+        else:
+            phase = _eased_phase(amount, 0.00, 0.92)
+        _blend_bone(pb, start[pb.name], target[pb.name], phase)
+    bpy.context.view_layer.update()
+    return wrist, cup

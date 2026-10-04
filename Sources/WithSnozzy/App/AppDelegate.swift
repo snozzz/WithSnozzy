@@ -132,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // 走到这里才是真正的界面启动（上面的判据分支都已经 return/exit）。
+        launchedForUI = true
+        state?.startSession()
+
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
@@ -215,7 +219,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    /// 是界面启动而不是判据。`state` 和它谁先到不一定，两边都试一次开场。
+    private var launchedForUI = false
+
     private func wireState() {
+        if launchedForUI { state?.startSession() }
         // 底部控制条靠它决定显隐。**必须在这里启动**：
         // state 是 SwiftUI 在 onAppear 里赋进来的，比
         // applicationDidFinishLaunching 晚，在那里启动时它还是 nil。

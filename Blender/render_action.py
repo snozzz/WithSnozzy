@@ -42,7 +42,8 @@ SPEC = AD.spec(ACTION)
 W, H = 1536 * SCALE, 1024 * SCALE
 os.makedirs(OUT, exist_ok=True)
 
-POSE = {"stretch": P.stretch, "coffee": P.coffee, "phone": P.phone}[ACTION]
+POSE = {"stretch": P.stretch, "coffee": P.coffee, "phone": P.phone,
+        "listen": P.listen}[ACTION]
 STEPS = AD.TRANSITION_FRAMES
 HOLDS = SPEC["holds"]
 

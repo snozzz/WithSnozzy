@@ -51,7 +51,6 @@ final class StoryDirector {
                 guard let self else { return }
                 Store.save(self.state, as: StoryState.storeName)
             }
-            saver?.schedule()
         }
     }
 
@@ -64,7 +63,7 @@ final class StoryDirector {
     }
 
     /// 只给判据和面板截图用：换一份存档看看长什么样。**同时停掉存盘**——
-    /// 不然 init 里排着的那次保存会把这份假存档写进用户的 story.json。
+    /// 不然之后任何一次排着的保存都会把这份假存档写进用户的 story.json。
     func preview(_ s: StoryState) {
         stopPersisting()
         state = s
@@ -76,6 +75,8 @@ final class StoryDirector {
     /// 改系统时间都不会一下子补出几个小时。
     func start() {
         guard ticker == nil else { return }
+        // 新存档在这里才落盘：只建了对象、没真正开场的进程（判据）不该写。
+        saver?.schedule()
         let t = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -195,16 +196,23 @@ final class StoryDirector {
         if state.note != nil { say?("记下了。明天念给你听。") }
     }
 
-    /// 电台放到她写的歌时，她偶尔认出来说一句。二十分钟最多一次——
-    /// 每首都说就成了报幕。
+    /// 电台放到她写的歌时，她偶尔认出来：按着耳机听一会儿，说一句。
+    /// 二十分钟最多一次——每首都来一遍就成了报幕。
+    /// 动作没排上（窗口不在、别的动作正演着）就只说那一句。
     @ObservationIgnored private var lastListeningLine = Date.distantPast
     func noticeListening(to track: Int, at now: Date = Date()) {
         guard now.timeIntervalSince(lastListeningLine) > 1200,
               Double.random(in: 0...1) < 0.5 else { return }
         lastListeningLine = now
         let title = Self.trackTitle(track)
-        say?(["这首是《\(title)》。", "你在听《\(title)》呀。",
-              "《\(title)》……被你听到了。"].randomElement()!)
+        let line = ["这首是《\(title)》。", "你在听《\(title)》呀。",
+                    "《\(title)》……被你听到了。"].randomElement()!
+        guard let performer else { say?(line); return }
+        performer.request(.action(.listen), patience: 20, ignoresCooldown: true,
+                          arrival: { [weak self] in self?.say?(line) },
+                          completion: { [weak self] arrived in
+                              if !arrived { self?.say?(line) }
+                          })
     }
 
     func markRead() {

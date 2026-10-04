@@ -74,6 +74,20 @@ enum StoryCheck {
             }
         }
         bubbleLines += holidays
+        var ambient = Set<String>()
+        for hour in stride(from: 0.0, to: 24, by: 1) {
+            for weekday in 1...7 {
+                for weather in Weather.allCases {
+                    for _ in 0..<12 {
+                        if let line = Dialogue.ambientIdle(hour: hour, weekday: weekday,
+                                                           weather: weather, playing: true) {
+                            ambient.insert(line)
+                        }
+                    }
+                }
+            }
+        }
+        bubbleLines += ambient
         let tooLong = bubbleLines.filter { rows($0) > 2 }
         check("\(bubbleLines.count) 句台词都装得进两行气泡"
               + (tooLong.isEmpty ? "" : "（超了：\(tooLong.joined(separator: " / "))）"),
@@ -385,6 +399,8 @@ enum StoryCheck {
         ok = true
         let state = AppState()
         state.story.idleSeconds = { 0 }
+        // 判据进程不会自动开场（见 `AppState.startSession`），这里手动开
+        state.startSession()
         var said: [String] = []
         var chin = false, stretch = false, celebrated = false
         func pump(_ seconds: Double, until: () -> Bool = { false }) {
@@ -445,6 +461,24 @@ enum StoryCheck {
         check("歇下来之后演了", said.suffix(3) == Story.chapters[1].lines[...])
         state.albumMode = false
         check("关掉专辑模式，电台回到现场生成", state.audio.albumTracks == 0)
+
+        print("== 按着耳机听：只在戴着耳机时演")
+        if state.sceneAssets.hasCompleteMotion(.listen) {
+            var listened = false
+            state.performer.request(.action(.listen), ignoresCooldown: true)
+            pump(1.5) { state.action(.listen).isActive }
+            check("没放歌（没戴耳机）时自动请求被丢掉", !state.action(.listen).isActive)
+            state.isPlaying = true      // 只改状态，不开音频
+            state.performer.request(.action(.listen), ignoresCooldown: true)
+            pump(20) {
+                if state.action(.listen).frame == CloseUp.transitionFrames { listened = true }
+                return listened && !state.action(.listen).isActive
+            }
+            check("放着歌时演到终态", listened)
+            state.isPlaying = false
+        } else {
+            check("按着耳机听的素材齐全", false)
+        }
         print("STORYSMOKE " + (ok ? "全部通过" : "有不合格项"))
         return ok
     }
@@ -470,7 +504,8 @@ enum StoryCheck {
         }
         let size = CGSize(width: 720, height: 480)
         struct Cell { let label: String; let palette: Palette; let weather: Weather
-                      let stars: Int; let activity: SnozzyActivity; let playing: Bool }
+                      let stars: Int; let activity: SnozzyActivity; let playing: Bool
+                      var action: (kind: ActionKind, frame: Int)? = nil }
         let cells = [
             Cell(label: "DAY · 写歌", palette: .day, weather: .clear, stars: 3,
                  activity: .composing, playing: false),
@@ -480,6 +515,11 @@ enum StoryCheck {
                  activity: .resting, playing: false),
             Cell(label: "NIGHT · 十二首", palette: .night, weather: .clear, stars: 12,
                  activity: .resting, playing: false),
+            Cell(label: "按着耳机听 · 抬手中", palette: .dusk, weather: .clear, stars: 5,
+                 activity: .composing, playing: true, action: (.listen, 4)),
+            Cell(label: "按着耳机听 · 点头", palette: .dusk, weather: .clear, stars: 5,
+                 activity: .composing, playing: true,
+                 action: (.listen, CloseUp.transitionFrames + 2)),
         ]
         func scene(_ c: Cell, stars: Int? = nil) -> some View {
             let t = 41.3
@@ -489,7 +529,7 @@ enum StoryCheck {
                 pose: SnozzyRig.pose(time: t, kick: 0, playing: c.playing),
                 face: FaceRig.expression(t: t, playing: c.playing, mood: 0.6, drowsy: 0,
                                          working: false, speaking: false, activity: cue),
-                headphones: c.playing, activity: cue, playing: c.playing,
+                headphones: c.playing, action: c.action, activity: cue, playing: c.playing,
                 typingFrame: TypingRig.frame(at: t, working: false,
                                              frames: assets.hands.frames, activity: cue))
             return SceneLayers(assets: assets, frame: frame, size: size,
@@ -497,7 +537,7 @@ enum StoryCheck {
                 .frame(width: size.width, height: size.height)
         }
         let sheet = VStack(spacing: 4) {
-            ForEach(0..<2, id: \.self) { row in
+            ForEach(0..<3, id: \.self) { row in
                 HStack(spacing: 4) {
                     ForEach(0..<2, id: \.self) { col in
                         let c = cells[row * 2 + col]

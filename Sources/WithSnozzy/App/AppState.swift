@@ -921,7 +921,9 @@ final class AppState {
                 // 面板开着说明你正在用它，这时候把镜头推上去只会挡住你在看的东西。
                 return self.panel == nil && self.isVisible
             case .action(let kind):
+                // 按着耳机听要真的戴着耳机：耳机跟着"在放歌"走
                 return self.sceneAssets.hasCompleteMotion(kind)
+                    && (kind != .listen || self.isPlaying)
             }
         }
         for kind in ActionKind.allCases {
@@ -935,6 +937,7 @@ final class AppState {
         // 端起杯子那一下配一句话，不然只是手在动。看手机同理。
         action(.coffee).onArrived = { [weak self] in self?.chatter.say(.coffee) }
         action(.phone).onArrived = { [weak self] in self?.chatter.say(.phone) }
+        action(.listen).onArrived = { [weak self] in self?.chatter.say(.listening) }
         // 你在回消息，她也拿起手机。触发口子是一个文件，谁都能戳。
         phoneNudge.onNudge = { [weak self] in
             self?.performer.request(.action(.phone), patience: 15)
@@ -994,24 +997,6 @@ final class AppState {
 
         wireStory()
 
-        // 启动时打个招呼，稍等一下再说，免得和窗口出现撞在一起。节日、好久不见
-        // 优先；问候说完再把攒着的剧情演出来（第一次打开就是序章）。
-        let greeting = story.greeting()
-        Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(1200))
-            guard let self else { return }
-            if let lines = greeting {
-                for (i, line) in lines.enumerated() {
-                    if i > 0 { try? await Task.sleep(for: .seconds(2.8)) }
-                    self.chatter.speak(line)
-                }
-            } else {
-                self.chatter.say(Dialogue.greetingContext(hour: self.sceneHour))
-            }
-            try? await Task.sleep(for: .seconds(7))
-            self.story.playPending()
-        }
-
         // 开发用：`--panel mixer --source library` 启动时直接进入指定状态。
         // 调面板样式时省掉每次手点的几步。
         let args = CommandLine.arguments
@@ -1036,6 +1021,36 @@ final class AppState {
         }
     }
 
+    /// 真正开场：打招呼、主线开始记账、演攒着的剧情。
+    ///
+    /// **不放在 `init` 里**：判据模式（`--actioncheck` 之类）也会由 SwiftUI 建出
+    /// 一个 `AppState`。放在 init 里的话，判据进程会在没有窗口的情况下把序章
+    /// "演掉"、记几分钟陪伴、再把存档写回去——用户按 HANDOFF 跑一次自检，
+    /// 真实存档里的序章就没了。由 `AppDelegate` 确认是界面启动之后才调，只调一次。
+    func startSession() {
+        guard !sessionStarted else { return }
+        sessionStarted = true
+        story.start()
+        // 稍等一下再开口，免得和窗口出现撞在一起。节日、好久不见优先；
+        // 问候说完再把攒着的剧情演出来（第一次打开就是序章）。
+        let greeting = story.greeting()
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard let self else { return }
+            if let lines = greeting {
+                for (i, line) in lines.enumerated() {
+                    if i > 0 { try? await Task.sleep(for: .seconds(2.8)) }
+                    self.chatter.speak(line)
+                }
+            } else {
+                self.chatter.say(Dialogue.greetingContext(hour: self.sceneHour))
+            }
+            try? await Task.sleep(for: .seconds(7))
+            self.story.playPending()
+        }
+    }
+    @ObservationIgnored private var sessionStarted = false
+
     /// 主线接线。`StoryDirector` 不认识窗口和番茄钟，这里告诉它。
     private func wireStory() {
         story.performer = performer
@@ -1058,9 +1073,15 @@ final class AppState {
         }
         story.onTracksChanged = { [weak self] in self?.syncAlbum() }
         chat.onSent = { [weak self] in self?.story.creditChat() }
-        chatter.extraIdle = { [weak self] in self?.story.idleHint() }
+        chatter.storyIdle = { [weak self] in self?.story.idleHint() }
+        chatter.ambientIdle = { [weak self] in
+            guard let self else { return nil }
+            return Dialogue.ambientIdle(
+                hour: self.sceneHour,
+                weekday: Calendar.current.component(.weekday, from: Date()),
+                weather: self.weather, playing: self.isPlaying)
+        }
         syncAlbum()
-        story.start()
 
         songWatcher = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {

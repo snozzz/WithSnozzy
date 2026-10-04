@@ -11,8 +11,8 @@ enum DialogueContext {
     /// 打瞌睡时被摸醒。
     case wokenUp
     case focusStarted, focusFinished, breakFinished
-    /// 她端起杯子喝一口、拿起手机回消息的时候。
-    case coffee, phone
+    /// 她端起杯子喝一口、拿起手机回消息、按着耳机听的时候。
+    case coffee, phone, listening
     case taskAdded, taskCompleted, allTasksDone
     case rain, snow
     /// 连续专注很久了。
@@ -103,6 +103,12 @@ enum Dialogue {
             "有人找我。",
             "回一句就放下。",
             "嗯……先回这条。",
+        ],
+        .listening: [
+            "嘘，这段好听。",
+            "……这里的鼓。",
+            "听一会儿。",
+            "这一句再听一遍。",
         ],
         .focusFinished: [
             "一段完成了，休息一下。",
@@ -215,6 +221,37 @@ enum Dialogue {
         return t.prefix(titleLimit - 1) + "…"
     }
 
+    /// 闲着时、跟此刻有关的一句：几点、周几、下没下雨、在不在放歌。
+    /// 返回 nil 就用通用的那一池。分池而不是往通用池里加——通用池里的
+    /// "窗外的灯一盏盏亮起来了"在上午说出来就是错的。
+    static func ambientIdle(hour: Double, weekday: Int, weather: Weather,
+                            playing: Bool) -> String? {
+        var pool: [String] = []
+        switch hour {
+        case 5..<11:
+            pool += ["上午脑子最清楚。", "今天先做最难的那件？", "早上的光是斜着进来的。"]
+        case 11..<14:
+            pool += ["午饭吃了没？", "中午容易犯困。"]
+        case 14..<18:
+            pool += ["下午的光开始变暖了。", "这个点最容易走神。", "喝口水吧。"]
+        case 18..<23:
+            pool += ["晚饭吃了吗？", "灯带亮起来了。", "楼下的店开始热闹了。"]
+        default:
+            pool += ["这个点的电台，只有我们在听。", "再一小会儿就睡。", "外面只剩路灯了。"]
+        }
+        // Calendar.weekday：1 是周日，7 是周六
+        if weekday == 1 || weekday == 7 { pool += ["周末也在忙呀。", "周末的城市安静一点。"] }
+        if weekday == 2 { pool.append("星期一，慢慢来。") }
+        if weekday == 6 { pool.append("星期五了，再撑一下。") }
+        switch weather {
+        case .rain: pool += ["雨还在下。", "雨天适合待在屋里。"]
+        case .snow: pool += ["雪还没停。", "窗台上积了一点雪。"]
+        case .clear: break
+        }
+        if playing { pool += ["这首的贝斯好软。", "这段鼓我喜欢。"] }
+        return pool.randomElement()
+    }
+
     /// 按当前时刻挑一句问候。
     static func greetingContext(hour: Double) -> DialogueContext {
         switch hour {
@@ -305,17 +342,23 @@ final class Chatter {
     }
 
     /// 正在写的那首歌，她偶尔念叨一句。由 `AppState` 接到主线上。
-    var extraIdle: (() -> String?)?
+    var storyIdle: (() -> String?)?
+    /// 跟此刻有关的一句（几点、周几、天气、放没放歌）。由 `AppState` 给。
+    var ambientIdle: (() -> String?)?
 
     /// 主动搭话。只有距离上次说话足够久、且掷骰子通过时才开口。
-    /// 三成的时候念叨正在写的歌，其余照旧——一直说剧情就成了广播。
+    /// 三成念叨正在写的歌、三成说跟此刻有关的、其余是通用的——
+    /// 一直说剧情就成了广播，一直说天气就成了报时。
     func idleChatter() {
         guard current == nil,
               Date().timeIntervalSince(lastSpoke) > idleGap,
               Double.random(in: 0...1) < idleChance
         else { return }
-        if Double.random(in: 0...1) < 0.3, let hint = extraIdle?() {
+        let roll = Double.random(in: 0...1)
+        if roll < 0.3, let hint = storyIdle?() {
             speak(hint)
+        } else if roll < 0.6, let line = ambientIdle?() {
+            speak(line)
         } else {
             say(.idle)
         }

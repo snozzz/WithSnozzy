@@ -1379,6 +1379,15 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
 夜空一直是空的。和第 70 条是一类：**没有读者的那份不会有人发现它不对**。
 现在星星由城市自己在天空和楼之间画；`--storystrip` 量它确实改了窗洞里的像素。
 
+**87. 判据进程里也有一个完整的 `AppState`。** SwiftUI 在判据模式下照样建它，
+`applicationDidFinishLaunching` 里的 `return` 拦不住。所以 `AppState.init` 里
+任何"开场"性质的副作用都会在判据进程里发生——主线第一版就是这样：跑一次
+`--actioncheck`（几秒），进程里没有窗口，序章照样在第 8 秒"演完"、记进存档。
+用户按 HANDOFF 不设 `WITHSNOZZY_DATA_DIR` 直接跑判据，真实存档里的序章就没了。
+现在开场（问候、主线计时、演攒着的剧情）在 `AppState.startSession()`，只由
+`AppDelegate` 在走完所有判据分支之后调；`StoryDirector` 也不在 init 里落盘。
+**新加的副作用先问一句：判据进程会不会也跑它。**
+
 ## 四、验证纪律
 
 这个项目里"看着对"和"真的对"经常不是一回事，所以**把主观的东西做成可测的**：
@@ -1410,7 +1419,8 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
 - **主线在真实 AppState 里接没接上**：`WITHSNOZZY_DATA_DIR=临时目录 --storysmoke`。
   不开窗口，按真实接线走：开场问候 → 序章 → 写完第一首（懒腰、凑近、笑）→
   专辑播放列表 +1 → 专注中写完的那首等休息才演
-- **主线在房间里的痕迹**：`--storystrip out.png`。昼/黄昏/夜对照，量三件事：
+- **主线在房间里的痕迹**：`--storystrip out.png`。昼/黄昏/夜对照（另有按着耳机听的
+  抬手中和点头两格），量三件事：
   夜里 0→12 颗星只改窗洞里的像素（实测 822 个，全在窗洞内）、白天 0 像素、
   写歌卷帘只画在侧屏多边形里
 - **「她的专辑」面板长什么样**：`--storypanel out.png`。系统 `Toggle(.switch)`
@@ -1555,6 +1565,15 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
   倒放同一列。停留那一列是"像人"和"像做操"的分水岭（第 76 条）：
   伸懒腰是脖子晃 + 胸口起伏，喝咖啡是小口啜，玩手机是拇指点屏幕。
   只发布 2× 一份素材，缺任何一项整套不启用
+- **第四条长动作：按着耳机听**（`pose.listen`，清单 `Scripts/action_defs.py`）：
+  左手抬到耳罩上拢着、头往那边偏一点微微低下，停留那一列跟着拍子点头加轻微
+  侧晃（0.14 秒一张、六张一下≈lofi 的拍子）。**手的落点挂在头上**：先摆头
+  （含点头那一拍），再按摆好之后的耳罩位置反推手腕，所以点头时手跟着头走、
+  不在耳罩上滑。耳罩位置照 `headphones.build` 同一套量法从脸部网格现算。
+  只在戴着耳机（放歌）时演：电台放到她写的歌时她会按着耳机听一会儿（二十分钟
+  最多一次），放歌时也偶尔自发（20–40 分钟）。参数是 `render_listen_candidates.py`
+  里挑的：掌心朝镜头那几组读成"挥手"，掌心转向耳罩、四指拢着才读成"按着耳机"；
+  大臂偏离竖直 67°（抬手按耳朵本来就这个高度），挡眼 0、挡嘴 0
 - **桌上两件 3D 道具**（`Blender/props.py`）：马克杯和手机，和键盘同一层。
   画上去那个杯子已经抹掉（她够不着，第 73 条），支架上那台手机留着当场景
 - **动作面板**（控制条上那个招手图标）：把所有能主动演的东西列出来，
@@ -1609,6 +1628,9 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
   - **给明天留一句**（面板里，18 字以内）：第二天第一次在电脑前时作为一拍念出来
     （同样专注中不演、攒着等你），念过就清掉
   - 电台放到她写的歌时偶尔认出来说一句，二十分钟最多一次
+  - 闲聊分三池：三成念叨正在写的那首、三成说跟此刻有关的（时段、周末/周一/周五、
+    雨雪、放没放歌，`Dialogue.ambientIdle`）、其余通用。原来只有一池 12 句，
+    "窗外的灯一盏盏亮起来了"上午也会说
   - 闲聊时三成概率念叨正在写的那首；对话的上下文、MCP 状态、菜单栏都知道
     专辑写到哪儿；控制条上专辑图标有新页没看时亮一个小点
   - 存档 `story.json` 手写 `init(from:)`；读不出来先备份成 `story-unreadable-*.json`
@@ -2126,6 +2148,14 @@ $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.v
 python3 Scripts/chin_check.py /tmp/closeup1x
 $B --background --factory-startup --python Blender/render_closeup.py -- Snozzy.vrm /tmp/closeup2x 2
 python3 Scripts/chin_frames.py /tmp/closeup2x --out Assets  # base/逐帧/连续性/chin.json
+
+# 长动作（伸懒腰 / 喝咖啡 / 玩手机 / 按着耳机听）：身体 + 手层 + 逐档贴片
+# 挑终态参数先用 1× 候选（几秒一张），别拿 2× 发布集去试
+$B --background --factory-startup --python Blender/render_listen_candidates.py -- Snozzy.vrm /tmp/listen_cand
+$B --background --factory-startup --python Blender/render_action.py -- Snozzy.vrm /tmp/listen2x listen 2
+python3 Scripts/action_frames.py /tmp/listen2x listen --out Assets
+$B --background --factory-startup --python Blender/render_face.py -- Snozzy.vrm /tmp/facelisten2x 2 listen
+python3 Scripts/face_patches.py /tmp/facelisten2x --out Assets --prefix facelisten2x --action
 
 # 近景 2× 面部贴片：每个 00…08 姿态各自 13 块（约 12 分钟，126 张）
 # **必须和上面的身体帧同一次改动一起重出**——只重出身体，贴片会按旧头姿

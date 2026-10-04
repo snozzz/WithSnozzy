@@ -35,7 +35,8 @@ struct ActionPanel: View {
                     detail: detail(kind),
                     running: state.action(kind).isActive,
                     enabled: state.windowMode == .normal
-                        && state.sceneAssets.hasCompleteMotion(kind)) {
+                        && state.sceneAssets.hasCompleteMotion(kind)
+                        && (kind != .listen || state.isPlaying)) {
                     state.perform(kind)
                 }
             }
@@ -90,6 +91,7 @@ struct ActionPanel: View {
         case .stretch: "figure.arms.open"
         case .coffee: "cup.and.saucer.fill"
         case .phone: "iphone.gen3"
+        case .listen: "headphones"
         }
     }
 
@@ -97,6 +99,7 @@ struct ActionPanel: View {
         guard state.sceneAssets.hasCompleteMotion(kind) else { return "素材不全" }
         // `now` 没被用到值，但读一下它才能让倒计时每秒重算。
         _ = now
+        if kind == .listen && !state.isPlaying { return "戴着耳机（放歌）时才演" }
         guard kind.idleRange != nil else {
             // 手机那条不自发：它等的是"你在回消息"。
             return "外部触发（回消息时）"

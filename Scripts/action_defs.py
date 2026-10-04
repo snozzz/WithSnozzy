@@ -58,6 +58,18 @@ ACTIONS = {
         "manifest": "phone.json",
         "hands_keep": ("R",),
     },
+    # 按着耳机听：左手抬到耳罩上，右手留在键盘上；hold 那一段是跟着拍子点头。
+    # 不碰道具。主线里她听自己写完的歌时演（只在戴着耳机——放歌——时）
+    "listen": {
+        "holds": 6,
+        "prop": None,
+        "face": "facelisten2x",
+        "body": "snozzy_body_listen2x",
+        "phones": "snozzy_body_listen_headphones2x",
+        "hand": "snozzy_listen_hand",
+        "manifest": "listen.json",
+        "hands_keep": ("R",),
+    },
 }
 
 
