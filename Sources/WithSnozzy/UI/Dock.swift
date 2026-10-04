@@ -1,15 +1,33 @@
 import SwiftUI
 
 /// 底部悬浮控制条。
+///
+/// 一整排按钮是 `fixedSize` 的，完整一档实测 944 点宽，而窗口最小 720——
+/// 原来窗口一拉窄，控制条两头就被截掉。所以分三档，放得下哪档用哪档：
+/// 完整 → 收起曲名 → 再收起音量（音量在菜单栏里也有）。
 struct Dock: View {
     let palette: Palette
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            DockBar(palette: palette, showsTrack: true, showsVolume: true)
+            DockBar(palette: palette, showsTrack: false, showsVolume: true)
+            DockBar(palette: palette, showsTrack: false, showsVolume: false)
+        }
+    }
+}
+
+struct DockBar: View {
+    let palette: Palette
+    let showsTrack: Bool
+    let showsVolume: Bool
     @Environment(AppState.self) private var state
     @State private var showActions = false
 
     var body: some View {
         @Bindable var s = state
 
-        HStack(spacing: 14) {
+        HStack(spacing: showsTrack ? 12 : 11) {
             // ── 播放控制 ──────────────────────────────
             // 第一个按钮在两种来源下含义不同：
             // 电台是「再生成一首」，音乐库是「随机播放开关」。
@@ -48,30 +66,34 @@ struct Dock: View {
                 state.nextTrack()
             }
 
-            divider
+            if showsTrack {
+                divider
 
-            // ── 曲目信息 ──────────────────────────────
-            VStack(alignment: .leading, spacing: 2) {
-                Text(state.trackTitle)
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.88))
-                    .lineLimit(1)
-                Text(state.subtitleText)
-                    .font(.system(size: 10, weight: .regular, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .monospacedDigit()
+                // ── 曲目信息 ──────────────────────────────
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(state.trackTitle)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(1)
+                    Text(state.subtitleText)
+                        .font(.system(size: 10, weight: .regular, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.42))
+                        .monospacedDigit()
+                }
+                .frame(width: 138, alignment: .leading)
             }
-            .frame(width: 138, alignment: .leading)
 
-            divider
+            if showsVolume {
+                divider
 
-            // ── 音量 ─────────────────────────────────
-            HStack(spacing: 8) {
-                Image(systemName: volumeSymbol)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(width: 14)
-                SlimSlider(value: $s.volume, tint: palette.accent, width: 76)
+                // ── 音量 ─────────────────────────────────
+                HStack(spacing: 8) {
+                    Image(systemName: volumeSymbol)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .frame(width: 14)
+                    SlimSlider(value: $s.volume, tint: palette.accent, width: 76)
+                }
             }
 
             divider

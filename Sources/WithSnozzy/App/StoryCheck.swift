@@ -658,6 +658,21 @@ enum StoryCheck {
             exit(1)
         }
         print("已写入 \(path)  (\(Int(image.size.width))×\(Int(image.size.height)))")
+        // 控制条是 fixedSize 的一整排：每加一个面板按钮它就宽一截，
+        // 而窗口最小 720 宽。量真实排版的宽度，不靠数按钮。
+        // 控制条三档各自多宽；窗口（最小 720，两侧各留 12 点）放得下哪一档。
+        let widths = [(true, true), (false, true), (false, false)].map { track, volume in
+            NSHostingView(rootView: DockBar(palette: .dusk, showsTrack: track, showsVolume: volume)
+                .environment(state)).fittingSize.width
+        }
+        print(String(format: "控制条：完整 %.0f / 收起曲名 %.0f / 只留按钮 %.0f 点",
+                     widths[0], widths[1], widths[2]))
+        for window in [960.0, 820.0, 720.0] {
+            let fit = widths.firstIndex { $0 <= window - 24 }
+            print(String(format: "  窗口 %.0f 宽 → %@", window,
+                         fit.map { ["完整", "收起曲名", "只留按钮"][$0] } ?? "✗ 哪档都放不下"))
+        }
+        print(widths[2] <= 720 - 24 ? "DOCK ✓ 最窄的窗口也放得下" : "DOCK ✗ 最窄的窗口放不下")
         exit(0)
     }
 }
