@@ -5,7 +5,7 @@ import SwiftUI
 /// 推镜头这件事在画面上的算术。纯几何，不带状态。
 ///
 /// 单独拎出来是因为**有两处要用同一份**：真实画面（`RootView.SceneStack`）
-/// 和判据（`Snapshot` 的 `--closeup`）。这个项目里"一份数据在两处各算一遍"
+/// 和判据（`Snapshot` 的 `--closeup`）。层序那一半在 `SceneLayers`。这个项目里"一份数据在两处各算一遍"
 /// 已经犯过三次了（`HIP_Y` 写三份、贴片清单和渲染脚本对不上、面部贴片的
 /// 横竖缩放比），第 46 条的结论是：发现两处在算同一件事就并成一处。
 /// 判据和被判的东西各算一遍尤其糟——那样判据永远是绿的。
@@ -36,6 +36,27 @@ enum SceneCamera {
                       in size: CGSize, zoom: CGFloat) -> CGPoint {
         let ax = size.width * anchor.x, ay = size.height * anchor.y
         return CGPoint(x: ax + (x - ax) * zoom, y: ay + (y - ay) * zoom)
+    }
+
+    /// 矢量回退版的方框占窗口高度多少、中心在哪。
+    static let figureScale: CGFloat = 0.78
+    static let figureCenterY: CGFloat = 0.511
+    /// 她头部中心在窗口里的高度。摸头的热区和气泡都以它为锚点。
+    /// = figureCenterY − figureScale/2 + 0.335 × figureScale
+    static let headY: CGFloat = 0.382
+
+    /// 镜头推到 `zoom` 时她的头在窗口哪儿。摸头热区跟着它走。
+    static func headPoint(in size: CGSize, zoom: CGFloat) -> CGPoint {
+        point(size.width / 2, size.height * headY, in: size, zoom: zoom)
+    }
+
+    /// 气泡的中心：头部右上方，跟着镜头走、再拦在窗口内。
+    static func bubblePoint(in size: CGSize, zoom: CGFloat) -> CGPoint {
+        let figure = size.height * figureScale
+        return penned(point(size.width / 2 + figure * 0.20,
+                            size.height * headY - figure * 0.22,
+                            in: size, zoom: zoom),
+                      in: size)
     }
 
     /// 气泡的半个身子。`SpeechBubble` 最宽 210 点、左右各 13 点内边距，

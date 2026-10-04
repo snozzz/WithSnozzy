@@ -1458,14 +1458,19 @@ private struct ActivityStrip: View {
         let playing = activity == .resting
         let cue = ActivityRig.preview(activity, playing: playing,
                                       phone: activity == .takingBreak ? 1 : 0)
+        let t = 43.0
+        let frame = SceneFrame(
+            palette: .day, t: t,
+            pose: SnozzyRig.pose(time: t, kick: 0, playing: playing),
+            face: FaceRig.expression(t: t, playing: playing, mood: 0.55, drowsy: 0,
+                                     working: activity != .resting && activity != .takingBreak,
+                                     speaking: false, activity: cue),
+            headphones: playing, activity: cue, playing: playing,
+            typingFrame: TypingRig.frame(at: t, working: true,
+                                         frames: assets.hands.frames, activity: cue))
         return ZStack(alignment: .topLeading) {
-            ZStack(alignment: .topLeading) {
-                PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: 43)
-                PaintedRoomForeground(assets: assets, palette: .day)
-                PaintedRoomActivityOverlay(assets: assets, cue: cue, palette: .day,
-                                           playing: playing, t: 43)
-            }
-            .frame(width: w, height: h)
+            SceneLayers(assets: assets, frame: frame, size: CGSize(width: w, height: h))
+                .frame(width: w, height: h)
             Text(activity.rawValue)
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.82))
@@ -1598,31 +1603,21 @@ private struct CelebrationCell: View {
             ? CloseUp.transitionFrames : nil
         let zoom: CGFloat = sample.closeup ? SceneCamera.zoom : 1
 
+        let frame = SceneFrame(
+            palette: sample.palette, t: t, pose: pose, face: face, headphones: false,
+            chinFrame: chinFrame, activity: cue, playing: sample.playing,
+            celebration: amount,
+            typingFrame: TypingRig.frame(
+                at: t, working: sample.working, frames: assets.hands.frames,
+                chin: chinFrame == nil ? nil : assets.hands.chin, activity: cue),
+            celebrationClipDisabled: celebrationClipDisabled,
+            celebrationOffset: celebrationOffset)
         return ZStack(alignment: .topLeading) {
-            ZStack(alignment: .topLeading) {
-                PaintedRoomBackdrop(assets: assets, palette: sample.palette,
-                                    weather: .clear, t: t)
-                RenderedSnozzy(assets: assets, palette: sample.palette,
-                               pose: pose, face: face, headphones: false,
-                               chinFrame: chinFrame, t: t)
-                PaintedRoomForeground(assets: assets, palette: sample.palette)
-                PaintedRoomActivityOverlay(
-                    assets: assets, cue: cue, palette: sample.palette,
-                    playing: sample.playing, t: t, celebration: amount,
-                    celebrationClipDisabled: celebrationClipDisabled,
-                    celebrationOffset: celebrationOffset)
-                if assets.hands.isUsable {
-                    TypingHands(assets: assets, palette: sample.palette,
-                                frame: TypingRig.frame(
-                                    at: t, working: sample.working,
-                                    frames: assets.hands.frames,
-                                    chin: chinFrame == nil ? nil : assets.hands.chin,
-                                    activity: cue),
-                                chinFrame: chinFrame)
-                }
-            }
-            .frame(width: CelebrationStrip.cellW, height: CelebrationStrip.cellH)
-            .scaleEffect(zoom, anchor: SceneCamera.unitAnchor)
+            SceneLayers(assets: assets, frame: frame,
+                        size: CGSize(width: CelebrationStrip.cellW,
+                                     height: CelebrationStrip.cellH),
+                        zoom: zoom)
+                .frame(width: CelebrationStrip.cellW, height: CelebrationStrip.cellH)
 
             Text(sample.label)
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -2049,9 +2044,8 @@ private struct CloseUpStrip: View {
 
     /// 一档。镜头进度从骨骼帧推导，和生产时间轴的九拍完全一致。
     ///
-    /// 层序和缩放变换要和 `RootView.SceneStack` 完全一致，否则这条判据
-    /// 量的就是另一个东西了。**变换那一半是共用的**（`SceneCamera`，
-    /// 第 46 条），层序这一半只能照抄——改了那边的层序，这里也要跟着改。
+    /// 层序、缩放和气泡位置都走生产的 `SceneLayers` / `SceneBubble`，
+    /// 这里只填输入（第 69 条：判据照抄层序，判据就永远是绿的）。
     private func cell(_ chinFrame: Int?, w: CGFloat, h: CGFloat) -> some View {
         let push: CGFloat
         if let frame = chinFrame, frame >= 0 {
@@ -2063,39 +2057,25 @@ private struct CloseUpStrip: View {
         let t = 3.0
         var pose = SnozzyRig.pose(time: t, kick: 0, playing: false)
         pose.blink = 0
-        let face = FaceRig.expression(t: t, playing: false, mood: 0.62, drowsy: 0,
-                                      working: false, speaking: false)
-        // 头和气泡的锚点抄自 `SceneStack`（figureScale 0.78、headY 0.382）
-        let figure = h * 0.78
-        let bubble = SceneCamera.penned(
-            SceneCamera.point(w / 2 + figure * 0.20, h * 0.382 - figure * 0.22,
-                              in: CGSize(width: w, height: h), zoom: zoom),
-            in: CGSize(width: w, height: h))
+        let size = CGSize(width: w, height: h)
+        let frame = SceneFrame(
+            palette: .day, t: t, pose: pose,
+            face: FaceRig.expression(t: t, playing: false, mood: 0.62, drowsy: 0,
+                                     working: false, speaking: false),
+            headphones: headphones, chinFrame: chinFrame,
+            activity: ActivityRig.preview(.resting, playing: false),
+            playing: false,
+            typingFrame: TypingRig.frame(at: t, working: false,
+                                         frames: assets.hands.frames,
+                                         chin: (chinFrame ?? -1) >= 0
+                                             ? assets.hands.chin : nil))
         return ZStack {
-            ZStack(alignment: .topLeading) {
-                PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: t)
-                RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
-                               headphones: headphones, chinFrame: chinFrame, t: t)
-                PaintedRoomForeground(assets: assets, palette: .day)
-                PaintedRoomActivityOverlay(
-                    assets: assets,
-                    cue: ActivityRig.preview(.resting, playing: false),
-                    palette: .day, playing: false, t: t)
-                TypingHands(assets: assets, palette: .day,
-                            frame: TypingRig.frame(at: t, working: false,
-                                                   frames: assets.hands.frames,
-                                                   chin: (chinFrame ?? -1) >= 0
-                                                       ? assets.hands.chin : nil),
-                            chinFrame: chinFrame)
-            }
-            .frame(width: w, height: h)
-            .scaleEffect(zoom, anchor: SceneCamera.unitAnchor)
-
+            SceneLayers(assets: assets, frame: frame, size: size, zoom: zoom)
+                .frame(width: w, height: h)
             // 气泡：推到头之后它会被一起推出去，得确认还在窗口里
             if (chinFrame ?? -1) >= 0 {
-                SpeechBubble(text: "「重写导出模块」还挂在上面呢。", palette: .day)
-                    .fixedSize()
-                    .position(bubble)
+                SceneBubble(text: "「重写导出模块」还挂在上面呢。", palette: .day,
+                            size: size, zoom: zoom)
             }
         }
         .frame(width: w, height: h)
@@ -2147,18 +2127,17 @@ private struct HandStrip: View {
         let pose = SnozzyRig.pose(time: 3.0, kick: 0, playing: false)
         let face = FaceRig.expression(t: 3.0, playing: false, mood: 0.5, drowsy: 0,
                                       working: true, speaking: false)
-        return ZStack(alignment: .topLeading) {
-            // 真实层序：房间 → 角色 → 桌子 → 手
-            PaintedRoomBackdrop(assets: assets, palette: .day, weather: .clear, t: 3)
-            RenderedSnozzy(assets: assets, palette: .day, pose: pose, face: face,
-                           headphones: false, t: 3)
-            PaintedRoomForeground(assets: assets, palette: .day)
-            TypingHands(assets: assets, palette: .day, frame: i)
-        }
-        .frame(width: canvasW, height: canvasH)
-        .offset(x: -crop.minX, y: -crop.minY)
-        .frame(width: crop.width, height: crop.height, alignment: .topLeading)
-        .clipped()
+        // 真实层序整张画（`SceneLayers`），再裁出键盘那一块
+        let frame = SceneFrame(palette: .day, t: 3, pose: pose, face: face,
+                               headphones: false,
+                               activity: ActivityRig.preview(.typing, playing: false),
+                               playing: false, typingFrame: i)
+        return SceneLayers(assets: assets, frame: frame,
+                           size: CGSize(width: canvasW, height: canvasH))
+            .frame(width: canvasW, height: canvasH)
+            .offset(x: -crop.minX, y: -crop.minY)
+            .frame(width: crop.width, height: crop.height, alignment: .topLeading)
+            .clipped()
     }
 }
 
