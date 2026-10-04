@@ -77,9 +77,11 @@ final class Performer {
                 completion?(false)
                 return
             }
-            if let i = queue.firstIndex(where: { $0.item == item }) {
-                queue.remove(at: i).completion?(false)
-            }
+            // 新的手动请求取代还没开演的旧手动请求：让位期间连点两下，
+            // 只该演最后点的那个，而不是演完它再把前一个补上。
+            let superseded = queue.filter { $0.manual || $0.item == item }
+            queue.removeAll { $0.manual || $0.item == item }
+            superseded.forEach { $0.completion?(false) }
             queue.insert(req, at: 0)
             if let playing = current {
                 release(playing)

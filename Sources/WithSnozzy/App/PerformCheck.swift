@@ -191,6 +191,15 @@ enum PerformCheck {
         let restarts = seq.filter { $0 == Shown(asset: "coffee", frame: -1) }.count
         check("喝咖啡只起步一次（-1 出现 \(restarts) 次，起落各一次）", restarts == 2)
 
+        seq = scenario("让位期间连点两个：只演最后点的那个") { waitFor in
+            performer.request(.action(.phone), manual: true, ignoresCooldown: true)
+            await waitFor { (rigs[.phone]?.frame ?? -1) > final }
+            performer.request(.action(.coffee), manual: true)
+            performer.request(.action(.stretch), manual: true)
+        }
+        check("看手机让位后演伸懒腰，先点的喝咖啡被取代",
+              reached(seq, "stretch") && !seq.contains { $0.asset == "coffee" })
+
         seq = scenario("自动请求遇到冷却：丢掉") { _ in
             performer.request(.action(.coffee))
         }
