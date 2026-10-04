@@ -77,6 +77,8 @@ struct StoryPanel: View {
             }
         }
         .onAppear { story.markRead() }
+        // 面板开着的时候又写完一首：人就在看，不该等关了面板再亮红点
+        .onChange(of: st.unread) { _, unread in if unread > 0 { story.markRead() } }
     }
 
     // MARK: - 封面

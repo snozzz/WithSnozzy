@@ -195,10 +195,11 @@ enum StoryCheck {
 
     private static func boundaries() {
         print("== 边界")
-        let midnight = calendar.startOfDay(for: day0)
-        var s = StoryEngine.fresh(at: midnight, focusMinutes: 0)
+        // 主线的一天从早上 5 点算起：从 5 点挂满 24 小时才是"同一天"
+        let dawn = calendar.startOfDay(for: day0).addingTimeInterval(StoryEngine.dayStartsAt)
+        var s = StoryEngine.fresh(at: dawn, focusMinutes: 0)
         for m in 0..<(24 * 60) {
-            StoryEngine.credit(&s, .minute(focusing: true), at: midnight.addingTimeInterval(Double(m) * 60))
+            StoryEngine.credit(&s, .minute(focusing: true), at: dawn.addingTimeInterval(Double(m) * 60))
         }
         for _ in 0..<1000 { StoryEngine.credit(&s, .task, at: day0) }
         for _ in 0..<1000 { StoryEngine.credit(&s, .chat, at: day0) }
@@ -239,6 +240,15 @@ enum StoryCheck {
         let noteBeat = nextDay.first { if case .note = $0 { true } else { false } }
         check("留言截到 \(StoryEngine.noteLimit) 字、去掉换行（「\(n.pending.first.map { "\($0.lines.last ?? "")" } ?? "")」）",
               noteBeat.map { $0.lines.last!.count <= StoryEngine.noteLimit + 2 } ?? false)
+        // 夜里 23:50 留的，凌晨 1 点（还是同一个晚上）不念，第二天早上才念
+        var late = StoryEngine.fresh(at: day0, focusMinutes: 0)
+        late.pending = []
+        let night = calendar.startOfDay(for: day0).addingTimeInterval(23 * 3600 + 50 * 60)
+        StoryEngine.leaveNote(&late, "早点睡", at: night)
+        let oneAM = StoryEngine.credit(&late, .minute(focusing: false), at: night.addingTimeInterval(70 * 60))
+        let morning = StoryEngine.credit(&late, .minute(focusing: false), at: night.addingTimeInterval(9 * 3600))
+        check("23:50 留的话凌晨一点不念、第二天早上念（一天从 5 点算）",
+              oneAM.isEmpty && morning.contains(.note("早点睡")))
         check("当天不念、第二天念一次，念完清掉",
               sameDay.isEmpty && noteBeat != nil && n.note == nil
                 && StoryEngine.credit(&n, .minute(focusing: false),

@@ -153,7 +153,15 @@ enum StoryEngine {
         case chat
     }
 
-    static func dayKey(_ date: Date) -> String { FocusHistory.dayFormatter.string(from: date) }
+    /// 主线的"一天"从早上 5 点算起，不是午夜。
+    ///
+    /// 按午夜切的话，夜里 23:50 给明天留的话 00:01 就被念出来了，凌晨一点写完的
+    /// 那首也算成"新的一天"——对熬夜的人来说那还是同一个晚上。
+    static let dayStartsAt: TimeInterval = 5 * 3600
+
+    static func dayKey(_ date: Date) -> String {
+        FocusHistory.dayFormatter.string(from: date.addingTimeInterval(-dayStartsAt))
+    }
 
     /// 当前这一首（或下一段小样）的门槛。
     static func need(_ s: StoryState) -> Double {
@@ -259,6 +267,7 @@ enum StoryEngine {
 
     /// 上次见面隔了几天。nil 是第一次。
     static func daysAway(_ s: StoryState, now: Date) -> Int? {
+        // 两边都是 dayKey 切出来的日期串，按日历日相减即可
         guard let last = s.lastSeenDay,
               let then = FocusHistory.dayFormatter.date(from: last),
               let today = FocusHistory.dayFormatter.date(from: dayKey(now)) else { return nil }
