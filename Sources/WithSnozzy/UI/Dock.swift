@@ -85,7 +85,7 @@ struct Dock: View {
             IconButton(symbol: "person.crop.circle.badge.questionmark", size: 14,
                        isOn: state.closeUp.isActive, tint: palette.accent,
                        help: "叫她凑近看看") {
-                state.closeUp.begin()
+                state.lookCloser()
             }
 
             // ── 动作面板 ──────────────────────────────

@@ -154,12 +154,20 @@ final class CloseUp {
 
     /// 推进结束时喊一声，由 `AppState` 接上去让她说话。
     var onArrived: (() -> Void)?
-    /// 现在能不能凑近。由 `AppState` 注入——窗口形态、面板开着没有、
-    /// 窗口可不可见都归它管，这里不该知道那些。
-    var canStart: (() -> Bool)?
+    /// 只管下一次的到位台词，用完即弃。主线剧情借近景说自己的话。
+    var nextArrival: (() -> Void)?
+    /// 察觉你回来了、而且过了冷却。接上 `Performer` 之后由它决定现在凑近还是
+    /// 排队——窗口形态、面板开着没有、窗口可不可见都归它管，这里不该知道那些。
+    var onNoticed: (() -> Void)?
+    /// 收工（自然退完或让完位）之后喊一声。`Performer` 靠它接下一条。
+    var onFinished: (() -> Void)?
+    /// 停多久。判据可以缩短它，生产用默认区间。
+    var holdRange = CloseUp.holdRange
 
     /// 正在近景里（含推进和退回）。
     var isActive: Bool { running != nil }
+    /// 正在倒放让位（见 `release`）。
+    private(set) var isReleasing = false
 
     // MARK: - 生命周期
 
@@ -187,10 +195,9 @@ final class CloseUp {
         let now = Date()
         guard running == nil,
               now.timeIntervalSince(lastFinished) > Self.cooldown,
-              let away = leftAt, now.timeIntervalSince(away) > Self.awayEnough,
-              canStart?() ?? true
+              let away = leftAt, now.timeIntervalSince(away) > Self.awayEnough
         else { return }
-        begin()
+        if let onNoticed { onNoticed() } else { begin() }
     }
 
     /// 立刻来一次。菜单/调试用，绕过冷却和"离开够久"那两条。
@@ -201,11 +208,12 @@ final class CloseUp {
     /// 就能停在任何一步，不需要每步再去认一次身份。
     func begin() {
         running?.cancel()
+        isReleasing = false
         // Set the published base synchronously.  Waiting for the child Task to
         // get its first actor turn can otherwise leave one old hand-layer frame
         // on screen at the instant the camera starts moving.
         chinFrame = -1
-        let hold = Double.random(in: Self.holdRange)
+        let hold = Double.random(in: holdRange)
         running = Task { [weak self] in
             guard let self else { return }
 
@@ -220,7 +228,12 @@ final class CloseUp {
             self.chinFrame = Self.transitionFrames
 
             // 推到位、掌根落到下颌之后才开口。
-            self.onArrived?()
+            if let say = self.nextArrival {
+                self.nextArrival = nil
+                say()
+            } else {
+                self.onArrived?()
+            }
 
             guard await self.pause(hold) else { return }
             withAnimation(.easeInOut(duration: Self.pullOut)) { self.pushed = false }
@@ -232,10 +245,38 @@ final class CloseUp {
             guard await self.pause(Self.frameTime) else { return }
             self.chinFrame = -1
             guard await self.pause(Self.pullOut - Self.motionDuration) else { return }
-            self.chinFrame = nil
-            self.running = nil
-            self.lastFinished = Date()
+            self.finish()
         }
+    }
+
+    /// 不硬切地退出来：镜头开始往回拉，手从此刻这一档沿同一列倒放回键盘，
+    /// 镜头退完再收工。和自然退场同一条路，只是起点不一定是终态。
+    func release() {
+        guard let start = chinFrame, running != nil, !isReleasing else { return }
+        running?.cancel()
+        nextArrival = nil
+        isReleasing = true
+        withAnimation(.easeInOut(duration: Self.pullOut)) { pushed = false }
+        running = Task { [weak self] in
+            guard let self else { return }
+            var f = min(start, Self.transitionFrames)
+            while f > -1 {
+                guard await self.pause(Self.frameTime) else { return }
+                f -= 1
+                self.chinFrame = f
+            }
+            let spent = Double(min(start, Self.transitionFrames) + 1) * Self.frameTime
+            guard await self.pause(max(Self.frameTime, Self.pullOut - spent)) else { return }
+            self.finish()
+        }
+    }
+
+    private func finish() {
+        chinFrame = nil
+        running = nil
+        isReleasing = false
+        lastFinished = Date()
+        onFinished?()
     }
 
     /// 睡一会儿。被取消就返回 false，调用方直接收工。
@@ -248,12 +289,14 @@ final class CloseUp {
         }
     }
 
-    /// 手动收起（切窗口形态之类）。
+    /// 硬收：只给"画面整个不在了"的场合用（切到迷你/桌宠）。
     func cancel() {
         guard running != nil else { return }
         running?.cancel()
         running = nil
         chinFrame = nil
+        isReleasing = false
+        nextArrival = nil
         withAnimation(.easeInOut(duration: 0.25)) { pushed = false }
         lastFinished = Date()
     }

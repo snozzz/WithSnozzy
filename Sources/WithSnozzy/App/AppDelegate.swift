@@ -70,6 +70,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if Snapshot.actionCheck {
             exit(Snapshot.runActionCheck() ? 0 : 1)
         }
+        if PerformCheck.requested {
+            exit(PerformCheck.run() ? 0 : 1)
+        }
         if Snapshot.activityCheck {
             exit(ActivityRig.selfCheck() ? 0 : 1)
         }

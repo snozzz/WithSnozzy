@@ -99,11 +99,16 @@ final class ActionRig {
     private var lastFinished = Date.distantPast
     private var dueAfter: Double
 
-    /// 现在能不能演。由 `AppState` 注入——窗口形态、近景在不在跑、
-    /// 素材齐不齐都归它管，这里不该知道那些。
-    var canStart: (() -> Bool)?
     /// 演到位（终态那一拍）时喊一声。喝咖啡和回消息各自要说句话。
     var onArrived: (() -> Void)?
+    /// 只管下一次的到位台词，用完即弃。主线剧情借这条动作说自己的话。
+    var nextArrival: (() -> Void)?
+    /// 演完（或让完位）之后喊一声。`Performer` 靠它接下一条。
+    var onFinished: (() -> Void)?
+    /// 到点该自发一次了。接上 `Performer` 之后由它决定现在演还是排队
+    /// ——窗口形态、近景在不在跑、素材齐不齐都归它管，这里不该知道那些。
+    /// 没接（自检里单独跑一条）就直接演。
+    var onDue: (() -> Void)?
 
     init(_ kind: ActionKind) {
         self.kind = kind
@@ -111,6 +116,10 @@ final class ActionRig {
     }
 
     var isActive: Bool { running != nil }
+    /// 正在倒放让位（见 `release`）。
+    private(set) var isReleasing = false
+    /// 刚演完不久。自动请求要等它过去，手动的不管。
+    var isCoolingDown: Bool { Date().timeIntervalSince(lastFinished) <= kind.cooldown }
     /// 距下一次自发还有多少秒。给动作面板显示，别的地方不用。
     var secondsUntilNext: Double {
         max(0, dueAfter - Date().timeIntervalSince(lastFinished))
@@ -121,7 +130,7 @@ final class ActionRig {
     private static let tick: Double = 15
 
     /// 开始自发节拍。**必须由 `AppState.wireState()` 调**，不能在 `init` 里
-    /// ——`canStart` 是外面注入的，那时候还是 nil（第 12 条）。
+    /// ——`onDue` 是外面注入的，那时候还是 nil（第 12 条）。
     ///
     /// 用一个粗粒度轮询而不是精确定时器：这条时间轴上"早晚十几秒"没有意义，
     /// 而轮询天然能处理"到点了但窗口是迷你形态 / 近景正在跑"——
@@ -137,7 +146,7 @@ final class ActionRig {
                 guard !self.isActive,
                       Date().timeIntervalSince(self.lastFinished) >= self.dueAfter
                 else { continue }
-                self.begin()
+                if let onDue = self.onDue { onDue() } else { self.begin() }
             }
         }
     }
@@ -147,11 +156,9 @@ final class ActionRig {
     /// **手动入口是必须的**：自动触发要等一整段番茄钟，改完素材想验一眼
     /// 根本等不起——托腮那条也是为这个才加的按钮。
     func begin(force: Bool = false) {
-        let now = Date()
-        guard force || (running == nil
-                        && now.timeIntervalSince(lastFinished) > kind.cooldown
-                        && canStart?() ?? true) else { return }
+        guard force || (running == nil && !isCoolingDown) else { return }
         running?.cancel()
+        isReleasing = false
         // 和 `CloseUp.begin` 一样同步落到 -1：等子 Task 拿到第一个 actor 时机
         // 才置的话，动作起步那一瞬间屏幕上还留着上一张常态图。
         frame = -1
@@ -167,7 +174,12 @@ final class ActionRig {
             }
             guard await self.pause(Self.frameTime) else { return }
             self.frame = final
-            self.onArrived?()
+            if let say = self.nextArrival {
+                self.nextArrival = nil
+                say()
+            } else {
+                self.onArrived?()
+            }
 
             // 停在那儿的一段。素材里没有停留帧时退回"静止停一会儿"——
             // 少一列图不该让整条动作演不了，只是没那么活。
@@ -191,10 +203,46 @@ final class ActionRig {
             guard await self.pause(Self.frameTime) else { return }
             self.frame = -1
             guard await self.pause(Self.frameTime) else { return }
-            self.frame = nil
-            self.running = nil
-            self.settle()
+            self.finish()
         }
+    }
+
+    /// 不硬切地收手：从此刻这一档沿同一列倒放回常态，再喊 `onFinished`。
+    ///
+    /// 原来让位只有 `cancel()`——`frame` 直接置 nil，举着杯子的胳膊一帧之内
+    /// 回到键盘上。停留那一列先落回终态（停留帧本来就是围着终态的小幅摆动，
+    /// 自然时间轴也是这么收的），再按 1/12 秒一档往回走。
+    func release() {
+        guard let start = frame, running != nil, !isReleasing else { return }
+        running?.cancel()
+        nextArrival = nil
+        isReleasing = true
+        let final = Self.transitionFrames
+        let holdStep = kind.holdFrameTime
+        running = Task { [weak self] in
+            guard let self else { return }
+            var f = start
+            if f > final {
+                guard await self.pause(holdStep) else { return }
+                f = final
+                self.frame = f
+            }
+            while f > -1 {
+                guard await self.pause(Self.frameTime) else { return }
+                f -= 1
+                self.frame = f
+            }
+            guard await self.pause(Self.frameTime) else { return }
+            self.finish()
+        }
+    }
+
+    private func finish() {
+        frame = nil
+        running = nil
+        isReleasing = false
+        settle()
+        onFinished?()
     }
 
     /// 一次演完（或被打断）之后重新计时，并重新抽下一次的间隔。
@@ -212,12 +260,15 @@ final class ActionRig {
         }
     }
 
-    /// 手动收起（切窗口形态、近景要开始之类）。
+    /// 硬收：只给"画面整个不在了"的场合用（切到迷你/桌宠）。
+    /// 画面还在的时候让位一律走 `release()`。
     func cancel() {
         guard running != nil else { return }
         running?.cancel()
         running = nil
         frame = nil
+        isReleasing = false
+        nextArrival = nil
         settle()
     }
 

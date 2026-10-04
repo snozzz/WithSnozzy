@@ -8,7 +8,7 @@ import SwiftUI
 /// （近景当初加那个按钮就是这个理由，HANDOFF 第五节写着"这个入口是必须的"）。
 ///
 /// **不要在这里另造一条播放路径。** 每一行调的都是生产代码里那个入口
-/// （`CloseUp.begin`、`AppState.perform`、`AppState.forcedActivity`），
+/// （`AppState.lookCloser`、`AppState.perform`、`AppState.forcedActivity`），
 /// 所以面板里看到的就是真实运行时的样子。判据和被判的东西各走一套，
 /// 判据永远是绿的——这个坑这个项目里踩过（第 69 条）。
 struct ActionPanel: View {
@@ -27,7 +27,7 @@ struct ActionPanel: View {
                     ? "推镜头 + 抬手托下颌，念一句待办" : "素材不全，只推镜头",
                 running: state.closeUp.isActive,
                 enabled: state.windowMode == .normal) {
-                state.closeUp.begin()
+                state.lookCloser()
             }
             ForEach(ActionKind.allCases, id: \.self) { kind in
                 row(symbol: symbol(kind),
@@ -36,7 +36,7 @@ struct ActionPanel: View {
                     running: state.action(kind).isActive,
                     enabled: state.windowMode == .normal
                         && state.sceneAssets.hasCompleteMotion(kind)) {
-                    state.perform(kind, force: true)
+                    state.perform(kind)
                 }
             }
 

@@ -1340,6 +1340,23 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 判据 `--compactstrip` 照**真实窗口尺寸**渲（第 72 条），桌宠那一格垫了
 格子底——任何一层不透明的背景都会在桌面上留下一个方块，纯色底上看不出来。
 
+**82. 动作被打断时不能 `cancel()`，要倒放让位；入口也只能有一个。**
+控制条/菜单栏/动作面板上的"叫她凑近"一直直接调 `CloseUp.begin()`，
+长动作正在演时两条同时跑：托腮优先上屏，近景收工那一刻画面从托腮常态
+**硬切**到动作的半截（停留列里举着杯子）。手动点另一条动作则是
+`perform()` 里先 `cancel()`——举着的胳膊一帧之内回到键盘。
+
+现在所有入口（按钮、自发节拍、番茄钟、主线剧情）都走 `Performer`：
+同一时刻只演一条；**手动**请求让正在演的那条从此刻这一档沿同一列倒放回
+常态（`release()`，停留列先落回终态），再接新的；**自动**请求排队，
+等前一条自己演完，等太久就作罢。`cancel()` 只留给"画面整个不在了"
+（切到迷你/桌宠）。
+
+两条之间的交接是 `X:-1 → Y:-1`，同一拍完成、不经过 1× 常态。各套 -1 底图
+不是逐像素相同（咖啡/手机那套桌沿那行多一截杯子），所以没靠"看着一样"
+放行：`--performcheck` 按真实层序整张渲出来量，直接交接最多差 48 个像素，
+不比经过常态那两步（51 / 28）大。判据见第四节。
+
 ## 四、验证纪律
 
 这个项目里"看着对"和"真的对"经常不是一回事，所以**把主观的东西做成可测的**：
@@ -1362,6 +1379,11 @@ XOR 峰值比必然爆掉，而那不是毛病（第 45 条）。
 - **迷你/桌宠里她长什么样**：`--compactstrip out.png`。照**真实窗口尺寸**渲
   （340×280 / 300×320，第 72 条），桌宠那一格垫格子底——不透明的背景
   在纯色底上看不出来，在桌面上就是一个方块
+- **长动作撞上的时候有没有硬切**：`--performcheck`。用真实 `CloseUp`/`ActionRig`/
+  `Performer` 演七段碰撞（停留中换动作、动作中途凑近、近景里点动作、自动排队、
+  排队过期、连点、冷却），每 4 毫秒记一次画面显示哪套素材第几档，要求每一步
+  只挪一档、换套必须在 -1 交接、任何时刻最多一条在演；负向探针用旧的
+  `cancel()` 让位，必须报出硬切
 - **一条长动作从头到尾对不对**：`--actioncheck`。素材契约和时间轴分开报：
   "素材没齐所以整套没启用"和"素材齐了但时间轴写错"在画面上长得一样
   （都是她不动）。停留那一段还要验**整圈循环**再回终态——停在半圈上
@@ -2063,6 +2085,7 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --citystrip-negative
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --closeup   /tmp/closeup.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --activitycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actioncheck
+dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --performcheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip /tmp/compact.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip /tmp/drowsy.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel /tmp/panel.png

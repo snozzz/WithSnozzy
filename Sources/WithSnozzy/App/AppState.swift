@@ -89,16 +89,19 @@ final class AppState {
     }
     func action(_ kind: ActionKind) -> ActionRig { actions[kind]! }
 
-    /// 演一条动作，并把别的收掉。
-    ///
-    /// **手动入口（动作面板、菜单栏）必须走这里**：它们用的是
-    /// `begin(force: true)`，绕过了 `canStart` 那道互斥判断，两条一起跑
-    /// 就会互相盖掉图层——画面上是半只胳膊。自动触发那条路由 `canStart`
-    /// 管，不会走到这儿。
-    func perform(_ kind: ActionKind, force: Bool = false) {
-        closeUp.cancel()
-        for (other, rig) in actions where other != kind { rig.cancel() }
-        action(kind).begin(force: force)
+    /// 近景和三条长动作的唯一入口。同一时刻只演一条；手动请求让正在演的那条
+    /// 倒放回常态再接上，自动请求排队。见 `Performer`。
+    @ObservationIgnored private(set) lazy var performer = Performer(closeUp: closeUp,
+                                                                     actions: actions)
+
+    /// 手动演一条动作（动作面板、菜单栏）。正在演的那条会倒放让位，不硬切。
+    func perform(_ kind: ActionKind) {
+        performer.request(.action(kind), manual: true)
+    }
+
+    /// 手动叫她凑近（控制条、菜单栏、动作面板）。
+    func lookCloser() {
+        performer.request(.closeUp, manual: true)
     }
 
     /// 外面戳一下她就拿起手机（回微信/TG 的时候用）。见 `PhoneNudge`。
@@ -700,10 +703,7 @@ final class AppState {
             guard windowMode != oldValue else { return }
             // 迷你/桌宠模式里没有那个画面，正演着的近景要收掉——
             // 不收的话切回完整模式时它还挂在那儿，镜头凭空是推进的
-            if windowMode != .normal {
-                closeUp.cancel()
-                actions.values.forEach { $0.cancel() }
-            }
+            if windowMode != .normal { performer.reset() }
             onWindowModeChange?(windowMode)
             scheduleSave()
         }
@@ -818,7 +818,8 @@ final class AppState {
                 self.celebrate()
                 // 专注完了先伸个懒腰再说话：动作是"歇下来"的信号，
                 // 台词跟在后面才像松了口气，反过来就成了边说边举手。
-                self.action(.stretch).begin()
+                // 近景正演着就排队，等它退完再伸——过半分钟就不补了。
+                self.performer.request(.action(.stretch), patience: 30)
                 self.chatter.say(.focusFinished)
             } else {
                 self.chatter.say(.breakFinished)
@@ -850,42 +851,42 @@ final class AppState {
             }
         }
 
-        // 长动作：素材齐了、窗口是完整形态、近景和别的动作都没在跑才演。
-        // 它们共用同一批图层槽位，同时跑会互相盖掉。
+        // 长动作和近景：互斥交给 `Performer`，这里只说环境允不允许。
+        performer.allows = { [weak self] item in
+            guard let self, self.windowMode == .normal else { return false }
+            switch item {
+            case .closeUp:
+                // 面板开着说明你正在用它，这时候把镜头推上去只会挡住你在看的东西。
+                return self.panel == nil && self.isVisible
+            case .action(let kind):
+                return self.sceneAssets.hasCompleteMotion(kind)
+            }
+        }
         for kind in ActionKind.allCases {
             let rig = action(kind)
             // 停留那一列有几张由**素材**说了算，代码里再写一份必然对不上
             // （第 70 条）。
             rig.holdFrames = sceneAssets.actionSets[kind]?.manifest.holdFrames ?? 0
-            rig.canStart = { [weak self] in
-                guard let self else { return false }
-                return self.windowMode == .normal
-                    && !self.closeUp.isActive
-                    && self.actions.values.allSatisfy { $0.kind == kind || !$0.isActive }
-                    && self.sceneAssets.hasCompleteMotion(kind)
-            }
+            rig.onDue = { [weak self] in self?.performer.request(.action(kind)) }
             rig.startScheduling()
         }
         // 端起杯子那一下配一句话，不然只是手在动。看手机同理。
         action(.coffee).onArrived = { [weak self] in self?.chatter.say(.coffee) }
         action(.phone).onArrived = { [weak self] in self?.chatter.say(.phone) }
         // 你在回消息，她也拿起手机。触发口子是一个文件，谁都能戳。
-        phoneNudge.onNudge = { [weak self] in self?.action(.phone).begin() }
+        phoneNudge.onNudge = { [weak self] in
+            self?.performer.request(.action(.phone), patience: 15)
+        }
         phoneNudge.start()
         // 进入专注段时喝一口咖啡。**只在自然进入 work 时**——手动 skip
         // 一路点过去的话，她会一段一段地举杯，像在灌咖啡。
         focus.onPhaseBegan = { [weak self] phase, automatic in
             guard let self, phase == .work, automatic else { return }
-            self.action(.coffee).begin()
+            self.performer.request(.action(.coffee), patience: 30)
         }
-        closeUp.canStart = { [weak self] in
-            guard let self else { return false }
-            // 桌宠/迷你模式里根本没有那个画面；面板开着说明你正在用它，
-            // 这时候把镜头推上去只会挡住你在看的东西。
-            // 长动作在跑时也不能推——两者共用同一批图层槽位。
-            return self.windowMode == .normal && self.panel == nil
-                && self.isVisible
-                && self.actions.values.allSatisfy { !$0.isActive }
+        // 你回来时她正举着杯子：喝完再看你，等太久就算了。
+        closeUp.onNoticed = { [weak self] in
+            self?.performer.request(.closeUp, patience: 8)
         }
         closeUp.onArrived = { [weak self] in self?.complainAboutWatching() }
 

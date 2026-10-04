@@ -105,7 +105,7 @@ struct MenuBarView: View {
             // 顶到了 260 点的面板宽度，最长的那个会被切掉。
             Button {
                 state.revealWindow?()
-                state.closeUp.begin()
+                state.lookCloser()
             } label: {
                 Label("叫她凑近看看", systemImage: "person.crop.circle.badge.questionmark")
                     .font(.system(size: 11))
@@ -119,7 +119,7 @@ struct MenuBarView: View {
             // 所以和近景一样必须留一个绕过冷却的入口。
             Button {
                 state.revealWindow?()
-                state.perform(.stretch, force: true)
+                state.perform(.stretch)
             } label: {
                 Label("让她伸个懒腰", systemImage: "figure.arms.open")
                     .font(.system(size: 11))
