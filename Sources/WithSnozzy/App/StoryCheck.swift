@@ -301,10 +301,14 @@ enum StoryCheck {
         let performer = Performer(closeUp: closeUp, actions: rigs)
         let story = StoryDirector(persist: false)
         var said: [String] = []
+        var saidInCloseUp: [Bool] = []
         var order: [String] = []
         var allowed = true
         story.performer = performer
-        story.say = { said.append($0) }
+        story.say = {
+            said.append($0)
+            saidInCloseUp.append(closeUp.chinFrame == CloseUp.transitionFrames)
+        }
         story.canPerform = { allowed }
         story.idleSeconds = { 0 }
 
@@ -339,6 +343,8 @@ enum StoryCheck {
         print("  动作：" + order.joined(separator: " → "))
         check("三句按顺序说完", said == Story.chapters[2].lines)
         check("先伸懒腰再凑近", order == ["stretch", "chin"])
+        check("凑近之后的几句都在近景里说完（\(saidInCloseUp.map { $0 ? "近" : "远" }.joined())）",
+              saidInCloseUp.dropFirst().allSatisfy { $0 })
         check("演完从待演列表里拿掉", !story.hasPending)
 
         // 记账：人不在、也没在专注，不算；专注中哪怕键盘没动也算

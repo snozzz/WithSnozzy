@@ -1625,7 +1625,8 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
     「电台放她的专辑」，电台按顺序轮放写完的几首；面板里每一首都能点名播放。
     原来电台 32 小节自动换歌后曲名不刷新，顺手修了（`songSerial` 轮询）
   - **演出**：写完一首时 伸懒腰（说第一句）→ 凑近（说出歌名，笑一下，响一声）→
-    再补一句。全走 `Performer`，和别的动作同一条队列。**专注中、说着话、窗口不在
+    再补一句。近景的停留按剩下几句的朗读时间定（`Performer.request(hold:)`），
+    不用它自己的随机 5–10 秒——抽到短的那次，最后一句会落在镜头退回之后。全走 `Performer`，和别的动作同一条队列。**专注中、说着话、窗口不在
     时不演**，攒在存档里，等你休息或回到窗口（"你回来了"那一下优先演剧情，
     不念待办）。序章在第一次打开时问候之后演
   - **日子**：一起的第 7/30/100/365 天各有一拍；隔三天以上再见说"好久不见"；
@@ -1670,8 +1671,12 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
   第 9 秒 261MB、之后稳在 ~300MB。旧版同样会付这笔，只是要等第一次近景
   （你切回窗口）才付——稳态一样，不是泄漏。ImageIO 那一项从 18MB 到 167MB
   就是它（`footprint <pid>` 看分类）
-- 主线开场（问候 → 序章）在真实窗口里没有截图验证过：做这一轮时屏幕锁着，
-  `screencapture` 只能截到黑屏。逻辑由 `--storysmoke` 在真实 `AppState` 上跑过
+- **主线在真实窗口里验过**（2026-10-04，独立 bundle id 的副本 + 隔离数据目录）：
+  开场问候 → 托腮说序章三句；预置差 0.5 分的存档加 `--assume-present`，
+  第一次记账时写完第一首：伸懒腰说第一句 → 推近托腮说歌名、侧屏亮勾 →
+  第三句仍在近景里 → 退回；`--panel story` 下面板的开关和输入框正常，
+  夜里窗外亮起第一颗星。截图法：`screencapture -x -o -l<窗口号>`，窗口号用
+  `CGWindowListCopyWindowInfo` 按 pid 找宽 960 的那个
 - 2.5D 仍是默认、稳定路径；现在另有一个可切换的实验性运行时全 3D 场景，
   用来和 2.5D 做体验对比。它不改变现有 2D 图层，也不接语音/记忆系统。
 
@@ -2209,6 +2214,8 @@ dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storycheck
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storypanel /tmp/story.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storystrip /tmp/storystrip.png
 WITHSNOZZY_DATA_DIR=$(mktemp -d) dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --storysmoke
+# 真实窗口里看演出：判定你一直在电脑前（不读键鼠空闲），配隔离目录和预置存档
+WITHSNOZZY_DATA_DIR=临时目录 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --assume-present
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --compactstrip /tmp/compact.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --drowsystrip /tmp/drowsy.png
 dist/WithSnozzy.app/Contents/MacOS/WithSnozzy --actionpanel /tmp/panel.png

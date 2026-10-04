@@ -136,7 +136,10 @@ final class StoryDirector {
             await act(.action(.stretch), saying: first)
         }
         if let second = lines.popFirst() {
-            await act(.closeUp, saying: second, highlight: beat)
+            // 凑近之后要把剩下的几句都说完再退：近景自己的停留是随机 5–10 秒，
+            // 抽到短的那次，最后一句就落在镜头退回去之后了（真实窗口里看到过）。
+            let hold = ([second] + lines).map(Self.readTime).reduce(0, +) + 1.5
+            await act(.closeUp, saying: second, highlight: beat, hold: hold)
         }
         for line in lines {
             say?(line)
@@ -145,20 +148,25 @@ final class StoryDirector {
     }
 
     private func act(_ item: Performer.Item, saying line: String,
-                     highlight beat: StoryBeat? = nil) async {
+                     highlight beat: StoryBeat? = nil, hold: Double? = nil) async {
         let speak = { [weak self] in
             self?.say?(line)
             if let beat { self?.onHighlight?(beat) }
         }
-        let arrived = await performer?.perform(item, patience: 60, arrival: speak) ?? false
+        let arrived = await performer?.perform(item, patience: 60, hold: hold,
+                                               arrival: speak) ?? false
         if !arrived { speak() }
         await pause(for: line)
     }
 
     /// 一句话读完要多久。和气泡的停留时长同一个换算（每秒四五个字），
     /// 但下一句可以在气泡收起之前接上。
+    static func readTime(_ line: String) -> Double {
+        max(2.4, Double(line.count) * 0.2 + 1.2)
+    }
+
     private func pause(for line: String) async {
-        try? await Task.sleep(for: .seconds(max(2.4, Double(line.count) * 0.2 + 1.2)))
+        try? await Task.sleep(for: .seconds(Self.readTime(line)))
     }
 
     // MARK: - 打招呼和闲话

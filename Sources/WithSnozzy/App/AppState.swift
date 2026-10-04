@@ -1012,6 +1012,10 @@ final class AppState {
            let m = WindowMode(rawValue: args[i + 1]) {
             windowMode = m
         }
+        // 开发用：当你一直在电脑前（不看键盘鼠标），验主线演出不用守着机器。
+        if args.contains("--assume-present") {
+            story.idleSeconds = { 0 }
+        }
         if args.contains("--play") {
             // 稍等一下再开始，让音频引擎和窗口都就绪。
             Task { [weak self] in

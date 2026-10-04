@@ -163,6 +163,8 @@ final class CloseUp {
     var onFinished: (() -> Void)?
     /// 停多久。判据可以缩短它，生产用默认区间。
     var holdRange = CloseUp.holdRange
+    /// 只管下一次停多久，用完即弃。主线剧情凑近时要把剩下几句说完再退。
+    var nextHold: Double?
 
     /// 正在近景里（含推进和退回）。
     var isActive: Bool { running != nil }
@@ -213,7 +215,9 @@ final class CloseUp {
         // get its first actor turn can otherwise leave one old hand-layer frame
         // on screen at the instant the camera starts moving.
         chinFrame = -1
-        let hold = Double.random(in: holdRange)
+        let hold = nextHold.map { max($0, holdRange.lowerBound) }
+            ?? Double.random(in: holdRange)
+        nextHold = nil
         running = Task { [weak self] in
             guard let self else { return }
 

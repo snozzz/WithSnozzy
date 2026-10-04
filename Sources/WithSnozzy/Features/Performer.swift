@@ -31,6 +31,8 @@ final class Performer {
         let arrival: (() -> Void)?
         /// 演到位了（true），或者被丢掉、过期、没到位就被让掉了（false）。
         let completion: ((Bool) -> Void)?
+        /// 近景停多久（秒）。nil 用它自己的随机区间。
+        var hold: Double? = nil
     }
 
     private let closeUp: CloseUp
@@ -65,12 +67,12 @@ final class Performer {
     var pending: Int { queue.count }
 
     func request(_ item: Item, manual: Bool = false, patience: TimeInterval = 20,
-                 ignoresCooldown: Bool = false, arrival: (() -> Void)? = nil,
-                 completion: ((Bool) -> Void)? = nil) {
+                 ignoresCooldown: Bool = false, hold: Double? = nil,
+                 arrival: (() -> Void)? = nil, completion: ((Bool) -> Void)? = nil) {
         let req = Request(item: item, manual: manual,
                           deadline: Date().addingTimeInterval(patience),
                           ignoresCooldown: ignoresCooldown, arrival: arrival,
-                          completion: completion)
+                          completion: completion, hold: hold)
         if manual {
             // 同一条正演着、也没在让位：什么都不用做。
             if item == current, !isReleasing(item) {
@@ -101,10 +103,11 @@ final class Performer {
     /// 演一条并等它演到位：到位返回 true；被丢掉、过期、或者还没到位就被让掉了
     /// 返回 false。主线剧情靠它把"伸懒腰 → 凑近 → 说话"串成一条时间轴。
     func perform(_ item: Item, patience: TimeInterval, ignoresCooldown: Bool = false,
-                 arrival: (() -> Void)? = nil) async -> Bool {
+                 hold: Double? = nil, arrival: (() -> Void)? = nil) async -> Bool {
         await withCheckedContinuation { cont in
             request(item, patience: patience, ignoresCooldown: ignoresCooldown,
-                    arrival: arrival, completion: { cont.resume(returning: $0) })
+                    hold: hold, arrival: arrival,
+                    completion: { cont.resume(returning: $0) })
         }
     }
 
@@ -160,6 +163,7 @@ final class Performer {
         switch req.item {
         case .closeUp:
             closeUp.nextArrival = arrived(closeUp.onArrived)
+            closeUp.nextHold = req.hold
             closeUp.begin()
         case .action(let kind):
             guard let rig = actions[kind] else { return }
