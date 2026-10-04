@@ -49,6 +49,39 @@ struct LibraryPanel: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
 
+                    // 她的专辑：放她写完的那几首，而不是现场生成。
+                    // 这时候"心情"不起作用——每首歌自己带着心情。
+                    let tracks = state.story.state.playableTracks
+                    Button {
+                        state.albumMode.toggle()
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "opticaldisc")
+                                .font(.system(size: 12))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text("她的专辑")
+                                    .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                                Text(tracks == 0 ? "她还没写完一首"
+                                     : "按顺序放她写完的 \(tracks) 首")
+                                    .font(.system(size: 9, design: .rounded))
+                                    .opacity(0.6)
+                            }
+                            Spacer(minLength: 0)
+                            if state.albumMode {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
+                            }
+                        }
+                        .foregroundStyle(state.albumMode ? palette.accent.color : .white.opacity(0.62))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background {
+                            RoundedRectangle(cornerRadius: Metrics.smallCorner, style: .continuous)
+                                .fill(.white.opacity(state.albumMode ? 0.13 : 0.06))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(tracks == 0)
+
                     Text("心情")
                         .font(.system(size: 10, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white.opacity(0.35))
@@ -57,6 +90,7 @@ struct LibraryPanel: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 8),
                                         GridItem(.flexible(), spacing: 8)], spacing: 8) {
                         ForEach(RadioMood.allCases) { mood in
+                            // 放专辑时心情不生效：整组压暗，别让人以为点了有用
                             let on = state.radioMood == mood
                             Button {
                                 state.radioMood = mood
@@ -78,8 +112,10 @@ struct LibraryPanel: View {
                             .buttonStyle(.plain)
                         }
                     }
+                    .opacity(state.albumMode ? 0.4 : 1)
 
-                    Text("换心情后，下一首才会变——不会打断正在放的这首。")
+                    Text(state.albumMode ? "放她的专辑时，每首歌的心情是写好的，这里不起作用。"
+                         : "换心情后，下一首才会变——不会打断正在放的这首。")
                         .font(.system(size: 9, design: .rounded))
                         .foregroundStyle(.white.opacity(0.3))
                         .fixedSize(horizontal: false, vertical: true)
