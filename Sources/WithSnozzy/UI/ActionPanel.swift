@@ -19,25 +19,45 @@ struct ActionPanel: View {
     private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
+        let is3D = state.sceneMode == .realtime3DExperimental
         VStack(alignment: .leading, spacing: 10) {
-            section("长动作", note: "换一整套上半身素材，八张真骨骼中间帧")
+            section("长动作", note: is3D ? "实时 3D 骨骼动画与道具交互，随时平滑衔接" : "换一整套上半身素材，八张真骨骼中间帧")
             row(symbol: "person.crop.circle.badge.questionmark",
                 title: "托腮凑近",
-                detail: state.sceneAssets.hasCompleteChinMotion
-                    ? "推镜头 + 抬手托下颌，念一句待办" : "素材不全，只推镜头",
-                running: state.closeUp.isActive,
+                detail: is3D
+                    ? (state.realtime3D.isCloseUpActive ? "点一下退回全景" : "切近景镜头 + 托腮看着你")
+                    : (state.sceneAssets.hasCompleteChinMotion
+                        ? "推镜头 + 抬手托下颌，念一句待办" : "素材不全，只推镜头"),
+                running: is3D ? state.realtime3D.isCloseUpActive : state.closeUp.isActive,
                 enabled: state.windowMode == .normal) {
                 state.lookCloser()
             }
             ForEach(ActionKind.allCases, id: \.self) { kind in
                 row(symbol: symbol(kind),
                     title: kind.label,
-                    detail: detail(kind),
-                    running: state.action(kind).isActive,
+                    detail: detail(kind, is3D: is3D),
+                    running: is3D ? is3DActionRunning(kind) : state.action(kind).isActive,
                     enabled: state.windowMode == .normal
-                        && state.sceneAssets.hasCompleteMotion(kind)
+                        && (is3D || state.sceneAssets.hasCompleteMotion(kind))
                         && (kind != .listen || state.isPlaying)) {
                     state.perform(kind)
+                }
+            }
+            if is3D {
+                row(symbol: "pencil.and.outline",
+                    title: "记笔记",
+                    detail: "拿起桌面钢笔在笔记本上写一笔",
+                    running: state.realtime3D.activeAction == "write_note_once",
+                    enabled: state.windowMode == .normal) {
+                    state.realtime3D.request(.write)
+                    state.chatter.speak("先记下来，免得一会儿忘了。")
+                }
+                row(symbol: "moon.zzz.fill",
+                    title: "打瞌睡",
+                    detail: "深夜犯困轻轻点头",
+                    running: state.realtime3D.activeAction == "drowsy_nod_loop",
+                    enabled: state.windowMode == .normal) {
+                    state.realtime3D.request(.drowsy)
                 }
             }
 
@@ -95,7 +115,25 @@ struct ActionPanel: View {
         }
     }
 
-    private func detail(_ kind: ActionKind) -> String {
+    private func is3DActionRunning(_ kind: ActionKind) -> Bool {
+        switch kind {
+        case .stretch: state.realtime3D.activeAction == "stand_stretch_once"
+        case .coffee: state.realtime3D.activeAction == "coffee_once"
+        case .phone: state.realtime3D.activeAction == "phone_once"
+        case .listen: state.realtime3D.activeAction == "listen_music_loop"
+        }
+    }
+
+    private func detail(_ kind: ActionKind, is3D: Bool = false) -> String {
+        if is3D {
+            if kind == .listen && !state.isPlaying { return "放歌（戴着耳机）时才演" }
+            switch kind {
+            case .stretch: return "双手举高舒展肩背"
+            case .coffee: return "端起热拿铁小口抿茶歇"
+            case .phone: return "拿起手机滑两下回复消息"
+            case .listen: return "扶着发光耳机随节拍摇摆"
+            }
+        }
         guard state.sceneAssets.hasCompleteMotion(kind) else { return "素材不全" }
         // `now` 没被用到值，但读一下它才能让倒计时每秒重算。
         _ = now

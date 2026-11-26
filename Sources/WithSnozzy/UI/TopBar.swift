@@ -19,6 +19,48 @@ struct TopBar: View {
             // 中间刻意留空：这里是墙上的串灯，压一行标题上去两边都看不清。
             Spacer()
 
+            if state.sceneMode == .realtime3DExperimental {
+                Menu {
+                    ForEach(Realtime3DCameraPreset.allCases) { preset in
+                        Button {
+                            state.realtime3D.isCloseUpActive = (preset == .closeup)
+                            state.realtime3D.requestCamera(preset)
+                        } label: {
+                            Label(preset.label, systemImage: preset.symbol)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: state.realtime3D.cameraPreset.symbol)
+                        Text(state.realtime3D.cameraPreset.label)
+                    }
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(palette.text.color(0.62))
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+            }
+
+            Button {
+                state.sceneMode = state.sceneMode == .realtime3DExperimental
+                    ? .twoPointFiveD : .realtime3DExperimental
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: state.sceneMode == .realtime3DExperimental ? "cube.fill" : "photo")
+                    Text(state.sceneMode.shortLabel)
+                }
+                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                .foregroundStyle(palette.text.color(0.68))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background {
+                    Capsule().fill(.white.opacity(0.08))
+                }
+            }
+            .buttonStyle(.plain)
+            .help("一键切换 3D 沉浸房间 / 2.5D 插画房间")
+
             Menu {
                 ForEach(Weather.allCases) { wx in
                     Button {

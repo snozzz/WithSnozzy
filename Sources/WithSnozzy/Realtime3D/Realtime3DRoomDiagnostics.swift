@@ -23,6 +23,11 @@ enum Realtime3DRoomDiagnostics {
             case "coffee", "coffee_once": return "coffee_once"
             case "phone", "phone_once": return "phone_once"
             case "stand", "stretch", "stand_stretch_once": return "stand_stretch_once"
+            case "write", "write_note_once": return "write_note_once"
+            case "pet", "pet_happy_once": return "pet_happy_once"
+            case "chin_rest", "closeup", "chin_rest_loop": return "chin_rest_loop"
+            case "listen", "listen_music_loop": return "listen_music_loop"
+            case "drowsy", "drowsy_nod_loop": return "drowsy_nod_loop"
             default: return bridgeAction
             }
         }

@@ -105,7 +105,9 @@ struct DockBar: View {
             // 放在控制条里而不是只放菜单栏：菜单栏那一栏是"不开主窗口也想用"的
             // 东西，而这个功能的全部内容就是主窗口里的画面，塞在那儿等于藏起来。
             IconButton(symbol: "person.crop.circle.badge.questionmark", size: 14,
-                       isOn: state.closeUp.isActive, tint: palette.accent,
+                       isOn: state.sceneMode == .realtime3DExperimental
+                           ? state.realtime3D.isCloseUpActive : state.closeUp.isActive,
+                       tint: palette.accent,
                        help: "叫她凑近看看") {
                 state.lookCloser()
             }

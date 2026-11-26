@@ -257,31 +257,52 @@ struct SettingsPanel: View {
                 Spacer(minLength: 0)
             }
 
-            Text("动作预览")
+            Text("机位视角")
                 .font(.system(size: 9, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.38))
 
-            HStack(spacing: 6) {
-                ForEach(Realtime3DAction.allCases) { action in
+            HStack(spacing: 5) {
+                ForEach(Realtime3DCameraPreset.allCases) { preset in
+                    Button {
+                        state.realtime3D.isCloseUpActive = (preset == .closeup)
+                        state.realtime3D.requestCamera(preset)
+                    } label: {
+                        Label(preset.label, systemImage: preset.symbol)
+                            .font(.system(size: 9, design: .rounded))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(state.realtime3D.cameraPreset == preset
+                          ? palette.accent.color
+                          : .white.opacity(0.45))
+                }
+            }
+
+            Text("动作触发")
+                .font(.system(size: 9, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.38))
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 5)], alignment: .leading, spacing: 5) {
+                ForEach(Realtime3DAction.featured) { action in
                     Button {
                         state.realtime3D.request(action)
                     } label: {
                         Label(action.label, systemImage: action.symbol)
                             .font(.system(size: 9, design: .rounded))
-                            .labelStyle(.titleAndIcon)
                             .lineLimit(1)
+                            .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .tint(state.realtime3D.activeAction.contains(action.rawValue)
                           ? palette.accent.color
-                          : .white.opacity(0.5))
+                          : .white.opacity(0.45))
                     .help("在 3D 房间里播放\(action.label)")
                 }
             }
 
-            Text("实时 3D 使用本地 GLB，不连接网络；切回 2.5D 会释放 WebGL 房间。")
+            Text("左键拖拽旋转视角 · 滚轮缩放 · 双击复位 · 点击咖啡、手机、台灯、黑胶、窗户或 Snozzy 均可直接互动。")
                 .font(.system(size: 9, design: .rounded))
-                .foregroundStyle(.white.opacity(0.32))
+                .foregroundStyle(.white.opacity(0.36))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

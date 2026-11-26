@@ -3,8 +3,42 @@ import Foundation
 import SwiftUI
 @preconcurrency import WebKit
 
-/// SwiftUI shell for the offline real-time room. The fallback lives outside
-/// WebGL so a bad GPU context or missing asset can never leave a white window.
+/// Snapshot of live companion state mirrored into Three.js only when values change.
+private struct Realtime3DStatePayload: Equatable {
+    let sceneHourStep: Int       // 0.05h granularity
+    let weather: String
+    let isPlaying: Bool
+    let beatStep: Int            // 0..10 quantized pulse
+    let focusPhase: String
+    let activity: String
+    let moodStep: Int            // 0..20
+    let drowsyStep: Int          // 0..20
+    let sheIsTalking: Bool
+    let celebrationStep: Int     // 0..20
+    let playableTracks: Int
+    let trackTitle: String
+
+    var dictionary: [String: Any] {
+        [
+            "sceneHour": Double(sceneHourStep) / 20.0,
+            "weather": weather,
+            "isPlaying": isPlaying,
+            "beatPulse": Double(beatStep) / 10.0,
+            "focusPhase": focusPhase,
+            "activity": activity,
+            "mood": Double(moodStep) / 20.0,
+            "drowsy": Double(drowsyStep) / 20.0,
+            "sheIsTalking": sheIsTalking,
+            "celebration": Double(celebrationStep) / 20.0,
+            "playableTracks": playableTracks,
+            "trackTitle": trackTitle,
+        ]
+    }
+}
+
+/// SwiftUI shell for the offline real-time 3D room. Streams AppState continuously
+/// to WebGL, routes direct 3D prop interactions back to SwiftUI, and anchors
+/// Snozzy's speech bubble to her live projected 3D head coordinates.
 struct Realtime3DRoomView: View {
     @Environment(AppState.self) private var state
 
@@ -13,49 +47,117 @@ struct Realtime3DRoomView: View {
     let session: Realtime3DSession
 
     var body: some View {
-        // Read the request fields as independent observation dependencies.
-        // Observation may not invalidate this view when only a property on
-        // the session reference changes; passing these values into the
-        // representable makes every button request reach updateNSView.
         let actionRequestID = session.actionRequestID
         let requestedAction = session.requestedAction
-        ZStack {
-            Realtime3DWebView(isVisible: isVisible,
-                              lowPower: lowPower,
-                              actionRequestID: actionRequestID,
-                              requestedAction: requestedAction,
-                              session: session)
+        let cameraRequestID = session.cameraRequestID
+        let requestedCamera = session.requestedCameraPreset
+        let petRequestID = session.petRequestID
+        let syncInterval: Double = lowPower ? 0.45 : (state.isPlaying || state.sheIsTalking ? 0.10 : 0.35)
 
-            if let error = session.error {
-                VStack(spacing: 11) {
-                    Image(systemName: "cube.transparent")
-                        .font(.system(size: 26, weight: .light))
-                        .foregroundStyle(.white.opacity(0.68))
-                    Text("3D 房间没有打开")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.88))
-                    Text(error)
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.50))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(3)
-                    Button("回到 2.5D") { state.sceneMode = .twoPointFiveD }
-                        .buttonStyle(.borderedProminent)
-                        .tint(state.palette.accent.color)
+        GeometryReader { geo in
+            ZStack {
+                TimelineView(.animation(minimumInterval: syncInterval, paused: !isVisible)) { tl in
+                    let t = tl.date.timeIntervalSinceReferenceDate
+                    let payload = makePayload(at: t)
+                    Realtime3DWebView(
+                        isVisible: isVisible,
+                        lowPower: lowPower,
+                        actionRequestID: actionRequestID,
+                        requestedAction: requestedAction,
+                        cameraRequestID: cameraRequestID,
+                        requestedCamera: requestedCamera,
+                        petRequestID: petRequestID,
+                        statePayload: payload,
+                        session: session,
+                        appState: state
+                    )
                 }
-                .padding(.horizontal, 28)
-                .padding(.vertical, 22)
-                .background {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(.black.opacity(0.55))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(.white.opacity(0.12), lineWidth: 1)
-                        }
+
+                // Live 3D speech bubble anchored near Snozzy's projected 3D head
+                if let line = state.chatter.current, session.isReady {
+                    let pt = bubblePoint(in: geo.size)
+                    SpeechBubble(text: line, palette: state.palette)
+                        .fixedSize()
+                        .position(pt)
+                        .transition(.scale(scale: 0.85, anchor: .bottomLeading)
+                            .combined(with: .opacity))
+                        .allowsHitTesting(false)
                 }
-                .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+
+                if let error = session.error {
+                    VStack(spacing: 11) {
+                        Image(systemName: "cube.transparent")
+                            .font(.system(size: 26, weight: .light))
+                            .foregroundStyle(.white.opacity(0.68))
+                        Text("3D 房间没有打开")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.88))
+                        Text(error)
+                            .font(.system(size: 10, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.50))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(3)
+                        Button("回到 2.5D") { state.sceneMode = .twoPointFiveD }
+                            .buttonStyle(.borderedProminent)
+                            .tint(state.palette.accent.color)
+                    }
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 22)
+                    .background {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(.black.opacity(0.55))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                            }
+                    }
+                    .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
+                }
             }
+            .animation(.spring(duration: 0.34, bounce: 0.28), value: state.chatter.current)
         }
+    }
+
+    private func bubblePoint(in size: CGSize) -> CGPoint {
+        let anchor = session.headScreenPoint
+        let rawX = anchor.x * size.width + 92
+        let rawY = anchor.y * size.height - 26
+        let clampedX = min(max(130, rawX), max(130, size.width - 140))
+        let clampedY = min(max(78, rawY), max(78, size.height - 130))
+        return CGPoint(x: clampedX, y: clampedY)
+    }
+
+    private func makePayload(at t: TimeInterval) -> Realtime3DStatePayload {
+        let cue = ActivityRig.cue(
+            at: t,
+            phase: state.focus.phase,
+            playing: state.isPlaying,
+            transitionFrom: state.activityTransitionFrom,
+            transitionStartedAt: state.activityTransitionStartedAt,
+            forced: state.forcedActivity
+        )
+        let beat = state.isPlaying ? state.audio.kickPulse : 0.0
+        let celeb = state.celebrationAmount(at: t)
+        let phaseStr: String = switch state.focus.phase {
+        case .idle: "idle"
+        case .work: "work"
+        case .shortBreak: "shortBreak"
+        case .longBreak: "longBreak"
+        }
+        return Realtime3DStatePayload(
+            sceneHourStep: Int((state.sceneHour * 20.0).rounded()),
+            weather: state.weather.rawValue,
+            isPlaying: state.isPlaying,
+            beatStep: Int((min(max(beat, 0), 1) * 10.0).rounded()),
+            focusPhase: phaseStr,
+            activity: cue.activity.rawValue,
+            moodStep: Int((min(max(state.mood, 0), 1) * 20.0).rounded()),
+            drowsyStep: Int((min(max(state.drowsy, 0), 1) * 20.0).rounded()),
+            sheIsTalking: state.sheIsTalking,
+            celebrationStep: Int((min(max(celeb, 0), 1) * 20.0).rounded()),
+            playableTracks: state.story.state.playableTracks,
+            trackTitle: state.trackTitle
+        )
     }
 }
 
@@ -64,7 +166,12 @@ private struct Realtime3DWebView: NSViewRepresentable {
     let lowPower: Bool
     let actionRequestID: Int
     let requestedAction: Realtime3DAction?
+    let cameraRequestID: Int
+    let requestedCamera: Realtime3DCameraPreset?
+    let petRequestID: Int
+    let statePayload: Realtime3DStatePayload
     let session: Realtime3DSession
+    let appState: AppState
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -80,17 +187,23 @@ private struct Realtime3DWebView: NSViewRepresentable {
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsBackForwardNavigationGestures = false
         webView.navigationDelegate = context.coordinator
-        context.coordinator.attach(webView: webView, session: session)
+        context.coordinator.attach(webView: webView, session: session, appState: appState)
         controller.add(context.coordinator, name: "room")
         context.coordinator.load()
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.update(isVisible: isVisible,
-                                   lowPower: lowPower,
-                                   requestID: actionRequestID,
-                                   action: requestedAction)
+        context.coordinator.update(
+            isVisible: isVisible,
+            lowPower: lowPower,
+            requestID: actionRequestID,
+            action: requestedAction,
+            cameraRequestID: cameraRequestID,
+            camera: requestedCamera,
+            petRequestID: petRequestID,
+            payload: statePayload
+        )
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -101,17 +214,23 @@ private struct Realtime3DWebView: NSViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         private weak var webView: WKWebView?
         private weak var session: Realtime3DSession?
+        private weak var appState: AppState?
         private var runtimeRoot: URL?
         private var lastRequestID = -1
+        private var lastCameraRequestID = -1
+        private var lastPetRequestID = -1
         private var lastVisible = true
         private var lastLowPower = false
         private var desiredVisible = true
         private var desiredLowPower = false
+        private var lastSentPayload: Realtime3DStatePayload?
+        private var latestPayload: Realtime3DStatePayload?
         private var didLoad = false
 
-        func attach(webView: WKWebView, session: Realtime3DSession) {
+        func attach(webView: WKWebView, session: Realtime3DSession, appState: AppState) {
             self.webView = webView
             self.session = session
+            self.appState = appState
         }
 
         func load() {
@@ -141,7 +260,7 @@ private struct Realtime3DWebView: NSViewRepresentable {
                 return
             }
             let manifestJSON = (try? JSONSerialization.data(withJSONObject: manifestObject,
-                                                              options: [.sortedKeys]))
+                                                             options: [.sortedKeys]))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
             let assetLiteral = Self.jsonStringLiteral(asset.absoluteString)
             let assetDataURL = (try? Data(contentsOf: asset))
@@ -158,10 +277,16 @@ private struct Realtime3DWebView: NSViewRepresentable {
         func update(isVisible: Bool,
                     lowPower: Bool,
                     requestID: Int,
-                    action: Realtime3DAction?) {
+                    action: Realtime3DAction?,
+                    cameraRequestID: Int,
+                    camera: Realtime3DCameraPreset?,
+                    petRequestID: Int,
+                    payload: Realtime3DStatePayload) {
             desiredVisible = isVisible
             desiredLowPower = lowPower
+            latestPayload = payload
             guard didLoad else { return }
+
             if isVisible != lastVisible {
                 send(command: ["type": "pause", "value": !isVisible])
                 lastVisible = isVisible
@@ -170,9 +295,22 @@ private struct Realtime3DWebView: NSViewRepresentable {
                 send(command: ["type": "lowPower", "value": lowPower])
                 lastLowPower = lowPower
             }
-            guard requestID != lastRequestID, let action else { return }
-            lastRequestID = requestID
-            send(command: ["type": "action", "name": action.rawValue])
+            if payload != lastSentPayload {
+                send(command: ["type": "state", "state": payload.dictionary])
+                lastSentPayload = payload
+            }
+            if cameraRequestID != lastCameraRequestID, let camera {
+                lastCameraRequestID = cameraRequestID
+                send(command: ["type": "cameraPreset", "preset": camera.rawValue])
+            }
+            if petRequestID != lastPetRequestID && petRequestID > 0 {
+                lastPetRequestID = petRequestID
+                send(command: ["type": "pet"])
+            }
+            if requestID != lastRequestID, let action {
+                lastRequestID = requestID
+                send(command: ["type": "action", "name": action.rawValue])
+            }
         }
 
         func dispose() {
@@ -212,6 +350,16 @@ private struct Realtime3DWebView: NSViewRepresentable {
                     send(command: ["type": "lowPower", "value": true])
                     lastLowPower = true
                 }
+                if let payload = latestPayload {
+                    send(command: ["type": "state", "state": payload.dictionary])
+                    lastSentPayload = payload
+                }
+                if let camera = session?.requestedCameraPreset,
+                   let camID = session?.cameraRequestID,
+                   camID != lastCameraRequestID {
+                    lastCameraRequestID = camID
+                    send(command: ["type": "cameraPreset", "preset": camera.rawValue])
+                }
                 if let action = session?.requestedAction,
                    let requestID = session?.actionRequestID,
                    requestID != lastRequestID {
@@ -225,10 +373,53 @@ private struct Realtime3DWebView: NSViewRepresentable {
                 if let name = body["name"] as? String {
                     session?.update(status: "正在执行 \(name)", action: name)
                 }
+            case "cameraPreset":
+                if let key = body["preset"] as? String,
+                   let preset = Realtime3DCameraPreset(rawValue: key) {
+                    session?.cameraPreset = preset
+                }
+            case "headAnchor":
+                if let nx = body["x"] as? Double, let ny = body["y"] as? Double {
+                    session?.updateHeadAnchor(nx: nx, ny: ny)
+                }
+            case "interaction":
+                handleInteraction(body)
             case "error":
                 session?.fail(body["message"] as? String ?? "3D runtime 错误")
             case "disposed":
                 didLoad = false
+            default:
+                break
+            }
+        }
+
+        private func handleInteraction(_ body: [String: Any]) {
+            guard let app = appState,
+                  let action = body["action"] as? String else { return }
+            switch action {
+            case "pet":
+                app.pet(from3DClick: true)
+            case "coffee":
+                app.chatter.say(.coffee)
+            case "phone":
+                app.chatter.say(.phone)
+            case "write":
+                app.chatter.speak("先记下来，等会儿别忘了。")
+            case "toggleMusic":
+                app.togglePlay()
+            case "cycleWeather":
+                if let raw = body["weather"] as? String, let wx = Weather(rawValue: raw) {
+                    app.weather = wx
+                }
+            case "toggleLamp":
+                if let on = body["lampOn"] as? Bool {
+                    session?.lampOn = on
+                    app.chatter.speak(on ? "暖灯光开着舒服多了。" : "关掉台灯，看会儿夜色。")
+                }
+            case "pokePlushie":
+                app.chatter.speak("软绵绵的，捏一下很解压吧？")
+            case "cycleCrystal":
+                app.chatter.speak("换一个温柔一点的颜色。")
             default:
                 break
             }
@@ -264,9 +455,6 @@ private struct Realtime3DWebView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // The local page has loaded; wait for the JS asset message before
-            // marking the session ready so a blank canvas is never reported as
-            // a usable room.
             session?.update(status: "正在解码 SnozzyRoom3D…")
         }
 
@@ -291,8 +479,6 @@ private struct Realtime3DWebView: NSViewRepresentable {
                 FileManager.default.fileExists(atPath: $0.appendingPathComponent("room.html").path)
             }) { return packaged }
 
-            // `swift run` has no resource bundle. Stage a tiny development
-            // directory so the exact same local-file URL path is exercised.
             let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             let source = cwd.appendingPathComponent("Sources/WithSnozzy/Realtime3D")
             let assets = cwd.appendingPathComponent("Assets/Realtime3D")

@@ -98,11 +98,39 @@ final class AppState {
 
     /// 手动演一条动作（动作面板、菜单栏）。正在演的那条会倒放让位，不硬切。
     func perform(_ kind: ActionKind) {
+        if sceneMode == .realtime3DExperimental {
+            switch kind {
+            case .stretch: realtime3D.request(.stand)
+            case .coffee:
+                realtime3D.request(.coffee)
+                chatter.say(.coffee)
+            case .phone:
+                realtime3D.request(.phone)
+                chatter.say(.phone)
+            case .listen:
+                realtime3D.request(.listen)
+                chatter.say(.listening)
+            }
+            return
+        }
         performer.request(.action(kind), manual: true)
     }
 
     /// 手动叫她凑近（控制条、菜单栏、动作面板）。
     func lookCloser() {
+        if sceneMode == .realtime3DExperimental {
+            if realtime3D.isCloseUpActive {
+                realtime3D.isCloseUpActive = false
+                realtime3D.requestCamera(.overview)
+                realtime3D.request(.typing)
+            } else {
+                realtime3D.isCloseUpActive = true
+                realtime3D.requestCamera(.closeup)
+                realtime3D.request(.chin_rest)
+                complainAboutWatching()
+            }
+            return
+        }
         performer.request(.closeUp, manual: true)
     }
 
@@ -365,11 +393,14 @@ final class AppState {
 
     /// 摸头。桌宠类应用里最重要的一个交互——
     /// 点她一下会有回应，这件事本身就让"陪伴"成立。
-    func pet() {
+    func pet(from3DClick: Bool = false) {
         chatter.say(drowsy > 0.5 ? .wokenUp : .pet)
         // 比完成一段专注小得多的心情提升，但足够让她笑一下。
         if lastCelebration == nil || Date().timeIntervalSince(lastCelebration!) > 40 {
             lastCelebration = Date().addingTimeInterval(-62)
+        }
+        if sceneMode == .realtime3DExperimental && !from3DClick {
+            realtime3D.requestPet()
         }
     }
 
