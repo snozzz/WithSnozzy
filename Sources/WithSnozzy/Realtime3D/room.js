@@ -5,6 +5,8 @@ import { createLiveScreens } from './src/screens.js';
 import { applyRoomMaterialPipeline } from './src/character_shader.js';
 import { createAtmosphere } from './src/atmosphere.js';
 import { createLifeEngine } from './src/life.js';
+import { createCameraController } from './src/camera.js';
+import { createInteractionController } from './src/interaction.js';
 
 const FPS = 24;
 const CROSSFADE_SECONDS = 0.32;
@@ -14,6 +16,7 @@ const loadingLabel = document.getElementById('room-loading');
 const errorPanel = document.getElementById('room-error');
 const errorLabel = document.getElementById('room-error-message');
 const statusLabel = document.getElementById('room-status');
+const tooltipEl = document.getElementById('room-tooltip');
 const post = (type, payload = {}) => {
   const message = { type, ...payload };
   if (window.webkit?.messageHandlers?.room) {
@@ -76,6 +79,9 @@ let procTextures = null;
 let liveScreens = null;
 let atmosphere = null;
 let lifeEngine = null;
+let cameraController = null;
+let interactionController = null;
+let lastHeadAnchorPostedAt = 0;
 let sharedCharacterUniforms = null;
 let roomEmissiveRegistry = null;
 
@@ -944,9 +950,16 @@ function animate() {
   if (!paused) {
     if (mixer) mixer.update(delta);
     lifeEngine?.update(delta, roomState, currentActionName, { allowAdditiveHead: !diagnosticRun });
+    cameraController?.update(delta);
+    interactionController?.update(delta);
     liveScreens?.update(delta, roomState);
     atmosphere?.update(delta, roomState, gltfRoot);
     renderer.render(scene, camera);
+    if (!diagnosticRun && lifeEngine && now - lastHeadAnchorPostedAt >= 120) {
+      lastHeadAnchorPostedAt = now;
+      const pt = lifeEngine.getHeadScreenPoint(camera);
+      post('headAnchor', { x: pt.x, y: pt.y });
+    }
     activeFPSFrames += 1;
     if (now - activeFPSWindowStart >= 1000) {
       activeFPS = activeFPSFrames * 1000 / (now - activeFPSWindowStart);
@@ -1768,6 +1781,8 @@ function dispose() {
   procTextures?.dispose?.();
   liveScreens?.dispose?.();
   atmosphere?.dispose?.();
+  cameraController?.dispose?.();
+  interactionController?.dispose?.();
   renderer?.dispose();
   renderer?.forceContextLoss?.();
   post('disposed');
@@ -1777,6 +1792,9 @@ window.__withSnozzy3DCommand = (command) => {
   if (typeof command === 'string') return playAction(command, { manual: true });
   if (!command || typeof command !== 'object') return false;
   if (command.type === 'action') return playAction(command.name, { manual: true });
+  if (command.type === 'cameraPreset' && command.preset) {
+    return cameraController ? cameraController.setPreset(command.preset, Boolean(command.instant)) : false;
+  }
   if (command.type === 'pet') {
     lifeEngine?.triggerPet();
     if (lifeEngine && atmosphere) atmosphere.spawnHearts(lifeEngine.getHeadWorldPosition());
@@ -1850,6 +1868,26 @@ function setup(gltf) {
   // complete scene bounds makes a detached decorative node shrink Snozzy to a
   // thumbnail, so never derive production framing from Box3.
   const cameraContract = applyAuthorCamera();
+  cameraController = createCameraController(camera, canvas, manifest, {
+    diagnosticRun: Boolean(diagnosticRun),
+    onPresetChange(preset, label) {
+      post('cameraPreset', { preset, label });
+    },
+  });
+  interactionController = createInteractionController({
+    canvas,
+    tooltipEl,
+    camera,
+    gltfRoot,
+    cameraController,
+    lifeEngine,
+    atmosphere,
+    liveScreens,
+    roomState,
+    playAction,
+    post,
+    diagnosticRun: Boolean(diagnosticRun),
+  });
   const metrics = runtimeMetrics(gltfRoot, materials);
   post('stage', { name: 'metrics_ready' });
   metrics.materialCount = materials.length;
