@@ -4,6 +4,7 @@ import { createProceduralTextures } from './src/textures.js';
 import { createLiveScreens } from './src/screens.js';
 import { applyRoomMaterialPipeline } from './src/character_shader.js';
 import { createAtmosphere } from './src/atmosphere.js';
+import { createLifeEngine } from './src/life.js';
 
 const FPS = 24;
 const CROSSFADE_SECONDS = 0.32;
@@ -74,6 +75,7 @@ let runtimeContactMeasurement = null;
 let procTextures = null;
 let liveScreens = null;
 let atmosphere = null;
+let lifeEngine = null;
 let sharedCharacterUniforms = null;
 let roomEmissiveRegistry = null;
 
@@ -941,6 +943,7 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
   if (!paused) {
     if (mixer) mixer.update(delta);
+    lifeEngine?.update(delta, roomState, currentActionName, { allowAdditiveHead: !diagnosticRun });
     liveScreens?.update(delta, roomState);
     atmosphere?.update(delta, roomState, gltfRoot);
     renderer.render(scene, camera);
@@ -1017,6 +1020,12 @@ function playAction(request, options = {}) {
   currentActionName = name;
   if (clipDefinitions.get(name)?.loop) preferredLoop = name;
   updateStatus(options.manual ? `正在${clipDefinitions.get(name)?.label || name}` : (clipDefinitions.get(name)?.label || name), name);
+  if (name === 'pet_happy_once') {
+    lifeEngine?.triggerPet();
+    if (lifeEngine && atmosphere) {
+      atmosphere.spawnHearts(lifeEngine.getHeadWorldPosition());
+    }
+  }
   if (options.manual) post('action', { name, manual: true });
   const companionName = {
     coffee_once: 'coffee_once_PropMotion',
@@ -1555,6 +1564,7 @@ function sampleAction(name, timeSeconds, screenshotName = name) {
   target.time = Math.max(0, Math.min(timeSeconds, Number(clipDefinitions.get(name)?.duration || 1)));
   if (companionAction) companionAction.time = target.time;
   mixer.update(0);
+  lifeEngine?.update(0.05, roomState, name, { allowAdditiveHead: false });
   gltfRoot.updateMatrixWorld(true);
   liveScreens?.update(0.1, roomState, true);
   atmosphere?.update(0.016, roomState, gltfRoot);
@@ -1767,6 +1777,11 @@ window.__withSnozzy3DCommand = (command) => {
   if (typeof command === 'string') return playAction(command, { manual: true });
   if (!command || typeof command !== 'object') return false;
   if (command.type === 'action') return playAction(command.name, { manual: true });
+  if (command.type === 'pet') {
+    lifeEngine?.triggerPet();
+    if (lifeEngine && atmosphere) atmosphere.spawnHearts(lifeEngine.getHeadWorldPosition());
+    return playAction('pet_happy_once', { manual: true });
+  }
   if (command.type === 'state' && command.state && typeof command.state === 'object') {
     Object.assign(roomState, command.state);
     liveScreens?.update(0.1, roomState, true);
@@ -1822,11 +1837,13 @@ function setup(gltf) {
   sharedCharacterUniforms = matResult.sharedUniforms;
   roomEmissiveRegistry = matResult.emissiveRegistry;
   atmosphere = createAtmosphere(scene, renderer, sharedCharacterUniforms, roomEmissiveRegistry);
+  lifeEngine = createLifeEngine(gltfRoot, sharedCharacterUniforms);
   post('stage', { name: 'materials_ready', count: materials.length });
   // Blender authors this asset Z-up while the browser renderer is Y-up.
   gltfRoot.rotation.x = -Math.PI / 2;
   scene.add(gltfRoot);
   gltfRoot.updateMatrixWorld(true);
+  lifeEngine.update(0.05, roomState, 'idle_seated_loop', { allowAdditiveHead: false });
   liveScreens.update(0.1, roomState, true);
   atmosphere.update(0.016, roomState, gltfRoot);
   // The room's comparison camera is an authored contract. Framing from the
