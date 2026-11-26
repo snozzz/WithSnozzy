@@ -23,19 +23,20 @@
 | **环境与效率工具** | 六路环境音、本地音乐与音乐 App、番茄钟、专注统计、待办、昼夜天气、菜单栏与媒体键 |
 | **三种窗口形态** | 完整窗口 / 迷你播放器 / 透明桌宠；后两者是同一套渲染素材裁出来的胸像，不再是另一个画风的简笔小人。被遮挡或最小化时暂停动画时间线 |
 
-## 为什么不是运行时 3D
+## 双渲染场景：2.5D 插画房间 & 3D 沉浸房间
 
-当前相机和房间构图是固定的。运行时 3D 不会凭空增加可见细节，却会要求重建已经完成的
-插画房间、材质、遮挡、222 根骨骼、58 个形态键和头发物理。项目因此采用混合 2.5D：
+顶部栏一键在两种完整场景间切换，音乐、番茄钟、专辑主线、对话与语音在两边完全同步：
+
+| 模式 | 特点 |
+|---|---|
+| **3D 沉浸房间** | Blender 建模的完整书房与桌面道具、10 段 24fps 骨骼交互动画（打字/喝咖啡/看手机/伸懒腰/托腮/听歌/记笔记/打瞌睡/摸头）、60fps 表情形态键与口型同步、双马尾弹簧物理、动态三屏、24h 光影与窗外 3D 城市雨雪、自由阻尼轨道镜头与 11 类桌面点击交互 |
+| **2.5D 插画房间** | 手绘分层插画 + Blender 离线 2× 卡通渲染角色、8 帧骨骼动作序列、轻量低功耗 |
 
 ```text
-Snozzy.vrm ── Blender 离线渲染 ──> 分层 PNG / 动作帧 / 面部贴片
-交付房间图 ── 遮罩与切层 ───────> room + desk
-SwiftUI ───────────────────────> 实时表情、天气、活动反馈、UI 与交互
+Blender 5.2 LTS ─┬─ 离线分层渲染 ──> 2.5D 插画房间 (Assets/)
+                 └─ 实时 GLB 导出 ──> 3D 沉浸房间 (Assets/Realtime3D/SnozzyRoom3D.glb)
+SwiftUI ────────────────────────────> 音频 DSP、专注、专辑主线、对话语音与统一状态同步
 ```
-
-这保留了 Blender/VRoid 的三维姿态质量，也保留了手绘房间的统一画风和像素级遮挡。
-需要新的动作时扩展离线动画素材；只有未来真的加入自由镜头，才值得迁移到运行时 3D。
 
 ## 构建与运行
 
@@ -109,6 +110,9 @@ $BIN --memorycheck                         # 隔离的记忆命令/检索/边界
 $BIN --storycheck                          # 主线：内容、节奏模拟、边界、演出、歌
 $BIN --performcheck                        # 长动作互相打断时有没有硬切
 $BIN --facefit /tmp/facefit.png            # 非 3:2 窗口的贴片对位
+$BIN --settingscheck                       # 偏好兼容与 3D/2.5D 往返解码
+$BIN --3droom-snapshot Assets/Realtime3D/SnozzyRoom3D.glb --3droom-output /tmp/3d_qa --3droom-report /tmp/3d_qa/report.json
+$BIN --3droom Assets/Realtime3D/SnozzyRoom3D.glb --3droom-output /tmp/3d_perf --3droom-report /tmp/3d_perf/report.json
 ```
 
 完整美术管线、验证阈值和踩坑记录见 [`HANDOFF.md`](HANDOFF.md)。

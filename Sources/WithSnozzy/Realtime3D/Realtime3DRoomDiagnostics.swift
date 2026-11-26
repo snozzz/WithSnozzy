@@ -192,11 +192,26 @@ enum Realtime3DRoomDiagnostics {
             if request.bridgeAction != nil {
                 diagnosticJSON = "null"
             } else {
-                let diagnostic: [String: Any] = [
+                var diagnostic: [String: Any] = [
                     "actions": request.snapshotOnly ? ["coffee_once", "phone_once", "stand_stretch_once"] : [],
                     "screenshots": true,
                     "performance": !request.snapshotOnly,
                 ]
+                if let preset = Realtime3DRoomDiagnostics.argumentValue("--3droom-preset", in: CommandLine.arguments) {
+                    diagnostic["preset"] = preset
+                }
+                if let hourStr = Realtime3DRoomDiagnostics.argumentValue("--3droom-hour", in: CommandLine.arguments),
+                   let hour = Double(hourStr) {
+                    diagnostic["sceneHour"] = hour
+                }
+                if let weather = Realtime3DRoomDiagnostics.argumentValue("--3droom-weather", in: CommandLine.arguments) {
+                    diagnostic["weather"] = weather
+                }
+                if let extraAction = Realtime3DRoomDiagnostics.argumentValue("--3droom-extra-action", in: CommandLine.arguments) {
+                    var list = diagnostic["actions"] as? [String] ?? []
+                    list.append(extraAction)
+                    diagnostic["actions"] = list
+                }
                 diagnosticJSON = String(data: try JSONSerialization.data(withJSONObject: diagnostic,
                                                                           options: [.sortedKeys]),
                                          encoding: .utf8) ?? "{}"

@@ -1888,6 +1888,17 @@ function setup(gltf) {
     post,
     diagnosticRun: Boolean(diagnosticRun),
   });
+  if (diagnosticRun) {
+    if (Number.isFinite(Number(diagnosticRun.sceneHour))) {
+      roomState.sceneHour = Number(diagnosticRun.sceneHour);
+    }
+    if (typeof diagnosticRun.weather === 'string') {
+      roomState.weather = diagnosticRun.weather;
+    }
+    if (typeof diagnosticRun.preset === 'string') {
+      cameraController.setPreset(diagnosticRun.preset, true);
+    }
+  }
   const metrics = runtimeMetrics(gltfRoot, materials);
   post('stage', { name: 'metrics_ready' });
   metrics.materialCount = materials.length;

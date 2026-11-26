@@ -6,14 +6,14 @@ import * as THREE from '../vendor/three.module.min.js';
 
 const MONITOR_MODES = ['typing', 'composing', 'researching', 'planning', 'resting'];
 
-function createScreenCanvas(w, h, flipX = false) {
+function createScreenCanvas(w, h, flipX = false, flipY = false) {
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.flipY = false;
+  texture.flipY = flipY;
   if (flipX) {
     texture.wrapS = THREE.RepeatWrapping;
     texture.repeat.x = -1;
@@ -355,9 +355,9 @@ function drawPhoneScreen(ctx, w, h, time, state) {
 }
 
 export function createLiveScreens() {
-  const main = createScreenCanvas(512, 320, true);
-  const side = createScreenCanvas(384, 256, true);
-  const phone = createScreenCanvas(192, 320, false);
+  const main = createScreenCanvas(512, 320, true, false);
+  const side = createScreenCanvas(384, 256, true, false);
+  const phone = createScreenCanvas(192, 320, true, true);
 
   let elapsed = 0;
   let accum = 999; // force initial draw on frame 0

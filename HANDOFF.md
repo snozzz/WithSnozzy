@@ -1680,40 +1680,42 @@ Support 按账户解析；`--storysmoke` 不设它直接拒跑。
 - 2.5D 仍是默认、稳定路径；现在另有一个可切换的实验性运行时全 3D 场景，
   用来和 2.5D 做体验对比。它不改变现有 2D 图层，也不接语音/记忆系统。
 
-### 运行时 3D（实验路径）
+### 运行时 3D（沉浸房间管线 v2）
 
-**现在值不值得切过去：不值得，但这条线要留着。** 2026-08-16 实测过一轮，
-`--3droom-snapshot` 十五道 gate 全绿、加载 898 毫秒、活动帧 56.7 fps
-（帧时中位 18 毫秒），**技术上完全跑得通**。问题不在性能，在美术：
-房间现在还是**灰模块**——书是彩色方块、墙是一块平板、没有贴图没有布光，
-而 2.5D 那边是一张完成度很高的插画（灯串、霓虹、绿植、窗外城市）。
-把 3D 拉到同一水平，等于把整间房重新做成带贴图和布光的 3D 场景，
-正是第五节原来那句"要重建插画房间、材质"的成本。
+2026-11 已完成从灰模实验到完整 3D 沉浸房间的重建，与 2.5D 插画房间并存，在顶部栏一键切换（旧存档仍默认 2.5D，通过 `--settingscheck`）。
 
-所以分界线很清楚：**固定机位下，2.5D 赢在画面，而画面正是这个 app 的全部。**
-3D 真正换来的是两样 2.5D 给不了的东西——**自由镜头**，
-以及**长动作**（`stand_stretch_once` 这类整段身体动作在 2.5D 里
-每一套都要重渲一整份上半身素材）。哪天要这两样里的任何一样，再评估。
+- **Blender 建模与动画管线**（`Blender/realtime3d/`）：
+  - `room_layout.py`：全场景单一真实度量来源（桌面 `0.740m`、地毯 `0.014m`、椅面 `0.505m`、4 组机位预设 `overview/desk/closeup/window`）
+  - `room_materials.py`：严格控制在 19 个共享房间材质（含角色 20 个 VRoid 材质共 39 ≤ 40 预算）
+  - `room_geometry.py`：封口无漏缝墙角、窗台窗帘、L 型浅橡木桌、三抽屉柜、双屏、75% 机械键盘、鼠标、音箱条、咖啡杯垫、手机、翻开笔记本与钢笔、铰链台灯、桌面小摆件、水晶灯、三层壁挂架与黑胶唱片
+  - `character_rig.py`：按角色网格贴地毯（`feetMinZ = 0.01396m`），五节狐尾绕椅身自然弯曲，头骨蒙皮 3D 发光耳机，修正 Blender 5.2 glTF 导入的 VRM 手指/拇指真实屈曲轴
+  - `animations.py`：24fps Bezier 10 段骨骼动画（`idle_seated_loop`、`typing_loop`、`coffee_once`、`phone_once`、`stand_stretch_once`、`chin_rest_loop`、`listen_music_loop`、`drowsy_nod_loop`、`pet_happy_once`、`write_note_once`）+ 3 组刚性道具伴随轨道（手局部握点误差 < 1mm），留空 `J_Sec_Hair*` 交由 Three.js 实时弹簧物理驱动
+- **Three.js 渲染与交互管线**（`Sources/WithSnozzy/Realtime3D/`，经 `./Scripts/bundle_3d.sh` 离线打包为 `room.bundle.js`）：
+  - `src/textures.js`：程序化木地板、浅橡木桌、编织地毯、墙面肌理、拿铁拉花、双幅海报图集
+  - `src/screens.js`：12Hz 实时三屏画布（主屏随活动切换代码/DAW/网页/看板/时钟，副屏频谱与专注环，手机消息）
+  - `src/character_shader.js`：保留 VRoid MToon 色彩的半兰伯特 + 时段边缘光 + 脸颊腮红着色器
+  - `src/atmosphere.js`：24h 连续时段光影、软阴影、窗外 3D 视差城市、月空星座（联动专辑曲目 0..12）、3D 雨雪、咖啡热气、浮尘与爱心反馈
+  - `src/life.js`：60fps 57 项面部形态键（自然眨眼、情绪与动作神态、多音素口型同步）、眼球跟随、发丝惯性弹簧物理、耳机显隐与黑胶自转
+  - `src/camera.js` & `src/interaction.js`：限位阻尼轨道镜头、4 机位平滑切换与 11 类桌面/房间射线直接点击交互
+- **实测指标**（`SnozzyRoom3D.glb` 9.8MB、`room.bundle.js` 700KB、全包 173MB）：
+  - `78,690` 三角面、`39` 材质、`222` 骨骼、`57` 形态键；`--3droom` 实测 `48.4 FPS`、`P95 27ms`、进程 RSS `227.7MB`（< 500MB）
+  - `--3droom-snapshot` 15/15 门禁全绿；`--3droom-bridge` 覆盖 `coffee / phone / stand / write / pet / chin_rest`
 
-生产资源在 `Sources/WithSnozzy/Realtime3D/`，打包后位于
-`Contents/Resources/ThreeRealtime3D/`：`room.html`、固定版本的本地 Three.js
-bundle、`SnozzyRoom3D.glb` 和 `SnozzyRoom3DManifest.json`。Swift 侧用非持久化
-`WKWebView` 承载本地页面，设置面板的“渲染场景”切换到 3D 时只替换完整场景的
-背景，TopBar、Dock 和面板仍走原来的 SwiftUI；迷你/桌宠继续走 2.5D。切回
-2.5D 会销毁 WebView、GPU context 和临时开发资源。
+```bash
+# 重新导出 3D GLB + manifest + 预览图（Blender 5.2 LTS）
+/Applications/Blender.app/Contents/MacOS/Blender --background --factory-startup --python-exit-code 1 \
+  --python Blender/realtime3d/SnozzyRoom3D_export.py -- Snozzy.vrm Assets/Realtime3D
 
-运行时约定：Blender 的 Z-up GLB 在根节点只做一次 `Z-up → Y-up` 转换；角色材质
-使用 MeshBasic/unlit、贴图显式 sRGB，头发/睫毛保留 alpha cutout。相机绝不能按
-整个房间 bounds 自动 framing（离群装饰会把 Snozzy 缩成小人），必须消费 manifest
-的 `camera.position/target/fovDegrees`，报告中的 `cameraContract` gate 也必须显示
-`source=manifest`。manifest 还应保留 `validation.contactContract` 和每个动作的
-`clips[].contact`，否则诊断应诚实失败。
+# 离线语法检查并重新打包 room.bundle.js（不要手改 bundle）
+./Scripts/bundle_3d.sh && ./Scripts/build_app.sh release
 
-动作名按 manifest 的真实 clip 名绑定：`idle_seated_loop`、`typing_loop`、
-`coffee_once`、`phone_once`、`stand_stretch_once`。日常默认 typing/idle 之间
-0.32 秒 crossfade；喝咖啡和看手机必须同时播放对应的
-`coffee_once_PropMotion` / `phone_once_PropMotion`，动作被打断或结束时显式恢复
-`Prop_Coffee` / `Prop_Phone` 的 rest TRS，不能假定 `AnimationAction.stop()` 会复位。
+# 3D 快照 / 性能 / 多时段机位 / 桥接诊断
+BIN=dist/WithSnozzy.app/Contents/MacOS/WithSnozzy
+$BIN --3droom-snapshot Assets/Realtime3D/SnozzyRoom3D.glb --3droom-output /tmp/3d_snap --3droom-report /tmp/3d_snap/report.json
+$BIN --3droom Assets/Realtime3D/SnozzyRoom3D.glb --3droom-output /tmp/3d_perf --3droom-report /tmp/3d_perf/report.json
+$BIN --3droom-snapshot Assets/Realtime3D/SnozzyRoom3D.glb --3droom-preset closeup --3droom-hour 1.5 --3droom-weather snow --3droom-extra-action chin_rest_loop --3droom-output /tmp/3d_night --3droom-report /tmp/3d_night/report.json
+$BIN --3droom-bridge Assets/Realtime3D/SnozzyRoom3D.glb --3droom-action coffee --3droom-output /tmp/3d_b --3droom-report /tmp/3d_b/report.json
+```
 
 ### 3D 诊断与常见坑
 
