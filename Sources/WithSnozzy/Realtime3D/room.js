@@ -1,5 +1,9 @@
 import * as THREE from './vendor/three.module.min.js';
 import { GLTFLoader } from './vendor/examples/jsm/loaders/GLTFLoader.js';
+import { createProceduralTextures } from './src/textures.js';
+import { createLiveScreens } from './src/screens.js';
+import { applyRoomMaterialPipeline } from './src/character_shader.js';
+import { createAtmosphere } from './src/atmosphere.js';
 
 const FPS = 24;
 const CROSSFADE_SECONDS = 0.32;
@@ -67,6 +71,27 @@ let routineProbeTimer = null;
 let routineProbeEvents = [];
 let routineProbeResult = null;
 let runtimeContactMeasurement = null;
+let procTextures = null;
+let liveScreens = null;
+let atmosphere = null;
+let sharedCharacterUniforms = null;
+let roomEmissiveRegistry = null;
+
+// Live companion state driven from SwiftUI (or interactive defaults)
+const roomState = {
+  sceneHour: 19.6,
+  weather: 'clear',
+  isPlaying: true,
+  beatPulse: 0,
+  focusPhase: 'idle',
+  activity: 'typing',
+  mood: 0.62,
+  drowsy: 0,
+  sheIsTalking: false,
+  celebration: 0,
+  playableTracks: 5,
+  trackTitle: 'Lo-Fi Radio · Chill',
+};
 
 const RUNTIME_CONTACT_TOLERANCE_METERS = 0.025;
 const RUNTIME_PROP_CONTACT_WINDOWS = {
@@ -916,6 +941,8 @@ function animate() {
   const delta = Math.min(clock.getDelta(), 0.1);
   if (!paused) {
     if (mixer) mixer.update(delta);
+    liveScreens?.update(delta, roomState);
+    atmosphere?.update(delta, roomState, gltfRoot);
     renderer.render(scene, camera);
     activeFPSFrames += 1;
     if (now - activeFPSWindowStart >= 1000) {
@@ -947,6 +974,12 @@ function actionNameFor(request) {
     phone: 'phone_once',
     stand: 'stand_stretch_once',
     stretch: 'stand_stretch_once',
+    chin_rest: 'chin_rest_loop',
+    closeup: 'chin_rest_loop',
+    listen: 'listen_music_loop',
+    drowsy: 'drowsy_nod_loop',
+    pet: 'pet_happy_once',
+    write: 'write_note_once',
   };
   return aliases[requested] || requested;
 }
@@ -988,10 +1021,12 @@ function playAction(request, options = {}) {
   const companionName = {
     coffee_once: 'coffee_once_PropMotion',
     phone_once: 'phone_once_PropMotion',
+    write_note_once: 'write_note_once_PropMotion',
   }[name];
   if (companionName && actions.has(companionName)) {
     restorePropRest('Prop_Coffee');
     restorePropRest('Prop_Phone');
+    restorePropRest('Prop_Pen');
     companionAction = actions.get(companionName);
     companionAction.reset()
       .setLoop(THREE.LoopOnce, 1)
@@ -1037,6 +1072,7 @@ function clearCompanionMotion() {
   companionAction = null;
   restorePropRest('Prop_Coffee');
   restorePropRest('Prop_Phone');
+  restorePropRest('Prop_Pen');
 }
 
 function finiteVector3(value) {
@@ -1105,13 +1141,22 @@ function restoreTypingAfterRuntimeContact() {
 }
 
 function sampleRuntimePropContact(name, definition) {
+  const clipMeta = (manifest.clips || []).find((c) => c.name === name);
+  const holdWin = clipMeta?.contact?.holdFrameWindow;
+  const startFrame = Array.isArray(holdWin) && holdWin.length === 2 ? Number(holdWin[0]) : definition.startFrame;
+  const endFrame = Array.isArray(holdWin) && holdWin.length === 2 ? Number(holdWin[1]) : definition.endFrame;
+  const gripArr = clipMeta?.contact?.handLocalGripPoint;
+  const gripLocal = Array.isArray(gripArr) && gripArr.length === 3
+    ? new THREE.Vector3(Number(gripArr[0]), Number(gripArr[1]), Number(gripArr[2]))
+    : null;
+
   const base = {
     action: name,
     companion: definition.companion,
     hand: definition.hand,
     prop: definition.prop,
-    startFrame: definition.startFrame,
-    endFrame: definition.endFrame,
+    startFrame,
+    endFrame,
     fps: FPS,
     toleranceMeters: RUNTIME_CONTACT_TOLERANCE_METERS,
     source: 'runtimeAnimationSample',
@@ -1141,7 +1186,7 @@ function sampleRuntimePropContact(name, definition) {
   if (!Number.isFinite(duration) || duration <= 0) {
     return { ...base, reason: `invalid_duration:${name}` };
   }
-  for (let frame = definition.startFrame; frame <= definition.endFrame; frame += 1) {
+  for (let frame = startFrame; frame <= endFrame; frame += 1) {
     const time = frame / FPS;
     if (!Number.isFinite(time) || time < 0 || time > duration + (1 / FPS)) {
       return { ...base, reason: `invalid_time:${frame}` };
@@ -1150,7 +1195,11 @@ function sampleRuntimePropContact(name, definition) {
     if (isolated.companion) isolated.companion.time = Math.min(time, duration);
     mixer.update(0);
     gltfRoot.updateMatrixWorld(true);
-    hand.getWorldPosition(handPosition);
+    if (gripLocal) {
+      handPosition.copy(gripLocal).applyMatrix4(hand.matrixWorld);
+    } else {
+      hand.getWorldPosition(handPosition);
+    }
     prop.getWorldPosition(propPosition);
     if (!finiteVector3(handPosition) || !finiteVector3(propPosition)) {
       return { ...base, reason: `non_finite_position:${frame}` };
@@ -1176,7 +1225,7 @@ function sampleRuntimePropContact(name, definition) {
     isolatedActions: isolatedWeights,
     isolatedPass,
     samples,
-    pass: isolatedPass && samples.length === definition.endFrame - definition.startFrame + 1
+    pass: isolatedPass && samples.length === endFrame - startFrame + 1
       && maxDistance <= RUNTIME_CONTACT_TOLERANCE_METERS,
   };
 }
@@ -1238,9 +1287,16 @@ function runtimeKeyboardBasis(keyboard) {
 }
 
 function runtimeFingerTipWorld(bone) {
-  // GLTFLoader does not carry Blender's bone-tail length. For this VRM
-  // skeleton the authored distal segment length is the local offset magnitude;
-  // use that as a local +Y tip, preserving the animation's bone rotation.
+  // True anatomical fingertip extends along the distal segment (parent -> bone)
+  // past joint 3 by 0.78× segment length, matching Blender's exact fingertip pose.
+  if (bone?.parent?.isBone) {
+    const pWorld = new THREE.Vector3();
+    const bWorld = new THREE.Vector3();
+    bone.parent.getWorldPosition(pWorld);
+    bone.getWorldPosition(bWorld);
+    const tip = bWorld.clone().add(bWorld.clone().sub(pWorld).multiplyScalar(0.78));
+    return finiteVector3(tip) ? tip : null;
+  }
   const length = bone?.position?.length?.();
   if (!Number.isFinite(length) || length <= 0) return null;
   const tip = new THREE.Vector3(0, length, 0).applyMatrix4(bone.matrixWorld);
@@ -1484,7 +1540,11 @@ function sampleAction(name, timeSeconds, screenshotName = name) {
   target.setEffectiveWeight(1).play();
   currentAction = target;
   currentActionName = name;
-  const companionName = { coffee_once: 'coffee_once_PropMotion', phone_once: 'phone_once_PropMotion' }[name];
+  const companionName = {
+    coffee_once: 'coffee_once_PropMotion',
+    phone_once: 'phone_once_PropMotion',
+    write_note_once: 'write_note_once_PropMotion',
+  }[name];
   if (companionName && actions.has(companionName)) {
     const companion = actions.get(companionName);
     companion.enabled = true;
@@ -1496,6 +1556,8 @@ function sampleAction(name, timeSeconds, screenshotName = name) {
   if (companionAction) companionAction.time = target.time;
   mixer.update(0);
   gltfRoot.updateMatrixWorld(true);
+  liveScreens?.update(0.1, roomState, true);
+  atmosphere?.update(0.016, roomState, gltfRoot);
   renderer.render(scene, camera);
   recordDiagnosticActionWeights(name, screenshotName, target.time, companionName);
   capture(screenshotName);
@@ -1669,6 +1731,7 @@ function applyAuthorCamera() {
 function setLowPower(next) {
   lowPower = Boolean(next);
   setPixelRatio();
+  atmosphere?.setLowPower(lowPower);
   post('status', { paused, lowPower, message: lowPower ? '省电模式' : currentActionName });
 }
 
@@ -1692,6 +1755,9 @@ function dispose() {
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     materials.forEach((material) => material?.dispose?.());
   });
+  procTextures?.dispose?.();
+  liveScreens?.dispose?.();
+  atmosphere?.dispose?.();
   renderer?.dispose();
   renderer?.forceContextLoss?.();
   post('disposed');
@@ -1701,6 +1767,18 @@ window.__withSnozzy3DCommand = (command) => {
   if (typeof command === 'string') return playAction(command, { manual: true });
   if (!command || typeof command !== 'object') return false;
   if (command.type === 'action') return playAction(command.name, { manual: true });
+  if (command.type === 'state' && command.state && typeof command.state === 'object') {
+    Object.assign(roomState, command.state);
+    liveScreens?.update(0.1, roomState, true);
+    atmosphere?.update(0.016, roomState, gltfRoot);
+    return true;
+  }
+  if (command.type === 'toggleLamp') {
+    return atmosphere ? atmosphere.toggleLamp() : false;
+  }
+  if (command.type === 'cycleMonitor') {
+    return liveScreens ? Boolean(liveScreens.cycleMainMode(roomState)) : false;
+  }
   if (command.type === 'pause') return setPaused(command.value);
   if (command.type === 'lowPower') return setLowPower(command.value);
   if (command.type === 'routineProbe') {
@@ -1726,35 +1804,31 @@ function setup(gltf) {
   gltfRoot = gltf.scene;
   savePropRest(gltfRoot, 'Prop_Coffee');
   savePropRest(gltfRoot, 'Prop_Phone');
+  savePropRest(gltfRoot, 'Prop_Pen');
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0e1020);
+  scene.background = new THREE.Color(0x161730);
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, preserveDrawingBuffer: Boolean(diagnosticRun) });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight, false);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMappingExposure = 1.12;
   post('stage', { name: 'renderer_ready' });
-  scene.add(new THREE.HemisphereLight(0xc8d5ff, 0x252033, 1.45));
-  const key = new THREE.DirectionalLight(0xffe4d2, 2.1);
-  key.position.set(2.5, -3.5, 4.8);
-  scene.add(key);
-  const fill = new THREE.DirectionalLight(0x8daaff, 1.15);
-  fill.position.set(-3, 1, 3);
-  scene.add(fill);
-  const materials = applyToonFactory(gltfRoot);
+
+  procTextures = createProceduralTextures();
+  liveScreens = createLiveScreens();
+  const matResult = applyRoomMaterialPipeline(gltfRoot, procTextures.textures, liveScreens.textures);
+  const { materials } = matResult;
+  sharedCharacterUniforms = matResult.sharedUniforms;
+  roomEmissiveRegistry = matResult.emissiveRegistry;
+  atmosphere = createAtmosphere(scene, renderer, sharedCharacterUniforms, roomEmissiveRegistry);
   post('stage', { name: 'materials_ready', count: materials.length });
-  // Blender authors this asset Z-up while the browser renderer is Y-up.  The
-  // GLB deliberately keeps the authoring contract in its manifest, so make
-  // the conversion explicit at the runtime root instead of relying on an
-  // exporter/importer convention.  Z-up -> Y-up is -90° around X (the
-  // positive direction keeps world-up positive); the sign is easy to get
-  // backwards and leaves the seated character upside down. Updating the
-  // world matrix before measuring keeps the diagnostic bounds in browser
-  // coordinates as well.
+  // Blender authors this asset Z-up while the browser renderer is Y-up.
   gltfRoot.rotation.x = -Math.PI / 2;
   scene.add(gltfRoot);
   gltfRoot.updateMatrixWorld(true);
+  liveScreens.update(0.1, roomState, true);
+  atmosphere.update(0.016, roomState, gltfRoot);
   // The room's comparison camera is an authored contract. Framing from the
   // complete scene bounds makes a detached decorative node shrink Snozzy to a
   // thumbnail, so never derive production framing from Box3.

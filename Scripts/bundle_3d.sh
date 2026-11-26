@@ -20,11 +20,15 @@ fi
 
 STAGE="$(mktemp -d /tmp/withsnozzy-bundle.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
-ln -s "$VENDOR" "$STAGE/vendor"
-ln -s "$RT/room.js" "$STAGE/room.js"
+cp -R "$VENDOR" "$STAGE/vendor"
+cp "$RT/room.js" "$STAGE/room.js"
 if [ -d "$RT/src" ]; then
-  ln -s "$RT/src" "$STAGE/src"
+  cp -R "$RT/src" "$STAGE/src"
 fi
+mkdir -p "$STAGE/node_modules/three"
+cat > "$STAGE/node_modules/three/package.json" <<'JSON'
+{"name":"three","type":"module","main":"../../vendor/three.module.min.js"}
+JSON
 
 echo "▸ 打包 room.bundle.js…"
 bun build "$STAGE/room.js" \

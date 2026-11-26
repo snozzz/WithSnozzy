@@ -57,6 +57,7 @@ let package = Package(
                 "Realtime3D/room.bundle.js",
                 "Realtime3D/room.html",
                 "Realtime3D/room.js",
+                "Realtime3D/src",
             ],
             swiftSettings: appSwiftSettings,
             linkerSettings: appLinkerSettings
