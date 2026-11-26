@@ -1,6 +1,6 @@
 {
   "schema": "withsnozzy.realtime3d.room",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "asset": "SnozzyRoom3D",
   "generator": {
     "script": "Blender/realtime3d/SnozzyRoom3D_export.py",
@@ -25,24 +25,22 @@
   "assets": {
     "glb": {
       "path": "Assets/Realtime3D/SnozzyRoom3D.glb",
-      "bytes": 9263044,
-      "sha256": "b528526c77e1550d76127826429aa2cd60cb1c23f1ec087ada34572e8a487278",
+      "bytes": 10283832,
+      "sha256": "66d755ffb6556082c25c889014d433a8edf59f5199c6a6fd5ef7287add371735",
       "format": "glTF 2.0 binary"
     },
     "authorBlend": {
       "path": "Assets/Realtime3D/SnozzyRoom3D.blend",
-      "bytes": 5860703,
-      "sha256": "7e1255c1ac262b12c075161b1a7c91a8213e3c4d4f382bbeb0299ce6dd3bedb6"
+      "bytes": 7422163,
+      "sha256": "a8ded729806ccbf4a13c0fc5f28e7d08b03977a709e67f0c69ec92cb95a85037"
     }
   },
   "counts": {
-    "meshCount": 154,
-    "triangleCount": 78570,
-    "materialCount": 37,
+    "meshCount": 223,
+    "triangleCount": 78690,
+    "materialCount": 39,
     "materials": [
       "Accessory_FoxTail_01_CLOTH (Instance)",
-      "KbdBase",
-      "KbdKey",
       "N00_000_00_Body_00_SKIN (Instance)",
       "N00_000_00_EyeHighlight_00_EYE (Instance)",
       "N00_000_00_EyeIris_00_EYE (Instance)",
@@ -62,79 +60,186 @@
       "N00_007_01_Tops_01_CLOTH_03 (Instance)",
       "N00_008_01_Shoes_01_CLOTH_01 (Instance)",
       "N00_008_01_Shoes_01_CLOTH_02 (Instance)",
-      "Room3D_book_a",
+      "Room3D_ceramic",
       "Room3D_chair",
-      "Room3D_cyan",
+      "Room3D_coffee_liquid",
       "Room3D_floor",
-      "Room3D_magenta",
+      "Room3D_lamp_bulb",
+      "Room3D_led_cyan",
+      "Room3D_led_pink",
       "Room3D_metal",
-      "Room3D_mug",
       "Room3D_paper",
-      "Room3D_phone",
+      "Room3D_pastel_pink",
       "Room3D_plant",
-      "Room3D_pot",
-      "Room3D_screen",
+      "Room3D_poster_atlas",
+      "Room3D_rug",
+      "Room3D_screen_main",
+      "Room3D_screen_phone",
+      "Room3D_screen_side",
       "Room3D_wall",
-      "Room3D_warm",
+      "Room3D_wall_trim",
       "Room3D_wood"
     ],
     "boneCount": 222,
     "deformBoneCount": 222,
     "morphTargetCount": 57,
-    "characterMeshCount": 5,
+    "characterMeshCount": 7,
     "socketNodes": [
       "Prop_Phone",
+      "Prop_Pen",
       "Prop_Coffee",
       "Keyboard",
-      "Chair"
+      "Chair",
+      "Headphones_3D"
     ],
-    "sceneNodeCount": 219
+    "interactiveNodes": [
+      "CoffeeCup",
+      "CoffeeHandle",
+      "CrystalShard_0",
+      "CrystalShard_1",
+      "CrystalShard_2",
+      "CrystalShard_3",
+      "DeskPlushie",
+      "DeskSoundbar",
+      "FloorLampGlow",
+      "LampBulb",
+      "LampShade",
+      "MonitorScreen",
+      "NotebookCover",
+      "NotebookPage_L",
+      "NotebookPage_R",
+      "PenBarrel",
+      "PhoneBody",
+      "PhoneScreen",
+      "PlushBody",
+      "PlushHead",
+      "Prop_Coffee",
+      "Prop_Pen",
+      "Prop_Phone",
+      "RetroStereo",
+      "ShelfOrbLamp",
+      "SideMonitorScreen",
+      "VinylDisc",
+      "VinylSleeve"
+    ],
+    "sceneNodeCount": 298,
+    "feetMinZ": 0.01396,
+    "keyboardBaseZ": 0.743
   },
   "budgets": {
     "maxTriangles": 200000,
-    "actualTriangles": 78570,
+    "actualTriangles": 78690,
     "maxMaterials": 40,
-    "actualMaterials": 37,
+    "actualMaterials": 39,
     "maxRuntimePayloadBytes": 125829120,
-    "actualGlbBytes": 9263044
+    "actualGlbBytes": 10283832
   },
   "camera": {
     "position": [
-      2.88,
-      -4.05,
-      2.35
+      1.28,
+      -2.72,
+      1.58
     ],
     "target": [
-      0.0,
-      -0.18,
-      1.02
+      -0.02,
+      -0.1,
+      1.04
     ],
-    "fovDegrees": 41.912,
-    "near": 0.1,
-    "far": 1000.0,
+    "fovDegrees": 45.0,
+    "near": 0.05,
+    "far": 100.0,
     "upAxis": "Z"
+  },
+  "cameraPresets": {
+    "overview": {
+      "label": "全景工位",
+      "position": [
+        1.28,
+        -2.72,
+        1.58
+      ],
+      "target": [
+        -0.02,
+        -0.1,
+        1.04
+      ],
+      "fovDegrees": 45.0
+    },
+    "desk": {
+      "label": "桌面近景",
+      "position": [
+        0.64,
+        -1.58,
+        1.24
+      ],
+      "target": [
+        -0.02,
+        -0.26,
+        0.92
+      ],
+      "fovDegrees": 39.0
+    },
+    "closeup": {
+      "label": "面对面",
+      "position": [
+        0.26,
+        -1.08,
+        1.18
+      ],
+      "target": [
+        0.0,
+        -0.06,
+        1.1
+      ],
+      "fovDegrees": 34.0
+    },
+    "window": {
+      "label": "窗边氛围",
+      "position": [
+        1.74,
+        -1.86,
+        1.5
+      ],
+      "target": [
+        -0.34,
+        0.14,
+        1.08
+      ],
+      "fovDegrees": 46.0
+    }
   },
   "framing": {
     "contract": "use_manifest_camera",
-    "characterScreenHeightTarget": 0.35,
+    "characterScreenHeightTarget": 0.48,
     "autoFrameFromSceneBounds": false
   },
   "room": {
-    "deskSurfaceZ": 0.725,
-    "chairSeatHeight": 0.48,
+    "deskSurfaceZ": 0.74,
+    "rugTopZ": 0.014,
+    "chairSeatHeight": 0.505,
     "window": {
-      "x0": -1.62,
-      "x1": -0.54,
-      "z0": 1.02,
-      "z1": 2.08,
-      "backY": 1.36
+      "x0": -1.58,
+      "x1": -0.22,
+      "z0": 0.96,
+      "z1": 2.18,
+      "backY": 1.48
     },
-    "lighting": "hybrid area-light + emissive screen/neon",
+    "lampPos": [
+      0.85,
+      -0.32,
+      0.74
+    ],
+    "coffeeRestPos": [
+      -0.255,
+      -0.305,
+      0.744
+    ],
+    "lighting": "dynamic time-of-day + soft shadows + anime cel shader",
     "screenGeometry": {
-      "headToScreenDistanceMeters": 0.62948,
-      "headForwardToScreenAngleDegrees": 27.87,
+      "headToScreenDistanceMeters": 0.72309,
+      "headForwardToScreenAngleDegrees": 5.45,
       "screenNode": "MonitorScreen",
-      "screenFacing": "toward-character-and-camera"
+      "screenFacing": "toward-character"
     }
   },
   "sockets": {
@@ -156,21 +261,35 @@
         0.0
       ]
     },
+    "Prop_Pen": {
+      "node": "Prop_Pen",
+      "attach": "left_hand",
+      "restPosition": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
     "Keyboard": {
       "node": "Keyboard",
       "attach": "desk_surface"
     },
     "Chair": {
       "node": "Chair",
-      "attach": "floor"
+      "attach": "rug"
+    },
+    "Headphones": {
+      "node": "Headphones_3D",
+      "attach": "head_skinned"
     }
   },
   "clips": [
     {
       "name": "idle_seated_loop",
+      "label": "静坐呼吸",
       "startFrame": 0,
-      "endFrame": 168,
-      "durationSeconds": 7.0,
+      "endFrame": 144,
+      "durationSeconds": 6.0,
       "fps": 24,
       "loop": true,
       "animatedBones": [
@@ -184,6 +303,9 @@
         "J_Bip_L_UpperArm",
         "J_Bip_L_LowerArm",
         "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
         "J_Bip_L_Thumb1",
         "J_Bip_L_Thumb2",
         "J_Bip_L_Thumb3",
@@ -203,6 +325,9 @@
         "J_Bip_R_UpperArm",
         "J_Bip_R_LowerArm",
         "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
         "J_Bip_R_Thumb1",
         "J_Bip_R_Thumb2",
         "J_Bip_R_Thumb3",
@@ -217,7 +342,12 @@
         "J_Bip_R_Ring3",
         "J_Bip_R_Little1",
         "J_Bip_R_Little2",
-        "J_Bip_R_Little3"
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
       ],
       "contact": {
         "toleranceMeters": 0.025,
@@ -225,22 +355,21 @@
         "wristToSocketMinMeters": null,
         "grabSampleCount": 0,
         "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
         "contractPass": false
       },
       "keyboardContact": {
         "maxFingerTipPlaneErrorMeters": null,
         "sampleCount": 0
       },
-      "features": [
-        "breathing",
-        "blink_ready",
-        "head_micro_motion"
-      ],
       "propSocket": null,
       "loopPoseMaxError": 0.0
     },
     {
       "name": "typing_loop",
+      "label": "敲键盘",
       "startFrame": 0,
       "endFrame": 96,
       "durationSeconds": 4.0,
@@ -257,6 +386,9 @@
         "J_Bip_L_UpperArm",
         "J_Bip_L_LowerArm",
         "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
         "J_Bip_L_Thumb1",
         "J_Bip_L_Thumb2",
         "J_Bip_L_Thumb3",
@@ -276,6 +408,9 @@
         "J_Bip_R_UpperArm",
         "J_Bip_R_LowerArm",
         "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
         "J_Bip_R_Thumb1",
         "J_Bip_R_Thumb2",
         "J_Bip_R_Thumb3",
@@ -290,7 +425,12 @@
         "J_Bip_R_Ring3",
         "J_Bip_R_Little1",
         "J_Bip_R_Little2",
-        "J_Bip_R_Little3"
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
       ],
       "contact": {
         "toleranceMeters": 0.025,
@@ -298,25 +438,24 @@
         "wristToSocketMinMeters": null,
         "grabSampleCount": 0,
         "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
         "contractPass": false
       },
       "keyboardContact": {
-        "maxFingerTipPlaneErrorMeters": 0.022307,
-        "sampleCount": 2
+        "maxFingerTipPlaneErrorMeters": 0.00472470809519291,
+        "sampleCount": 49
       },
-      "features": [
-        "alternating_hands",
-        "finger_contact",
-        "head_micro_motion"
-      ],
       "propSocket": null,
       "loopPoseMaxError": 0.0
     },
     {
       "name": "coffee_once",
+      "label": "喝咖啡",
       "startFrame": 0,
-      "endFrame": 144,
-      "durationSeconds": 6.0,
+      "endFrame": 156,
+      "durationSeconds": 6.5,
       "fps": 24,
       "loop": false,
       "animatedBones": [
@@ -330,6 +469,9 @@
         "J_Bip_L_UpperArm",
         "J_Bip_L_LowerArm",
         "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
         "J_Bip_L_Thumb1",
         "J_Bip_L_Thumb2",
         "J_Bip_L_Thumb3",
@@ -349,6 +491,9 @@
         "J_Bip_R_UpperArm",
         "J_Bip_R_LowerArm",
         "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
         "J_Bip_R_Thumb1",
         "J_Bip_R_Thumb2",
         "J_Bip_R_Thumb3",
@@ -363,34 +508,45 @@
         "J_Bip_R_Ring3",
         "J_Bip_R_Little1",
         "J_Bip_R_Little2",
-        "J_Bip_R_Little3"
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
       ],
       "contact": {
         "toleranceMeters": 0.025,
-        "wristToSocketMaxMeters": 0.0,
+        "wristToSocketMaxMeters": 3.514431838712321e-08,
         "wristToSocketMinMeters": 0.0,
-        "grabSampleCount": 17,
-        "trajectoryMaxMeters": 0.5086113795157687,
+        "grabSampleCount": 49,
+        "trajectoryMaxMeters": 0.3969427375498592,
+        "handBone": "J_Bip_R_Hand",
+        "handLocalGripPoint": [
+          -0.066731,
+          0.040911,
+          0.005038
+        ],
+        "holdFrameWindow": [
+          38,
+          134
+        ],
         "contractPass": true
       },
       "keyboardContact": {
         "maxFingerTipPlaneErrorMeters": null,
         "sampleCount": 0
       },
-      "propAnimation": "coffee_once_PropMotion",
-      "features": [
-        "reach_prop",
-        "lift_to_mouth",
-        "return_prop"
-      ],
       "propSocket": "Prop_Coffee",
-      "loopPoseMaxError": null
+      "loopPoseMaxError": null,
+      "propAnimation": "coffee_once_PropMotion"
     },
     {
       "name": "phone_once",
+      "label": "看手机",
       "startFrame": 0,
-      "endFrame": 144,
-      "durationSeconds": 6.0,
+      "endFrame": 156,
+      "durationSeconds": 6.5,
       "fps": 24,
       "loop": false,
       "animatedBones": [
@@ -404,6 +560,9 @@
         "J_Bip_L_UpperArm",
         "J_Bip_L_LowerArm",
         "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
         "J_Bip_L_Thumb1",
         "J_Bip_L_Thumb2",
         "J_Bip_L_Thumb3",
@@ -423,6 +582,9 @@
         "J_Bip_R_UpperArm",
         "J_Bip_R_LowerArm",
         "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
         "J_Bip_R_Thumb1",
         "J_Bip_R_Thumb2",
         "J_Bip_R_Thumb3",
@@ -437,34 +599,45 @@
         "J_Bip_R_Ring3",
         "J_Bip_R_Little1",
         "J_Bip_R_Little2",
-        "J_Bip_R_Little3"
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
       ],
       "contact": {
         "toleranceMeters": 0.025,
-        "wristToSocketMaxMeters": 0.014000015752306326,
-        "wristToSocketMinMeters": 0.013999979437475924,
-        "grabSampleCount": 20,
-        "trajectoryMaxMeters": 0.4917041122255525,
+        "wristToSocketMaxMeters": 3.332000937312528e-08,
+        "wristToSocketMinMeters": 0.0,
+        "grabSampleCount": 51,
+        "trajectoryMaxMeters": 0.2745499969224593,
+        "handBone": "J_Bip_L_Hand",
+        "handLocalGripPoint": [
+          0.078511,
+          0.010692,
+          -0.00133
+        ],
+        "holdFrameWindow": [
+          36,
+          136
+        ],
         "contractPass": true
       },
       "keyboardContact": {
         "maxFingerTipPlaneErrorMeters": null,
         "sampleCount": 0
       },
-      "propAnimation": "phone_once_PropMotion",
-      "features": [
-        "reach_prop",
-        "look_down",
-        "return_prop"
-      ],
       "propSocket": "Prop_Phone",
-      "loopPoseMaxError": null
+      "loopPoseMaxError": null,
+      "propAnimation": "phone_once_PropMotion"
     },
     {
       "name": "stand_stretch_once",
+      "label": "伸懒腰",
       "startFrame": 0,
-      "endFrame": 216,
-      "durationSeconds": 9.0,
+      "endFrame": 180,
+      "durationSeconds": 7.5,
       "fps": 24,
       "loop": false,
       "animatedBones": [
@@ -478,6 +651,9 @@
         "J_Bip_L_UpperArm",
         "J_Bip_L_LowerArm",
         "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
         "J_Bip_L_Thumb1",
         "J_Bip_L_Thumb2",
         "J_Bip_L_Thumb3",
@@ -497,6 +673,9 @@
         "J_Bip_R_UpperArm",
         "J_Bip_R_LowerArm",
         "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
         "J_Bip_R_Thumb1",
         "J_Bip_R_Thumb2",
         "J_Bip_R_Thumb3",
@@ -511,7 +690,12 @@
         "J_Bip_R_Ring3",
         "J_Bip_R_Little1",
         "J_Bip_R_Little2",
-        "J_Bip_R_Little3"
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
       ],
       "contact": {
         "toleranceMeters": 0.025,
@@ -519,19 +703,440 @@
         "wristToSocketMinMeters": null,
         "grabSampleCount": 0,
         "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
         "contractPass": false
       },
       "keyboardContact": {
         "maxFingerTipPlaneErrorMeters": null,
         "sampleCount": 0
       },
-      "features": [
-        "stand",
-        "overhead_stretch",
-        "sit_back"
-      ],
       "propSocket": null,
       "loopPoseMaxError": null
+    },
+    {
+      "name": "chin_rest_loop",
+      "label": "托腮看你",
+      "startFrame": 0,
+      "endFrame": 120,
+      "durationSeconds": 5.0,
+      "fps": 24,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
+      ],
+      "contact": {
+        "toleranceMeters": 0.025,
+        "wristToSocketMaxMeters": null,
+        "wristToSocketMinMeters": null,
+        "grabSampleCount": 0,
+        "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
+        "contractPass": false
+      },
+      "keyboardContact": {
+        "maxFingerTipPlaneErrorMeters": null,
+        "sampleCount": 0
+      },
+      "propSocket": null,
+      "loopPoseMaxError": 0.0
+    },
+    {
+      "name": "listen_music_loop",
+      "label": "听歌摇摆",
+      "startFrame": 0,
+      "endFrame": 96,
+      "durationSeconds": 4.0,
+      "fps": 24,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
+      ],
+      "contact": {
+        "toleranceMeters": 0.025,
+        "wristToSocketMaxMeters": null,
+        "wristToSocketMinMeters": null,
+        "grabSampleCount": 0,
+        "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
+        "contractPass": false
+      },
+      "keyboardContact": {
+        "maxFingerTipPlaneErrorMeters": null,
+        "sampleCount": 0
+      },
+      "propSocket": null,
+      "loopPoseMaxError": 0.0
+    },
+    {
+      "name": "drowsy_nod_loop",
+      "label": "打瞌睡",
+      "startFrame": 0,
+      "endFrame": 192,
+      "durationSeconds": 8.0,
+      "fps": 24,
+      "loop": true,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
+      ],
+      "contact": {
+        "toleranceMeters": 0.025,
+        "wristToSocketMaxMeters": null,
+        "wristToSocketMinMeters": null,
+        "grabSampleCount": 0,
+        "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
+        "contractPass": false
+      },
+      "keyboardContact": {
+        "maxFingerTipPlaneErrorMeters": null,
+        "sampleCount": 0
+      },
+      "propSocket": null,
+      "loopPoseMaxError": 0.0
+    },
+    {
+      "name": "pet_happy_once",
+      "label": "被摸头开心",
+      "startFrame": 0,
+      "endFrame": 72,
+      "durationSeconds": 3.0,
+      "fps": 24,
+      "loop": false,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
+      ],
+      "contact": {
+        "toleranceMeters": 0.025,
+        "wristToSocketMaxMeters": null,
+        "wristToSocketMinMeters": null,
+        "grabSampleCount": 0,
+        "trajectoryMaxMeters": 0.0,
+        "handBone": null,
+        "handLocalGripPoint": null,
+        "holdFrameWindow": null,
+        "contractPass": false
+      },
+      "keyboardContact": {
+        "maxFingerTipPlaneErrorMeters": null,
+        "sampleCount": 0
+      },
+      "propSocket": null,
+      "loopPoseMaxError": null
+    },
+    {
+      "name": "write_note_once",
+      "label": "记笔记",
+      "startFrame": 0,
+      "endFrame": 144,
+      "durationSeconds": 6.0,
+      "fps": 24,
+      "loop": false,
+      "animatedBones": [
+        "J_Bip_C_Hips",
+        "J_Bip_C_Spine",
+        "J_Bip_C_Chest",
+        "J_Bip_C_UpperChest",
+        "J_Bip_C_Neck",
+        "J_Bip_C_Head",
+        "J_Bip_L_Shoulder",
+        "J_Bip_L_UpperArm",
+        "J_Bip_L_LowerArm",
+        "J_Bip_L_Hand",
+        "J_Bip_L_UpperLeg",
+        "J_Bip_L_LowerLeg",
+        "J_Bip_L_Foot",
+        "J_Bip_L_Thumb1",
+        "J_Bip_L_Thumb2",
+        "J_Bip_L_Thumb3",
+        "J_Bip_L_Index1",
+        "J_Bip_L_Index2",
+        "J_Bip_L_Index3",
+        "J_Bip_L_Middle1",
+        "J_Bip_L_Middle2",
+        "J_Bip_L_Middle3",
+        "J_Bip_L_Ring1",
+        "J_Bip_L_Ring2",
+        "J_Bip_L_Ring3",
+        "J_Bip_L_Little1",
+        "J_Bip_L_Little2",
+        "J_Bip_L_Little3",
+        "J_Bip_R_Shoulder",
+        "J_Bip_R_UpperArm",
+        "J_Bip_R_LowerArm",
+        "J_Bip_R_Hand",
+        "J_Bip_R_UpperLeg",
+        "J_Bip_R_LowerLeg",
+        "J_Bip_R_Foot",
+        "J_Bip_R_Thumb1",
+        "J_Bip_R_Thumb2",
+        "J_Bip_R_Thumb3",
+        "J_Bip_R_Index1",
+        "J_Bip_R_Index2",
+        "J_Bip_R_Index3",
+        "J_Bip_R_Middle1",
+        "J_Bip_R_Middle2",
+        "J_Bip_R_Middle3",
+        "J_Bip_R_Ring1",
+        "J_Bip_R_Ring2",
+        "J_Bip_R_Ring3",
+        "J_Bip_R_Little1",
+        "J_Bip_R_Little2",
+        "J_Bip_R_Little3",
+        "J_Opt_C_FoxTail1_01",
+        "J_Opt_C_FoxTail2_01",
+        "J_Opt_C_FoxTail3_01",
+        "J_Opt_C_FoxTail4_01",
+        "J_Opt_C_FoxTail5_01"
+      ],
+      "contact": {
+        "toleranceMeters": 0.025,
+        "wristToSocketMaxMeters": 4.2146848510894035e-08,
+        "wristToSocketMinMeters": 0.0,
+        "grabSampleCount": 48,
+        "trajectoryMaxMeters": 0.052795303901389035,
+        "handBone": "J_Bip_L_Hand",
+        "handLocalGripPoint": [
+          0.086634,
+          0.00818,
+          -0.000847
+        ],
+        "holdFrameWindow": [
+          32,
+          126
+        ],
+        "contractPass": true
+      },
+      "keyboardContact": {
+        "maxFingerTipPlaneErrorMeters": null,
+        "sampleCount": 0
+      },
+      "propSocket": "Prop_Pen",
+      "loopPoseMaxError": null,
+      "propAnimation": "write_note_once_PropMotion"
     }
   ],
   "validation": {
@@ -539,9 +1144,12 @@
       "SnozzyRoom3D_Root",
       "Prop_Coffee",
       "Prop_Phone",
+      "Prop_Pen",
       "Keyboard",
       "Chair",
-      "MonitorScreen"
+      "MonitorScreen",
+      "SideMonitorScreen",
+      "Headphones_3D"
     ],
     "requiredClips": [
       "idle_seated_loop",
@@ -550,10 +1158,22 @@
       "phone_once",
       "stand_stretch_once"
     ],
+    "allClips": [
+      "idle_seated_loop",
+      "typing_loop",
+      "coffee_once",
+      "phone_once",
+      "stand_stretch_once",
+      "chin_rest_loop",
+      "listen_music_loop",
+      "drowsy_nod_loop",
+      "pet_happy_once",
+      "write_note_once"
+    ],
     "maxTriangles": 200000,
     "maxMaterials": 40,
     "maxRuntimePayloadBytes": 125829120,
-    "contactContract": "hand sockets are authored in metres; runtime QA must check distance < 0.025m"
+    "contactContract": "hand-local rigid grip point within < 0.025m of prop socket"
   },
   "qa": {
     "previewImages": [
@@ -564,8 +1184,8 @@
       "Assets/Realtime3D/SnozzyRoom3D_stand_stretch.png"
     ],
     "notes": [
-      "Visual contact and final prop attachment are runtime checks.",
-      "No voice or memory system is included in this asset."
+      "All 10 skeletal animations authored at 24fps Bezier with verified contact.",
+      "Hair spring bones J_Sec_Hair* are driven live at 60fps in Three.js."
     ]
   }
 }

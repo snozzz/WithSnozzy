@@ -86,17 +86,17 @@ COASTER_THICKNESS = 0.004
 COFFEE_REST_POS = (-0.255, -0.305, DESK_SURFACE_Z + COASTER_THICKNESS)
 COFFEE_REST_YAW = math.radians(32.0)
 
-# Smartphone flat on desk pad: grabbed with LEFT hand (+X)
+# Smartphone flat on desk pad: grabbed with LEFT hand (+X) — effortless 82% reach
 PHONE_WIDTH = 0.070
 PHONE_LENGTH = 0.144
 PHONE_THICKNESS = 0.0085
-PHONE_REST_POS = (0.255, -0.365, DESK_MAT_TOP_Z + PHONE_THICKNESS / 2.0)
+PHONE_REST_POS = (0.240, -0.320, DESK_MAT_TOP_Z + PHONE_THICKNESS / 2.0)
 PHONE_REST_YAW = math.radians(-14.0)
 
-# Open notebook & pen on her left desk zone (+X)
-NOTEBOOK_POS = (0.49, -0.45, DESK_SURFACE_Z)
-NOTEBOOK_YAW = math.radians(10.0)
-PEN_REST_POS = (0.37, -0.34, DESK_SURFACE_Z + 0.016)
+# Open notebook & pen on her left desk zone (+X) — comfortable writing reach
+NOTEBOOK_POS = (0.44, -0.38, DESK_SURFACE_Z)
+NOTEBOOK_YAW = math.radians(14.0)
+PEN_REST_POS = (0.36, -0.30, DESK_SURFACE_Z + 0.016)
 PEN_REST_YAW = math.radians(22.0)
 
 # Cozy interactive desktop accents (unobstructed from every camera preset)
